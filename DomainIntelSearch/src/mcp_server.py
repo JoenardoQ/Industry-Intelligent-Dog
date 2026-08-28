@@ -1,0 +1,368 @@
+"""MCP Server：把 DomainIntelData 的全部数据源封装为 MCP 工具.
+
+让任意 Agent（WorkBuddy / Claude / Codex / 自研）通过统一的
+Model Context Protocol 调用数据，而不是把抓取/读取逻辑耦合在 Agent 内。
+
+传输：stdio（换行分隔的 JSON-RPC 2.0，MCP 标准 stdio transport）
+协议：initialize / notifications/initialized / ping / tools/list / tools/call
+
+工具清单（tools/list 可见）：
+  list_industries                       列出全部行业文件夹
+  get_daily(industry, category?, date?) 读取每日情报（六类，含可信度/引用）
+  get_knowledge(industry)               三层知识结构（行业→产业链→实体）
+  get_sources(industry)                 信息源清单（七类）
+  get_landscape(industry)               竞争格局（四类玩家 + 历史快照）
+  get_impact_events(industry)           检测到的行业事件清单
+  get_impact(industry, slug?)           某事件的影响分析（公司/供应链/论文/政策）
+  list_report_tasks(industry)           报告任务包清单（三报告 + 深度报告）
+  read_report(industry, relpath)        读取 one_time/ 或 periodic/ 下任意产物
+  search_items(industry, keyword)       在最近一天情报里按关键词检索
+
+启动：
+  python -m src.main mcp-serve                 # 服务全部行业
+  （Claude Desktop / WorkBuddy mcp.json 里配置 command+args 即可）
+
+纯标准库实现，零依赖；日志走 stderr，stdout 只跑协议帧。
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+SERVER_NAME = "domain-intel"
+SERVER_VERSION = "1.1.0"
+PROTOCOL_VERSION = "2024-11-05"   # 兼容主流客户端；initialize 时回显请求版本
+
+DATA_ROOT: Path = Path("D:/IntDog/DomainIntelData")  # serve_stdio() 启动时覆盖
+
+SKIP_DIRS = {"skill", "domains", "images", "_trash", "__pycache__"}
+
+
+# ----------------------------------------------------------------------
+# 工具实现（全部只读 DomainIntelData）
+# ----------------------------------------------------------------------
+def _industry_dir(folder: str) -> Path:
+    if not folder or Path(folder).name != folder:
+        raise ValueError("industry 必须是单个行业文件夹名")
+    root = DATA_ROOT.resolve()
+    d = (root / folder).resolve()
+    if not d.is_relative_to(root):
+        raise ValueError("industry 路径越界")
+    if not d.exists() or not (d / "control.json").exists():
+        raise ValueError(f"行业不存在或未初始化: {folder!r}（先跑 init-industry）")
+    return d
+
+
+def _safe_child(base: Path, relative: str) -> Path:
+    candidate = (base.resolve() / relative).resolve()
+    if not candidate.is_relative_to(base.resolve()):
+        raise ValueError("相对路径越界")
+    return candidate
+
+
+def _read_json(path: Path, default):
+    try:
+        if path.exists():
+            return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        pass
+    return default
+
+
+def tool_list_industries(_args: dict):
+    out = []
+    if DATA_ROOT.exists():
+        for d in sorted(DATA_ROOT.iterdir()):
+            if d.is_dir() and d.name not in SKIP_DIRS and not d.name.startswith("."):
+                if (d / "control.json").exists():
+                    ctrl = _read_json(d / "control.json", {})
+                    out.append({"folder": d.name,
+                                "periodic_enabled": ctrl.get("periodic_enabled", False)})
+    return {"data_root": str(DATA_ROOT), "industries": out}
+
+
+def tool_get_daily(args: dict):
+    folder = args["industry"]
+    _industry_dir(folder)
+    category = args.get("category") or None
+    date = args.get("date") or None
+    # 复用 IndustryStore 的读取逻辑
+    from .industry_store import IndustryStore
+    store = IndustryStore(DATA_ROOT, folder)
+    items = store.list_daily(date=date, category=category)
+    for it in items:
+        it.pop("_file", None)
+    return {"industry": folder, "count": len(items), "items": items}
+
+
+def tool_get_knowledge(args: dict):
+    folder = args["industry"]
+    base = _industry_dir(folder) / "one_time" / "knowledge"
+    return {
+        "industry": _read_json(base / "industry.json", {}),
+        "chains": _read_json(base / "chains.json", []),
+        "entities": _read_json(base / "entities.json", []),
+    }
+
+
+def tool_get_sources(args: dict):
+    folder = args["industry"]
+    return _read_json(_industry_dir(folder) / "sources.json", {})
+
+
+def tool_get_landscape(args: dict):
+    folder = args["industry"]
+    ldir = _industry_dir(folder) / "one_time" / "landscape"
+    latest = _read_json(ldir / "landscape.json", None)
+    history = []
+    hdir = ldir / "history"
+    if hdir.exists():
+        history = [f.stem for f in sorted(hdir.glob("*.json"))]
+    return {"landscape": latest, "history_snapshots": history}
+
+
+def tool_get_impact_events(args: dict):
+    folder = args["industry"]
+    return _read_json(_industry_dir(folder) / "one_time" / "impact" / "events.json",
+                      {"events": [], "note": "尚未运行 impact 检测"})
+
+
+def tool_get_impact(args: dict):
+    folder = args["industry"]
+    idir = _industry_dir(folder) / "one_time" / "impact"
+    slug = args.get("slug")
+    if slug:
+        data = _read_json(_safe_child(idir, slug) / "impact.json", None)
+        if data is None:
+            raise ValueError(f"未找到事件影响分析: {slug!r}")
+        return data
+    # 未指定 slug：列出全部已分析事件
+    out = []
+    if idir.exists():
+        for d in sorted(idir.iterdir()):
+            if d.is_dir() and (d / "impact.json").exists():
+                data = _read_json(d / "impact.json", {})
+                out.append({"slug": d.name, "event": data.get("event"),
+                            "companies": len(data.get("affected_companies", [])),
+                            "papers": len(data.get("related_papers", [])),
+                            "policies": len(data.get("related_policies", []))})
+    return {"analyzed_events": out}
+
+
+def tool_list_report_tasks(args: dict):
+    folder = args["industry"]
+    rdir = _industry_dir(folder) / "one_time" / "reports"
+    return {
+        "standard_tasks": _read_json(rdir / "tasks.json", {}).get("tasks", []),
+        "deep_tasks": _read_json(rdir / "deep_tasks.json", {}).get("tasks", []),
+    }
+
+
+def tool_read_report(args: dict):
+    folder = args["industry"]
+    rel = args["relpath"].replace("\\", "/").lstrip("/")
+    base = _industry_dir(folder)
+    f = _safe_child(base, rel)
+    if not f.exists() or not f.is_file():
+        raise ValueError(f"文件不存在: {rel}")
+    if f.stat().st_size > 2_000_000:
+        raise ValueError("文件超过 2MB 读取上限")
+    if f.suffix == ".json":
+        return {"path": rel, "json": _read_json(f, None)}
+    return {"path": rel, "text": f.read_text(encoding="utf-8", errors="replace")}
+
+
+def tool_search_items(args: dict):
+    folder = args["industry"]
+    kw = (args.get("keyword") or "").strip()
+    if not kw:
+        raise ValueError("keyword 不能为空")
+    from .industry_store import IndustryStore
+    store = IndustryStore(DATA_ROOT, folder)
+    items = store.list_daily(date=args.get("date") or None)
+    low = kw.lower()
+    hits = []
+    for it in items:
+        blob = ((it.get("title", "") or "") + " "
+                + (it.get("abstract", "") or "")).lower()
+        if low in blob:
+            it = dict(it)
+            it.pop("_file", None)
+            hits.append(it)
+    return {"industry": folder, "keyword": kw, "count": len(hits), "items": hits}
+
+
+# ----------------------------------------------------------------------
+# 工具注册表（name → schema + 实现）
+# ----------------------------------------------------------------------
+def _schema(props: dict, required: list[str]):
+    return {"type": "object",
+            "properties": {k: {"type": v[0], "description": v[1]}
+                           for k, v in props.items()},
+            "required": required}
+
+
+TOOLS = {
+    "list_industries": {
+        "description": "列出 DomainIntelData 下全部行业文件夹及定期开关状态",
+        "inputSchema": _schema({}, []),
+        "fn": tool_list_industries,
+    },
+    "get_daily": {
+        "description": "读取某行业每日情报（news/github/funding/hiring/ceo/papers），"
+                       "每条含 title/abstract/url/credibility/references",
+        "inputSchema": _schema({
+            "industry": ("string", "行业文件夹名，如 Chips / AI"),
+            "category": ("string", "可选，六类之一，缺省全部"),
+            "date": ("string", "可选，YYYY-MM-DD，缺省最近一天"),
+        }, ["industry"]),
+        "fn": tool_get_daily,
+    },
+    "get_knowledge": {
+        "description": "读取某行业三层知识结构：行业→产业链→企业/高校实体",
+        "inputSchema": _schema({"industry": ("string", "行业文件夹名")}, ["industry"]),
+        "fn": tool_get_knowledge,
+    },
+    "get_sources": {
+        "description": "读取某行业信息源清单（博客/平台/自媒体/新闻/期刊/财报/金融）",
+        "inputSchema": _schema({"industry": ("string", "行业文件夹名")}, ["industry"]),
+        "fn": tool_get_sources,
+    },
+    "get_landscape": {
+        "description": "读取竞争格局：Leader/Challenger/Emerging/Declining + 历史快照列表",
+        "inputSchema": _schema({"industry": ("string", "行业文件夹名")}, ["industry"]),
+        "fn": tool_get_landscape,
+    },
+    "get_impact_events": {
+        "description": "读取自动检测到的行业级事件清单（政策信号/多源印证）",
+        "inputSchema": _schema({"industry": ("string", "行业文件夹名")}, ["industry"]),
+        "fn": tool_get_impact_events,
+    },
+    "get_impact": {
+        "description": "读取某事件的影响分析（受影响公司/供应链/论文/政策）；"
+                       "不传 slug 则列出全部已分析事件",
+        "inputSchema": _schema({
+            "industry": ("string", "行业文件夹名"),
+            "slug": ("string", "可选，事件目录名"),
+        }, ["industry"]),
+        "fn": tool_get_impact,
+    },
+    "list_report_tasks": {
+        "description": "列出报告任务包：三种行业报告 + 深度研究报告（季度/产业链/格局/市场）",
+        "inputSchema": _schema({"industry": ("string", "行业文件夹名")}, ["industry"]),
+        "fn": tool_list_report_tasks,
+    },
+    "read_report": {
+        "description": "读取行业目录下任意产物文件（json 自动解析，其余按文本）",
+        "inputSchema": _schema({
+            "industry": ("string", "行业文件夹名"),
+            "relpath": ("string", "相对行业目录的路径，如 one_time/reports/deep/quarterly.md"),
+        }, ["industry", "relpath"]),
+        "fn": tool_read_report,
+    },
+    "search_items": {
+        "description": "在某行业最近一天情报中按关键词检索（标题+摘要）",
+        "inputSchema": _schema({
+            "industry": ("string", "行业文件夹名"),
+            "keyword": ("string", "检索关键词"),
+            "date": ("string", "可选，YYYY-MM-DD"),
+        }, ["industry", "keyword"]),
+        "fn": tool_search_items,
+    },
+}
+
+
+# ----------------------------------------------------------------------
+# JSON-RPC / MCP 协议循环（stdio，换行分隔）
+# ----------------------------------------------------------------------
+def _send(obj: dict):
+    sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "\n")
+    sys.stdout.flush()
+
+
+def _result(rid, result):
+    _send({"jsonrpc": "2.0", "id": rid, "result": result})
+
+
+def _error(rid, code: int, message: str):
+    _send({"jsonrpc": "2.0", "id": rid, "error": {"code": code, "message": message}})
+
+
+def _log(msg: str):
+    sys.stderr.write(f"[{SERVER_NAME}] {msg}\n")
+    sys.stderr.flush()
+
+
+def _handle(msg: dict):
+    method = msg.get("method", "")
+    rid = msg.get("id")          # 通知没有 id
+    params = msg.get("params") or {}
+
+    if method == "initialize":
+        client_ver = (params.get("protocolVersion") or PROTOCOL_VERSION)
+        _result(rid, {
+            "protocolVersion": client_ver,
+            "capabilities": {"tools": {"listChanged": False}},
+            "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
+        })
+    elif method == "notifications/initialized":
+        pass  # 纯通知，无需响应
+    elif method == "ping":
+        if rid is not None:
+            _result(rid, {})
+    elif method == "tools/list":
+        _result(rid, {"tools": [
+            {"name": name, "description": spec["description"],
+             "inputSchema": spec["inputSchema"]}
+            for name, spec in TOOLS.items()
+        ]})
+    elif method == "tools/call":
+        name = params.get("name", "")
+        args = params.get("arguments") or {}
+        spec = TOOLS.get(name)
+        if spec is None:
+            _error(rid, -32602, f"未知工具: {name!r}")
+            return
+        try:
+            data = spec["fn"](args)
+            _result(rid, {
+                "content": [{"type": "text",
+                             "text": json.dumps(data, ensure_ascii=False,
+                                                indent=2)}],
+                "isError": False,
+            })
+        except Exception as e:  # 工具内错误按 MCP 约定以 isError 返回
+            _result(rid, {"content": [{"type": "text", "text": f"ERROR: {e}"}],
+                          "isError": True})
+    else:
+        if rid is not None:
+            _error(rid, -32601, f"Method not found: {method}")
+
+
+def serve_stdio(data_root: str | Path):
+    """启动 MCP stdio 服务（阻塞，直到 stdin 关闭）."""
+    global DATA_ROOT
+    DATA_ROOT = Path(data_root)
+    _log(f"data_root={DATA_ROOT}  tools={len(TOOLS)}  等待客户端…")
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            msg = json.loads(line)
+        except json.JSONDecodeError:
+            _error(None, -32700, "Parse error")
+            continue
+        try:
+            _handle(msg)
+        except Exception as e:
+            _log(f"handler error: {e}")
+            if msg.get("id") is not None:
+                _error(msg["id"], -32603, f"Internal error: {e}")
+    _log("stdin 关闭，服务退出")
+
+
+if __name__ == "__main__":
+    serve_stdio(sys.argv[1] if len(sys.argv) > 1 else "D:/IntDog/DomainIntelData")

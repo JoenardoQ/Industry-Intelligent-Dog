@@ -1,0 +1,142 @@
+# ============================================================
+# Domain Intelligence System 配置文件
+# 领域情报系统配置
+# ============================================================
+
+# ---------- 目标领域设置 ----------
+domain:
+  name: "人工智能"                # 目标领域名称
+  name_en: "Artificial Intelligence"  # 英文名称（用于英文源检索）
+  depth: "beginner"              # beginner(新手) | intermediate(熟手) | expert(专家)
+  keywords:                      # 领域关键词（用于新闻过滤）
+    - "AI"
+    - "人工智能"
+    - "machine learning"
+    - "deep learning"
+    - "LLM"
+    - "大模型"
+
+# ---------- 邮件推送设置 ----------
+email:
+  enabled: false                    # 配好真实地址与环境变量 INTDOG_SMTP_PASSWORD 后再开启
+  smtp_server: "smtp.qq.com"     # QQ邮箱: smtp.qq.com | 163: smtp.163.com | Gmail: smtp.gmail.com | Outlook: smtp-mail.outlook.com
+  smtp_port: 465                 # SSL端口: QQ/163=465, Gmail=465, Outlook=587
+  use_ssl: true
+  sender: "your_email@qq.com"    # 发件人邮箱
+  password: "your_auth_code"     # 邮箱授权码（非登录密码）
+  recipients:                    # 收件人列表
+    - "recipient@example.com"
+  daily_time: "08:00"            # 每日推送时间
+  weekly_day: "monday"           # 每周推送日
+  send_on_periodic: true          # crawl-daily / crawl-weekly 完成后发送
+
+# ---------- 新闻源设置 ----------
+news:
+  # NewsAPI (免费100次/天) - https://newsapi.org/register
+  newsapi_key: ""
+
+  # GNews (免费100次/天) - https://gnews.io/register
+  gnews_key: ""
+
+  # RSS 源（无需API Key，推荐使用）
+  rss_feeds:
+    general:
+      - name: "TechCrunch"
+        url: "https://techcrunch.com/feed/"
+        lang: "en"
+      - name: "The Verge"
+        url: "https://www.theverge.com/rss/index.xml"
+        lang: "en"
+      - name: "36氪"
+        url: "https://36kr.com/feed"
+        lang: "zh"
+      - name: "机器之心"
+        url: "https://www.jiqizhixin.com/rss"
+        lang: "zh"
+    startup:
+      - name: "HackerNews"
+        url: "https://hnrss.org/frontpage"
+        lang: "en"
+      - name: "Product Hunt"
+        url: "https://www.producthunt.com/feed"
+        lang: "en"
+    finance:
+      - name: "华尔街见闻"
+        url: "https://wallstreetcn.com/rss.xml"
+        lang: "zh"
+      - name: "Financial Times"
+        url: "https://www.ft.com/rss/home"
+        lang: "en"
+    policy:
+      - name: "中国政府网"
+        url: "http://www.gov.cn/pushinfo/v150203/rss.xml"
+        lang: "zh"
+
+# ---------- 学术源设置 ----------
+academic:
+  arxiv_categories:              # arXiv 分类（按领域调整）
+    - "cs.AI"
+    - "cs.LG"
+    - "cs.CL"
+  semantic_scholar_fields:       # Semantic Scholar 领域
+    - "Computer Science"
+    - "Machine Learning"
+  max_papers_per_day: 20
+
+# ---------- LLM / Agent 设置（可选） ----------
+# 重要：DomainIntelSearch 不绑定任何特定 agent 平台（WorkBuddy / Codex / Claude Code 皆可）。
+# 深度研究以"模型无关任务包"(industry/<行业>/tasks/*.json) 形式产出，任何 agent/模型都能执行。
+# 若希望 Search 自带联网 LLM 直连能力，配置下方 provider 即可；留空则只产出任务包。
+llm:
+  provider: "none"               # 默认使用任务包/Codex 套餐；API 需显式选择
+  api_key: ""
+  api_base: "https://api.openai.com/v1"
+  model: "gpt-5.6-terra"         # 质量/成本平衡，支持 Web search
+  reasoning_effort: "medium"
+  web_search: true               # OpenAI Responses API 可用时为研究任务启用网页检索
+  timeout_seconds: 600            # 深度联网研究可能持续数分钟
+
+# ---------- Codex 套餐执行（无需 API Key） ----------
+codex:
+  model: ""                       # 留空=使用套餐当前默认模型
+  timeout_seconds: 1800
+
+# ---------- 输出设置（旧版 daily/weekly 命令的扁平归档，归入 _archive 子目录） ----------
+# 注意：新版按行业分目录存储用 init-industry / crawl-daily（见 main.py 顶部说明），
+#       数据写入 DomainIntelData/<行业>/。以下 output/archive 仅供旧命令使用。
+output:
+  dir: "../DomainIntelData/_archive/reports"
+  data_dir: "../DomainIntelData/_archive/raw"
+  report_format: "html"          # html | markdown
+  language: "zh"                 # zh | en | both
+
+# ---------- 按行业分目录的数据层根（新版主存储） ----------
+# init-industry / crawl-daily 等新命令把数据写入 <data_layer.root>/<行业>/。
+data_layer:
+  root: "../DomainIntelData"
+
+# ---------- 数据层设置（旧版扁平归档，归入 _archive 子目录） ----------
+# 新版按行业分目录：DomainIntelData/<行业>/（init-industry 创建）。
+archive:
+  enabled: true
+  root: "../DomainIntelData/_archive"
+  serve_port: 8900               # 局域网服务端口（可选）
+
+# ---------- IIOS 多 Agent 设置（规格见 IIOS_SPEC.md） ----------
+iios:
+  region: "global"               # global | china | us | europe（区域视角）
+  # 四级调度（daily/weekly 由 WorkBuddy 自动化承担；monthly/quarterly 生成 LLM 任务包）
+  schedule:
+    daily:     ["collect", "daily"]                    # 新闻/论文/发言 → 日报
+    weekly:    ["weekly"]                              # 行业+政策+投融资周报
+    monthly:   ["agent:finance", "agent:technology"]   # 财报跟踪+技术趋势任务包
+    quarterly: ["plan"]                                # 深度行业报告全量计划
+  # 多源交叉验证（Phase 2）：同一事件 >=2 源 → confidence >= 0.8
+  verification:
+    min_sources: 2
+    base_confidence: 0.6
+
+# ---------- 独立桌面程序设置（desktop/main.py 打包为 exe） ----------
+desktop:
+  crawl_interval_hours: 4        # 后台爬虫抓取间隔（小时）
+  send_email: false              # 后台抓取完成后是否发邮件（需先配置 email 段）

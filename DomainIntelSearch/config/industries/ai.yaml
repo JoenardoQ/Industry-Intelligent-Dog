@@ -1,0 +1,40 @@
+id: ai
+name: 人工智能
+name_en: Artificial Intelligence
+data_folder: AI
+aliases:
+- AI
+- 大模型
+- LLM
+- machine learning
+depth: beginner
+description: 大模型、算力、Agent 应用与 AI 产业化
+value_chain_template: 人工智能
+keywords:
+- AI
+- 人工智能
+- machine learning
+- deep learning
+- LLM
+- 大模型
+- Agent
+- 多模态
+arxiv_categories:
+- cs.AI
+- cs.LG
+- cs.CL
+semantic_scholar_fields:
+- Computer Science
+- Machine Learning
+tracked_companies:
+- name: 科大讯飞
+  symbol: '002230'
+- name: 寒武纪
+  symbol: '688256'
+- name: 金山办公
+  symbol: '688111'
+extra_rss_feeds:
+  general:
+  - name: MIT Tech Review AI
+    url: https://www.technologyreview.com/topic/artificial-intelligence/feed/
+    lang: en

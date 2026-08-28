@@ -1,0 +1,31 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+.intdog-runtime/
+dist/
+build/
+
+# Local secrets and runtime state
+.env
+*.local.yaml
+DomainIntelData/**/.lock
+DomainIntelData/**/.tmp
+
+# Generated intelligence and local databases. Keep only the public data contract.
+DomainIntelData/*
+!DomainIntelData/README.md
+!DomainIntelData/skill/
+!DomainIntelData/skill/**
+*.db
+*.sqlite
+*.sqlite3
+
+# Local logs and agent/session state
+*.log
+.codex/
+.agents/
+.workbuddy/

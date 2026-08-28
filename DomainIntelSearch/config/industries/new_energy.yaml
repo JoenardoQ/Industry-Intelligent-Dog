@@ -1,0 +1,42 @@
+# 新能源行业档案
+id: new_energy
+name: "新能源"
+name_en: "New Energy"
+data_folder: "NewEnergy"
+aliases: ["锂电", "储能", "光伏", "动力电池", "battery", "EV"]
+depth: "beginner"
+description: "锂电池、储能、光伏、新能源车与回收利用"
+value_chain_template: "新能源"
+
+keywords:
+  - "新能源"
+  - "锂电"
+  - "储能"
+  - "光伏"
+  - "动力电池"
+  - "固态电池"
+  - "宁德时代"
+  - "比亚迪"
+  - "battery"
+  - "energy storage"
+  - "EV"
+  - "photovoltaic"
+  - "lithium"
+
+arxiv_categories:
+  - "eess.SY"
+  - "cond-mat.mtrl-sci"
+  - "physics.chem-ph"
+
+semantic_scholar_fields:
+  - "Engineering"
+  - "Materials Science"
+  - "Chemistry"
+
+tracked_companies:
+  - { name: "宁德时代", symbol: "300750" }
+  - { name: "比亚迪", symbol: "002594" }
+  - { name: "阳光电源", symbol: "300274" }
+  - { name: "亿纬锂能", symbol: "300014" }
+
+extra_rss_feeds: {}

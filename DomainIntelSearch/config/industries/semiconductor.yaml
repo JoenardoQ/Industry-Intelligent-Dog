@@ -1,0 +1,73 @@
+id: semiconductor
+name: 半导体
+name_en: Semiconductor
+data_folder: Chips
+aliases:
+- 芯片
+- 集成电路
+- IC
+- chip
+- semiconductor
+- 晶圆
+depth: beginner
+description: 芯片设计、制造、封测、设备材料与国产替代
+value_chain_template: 半导体
+keywords:
+- 半导体
+- 芯片
+- 晶圆
+- 光刻
+- EUV
+- EDA
+- 先进制程
+- 封装
+- 存储芯片
+- HBM
+- GPU
+- ASIC
+- chiplet
+- 中芯国际
+- 台积电
+- semiconductor
+- chip
+- wafer
+- foundry
+- lithography
+arxiv_categories:
+- cs.AR
+- cs.ET
+- eess.SY
+semantic_scholar_fields:
+- Computer Science
+- Engineering
+- Physics
+tracked_companies:
+- name: 中芯国际
+  symbol: '688981'
+- name: 海光信息
+  symbol: '688041'
+- name: 北方华创
+  symbol: '002371'
+- name: 中微公司
+  symbol: '688012'
+- name: 韦尔股份
+  symbol: '603501'
+- name: 兆易创新
+  symbol: '603986'
+extra_rss_feeds:
+  general:
+  - name: Semiconductor Engineering
+    url: https://semiengineering.com/feed/
+    lang: en
+  - name: Tom's Hardware
+    url: https://www.tomshardware.com/feeds/all
+    lang: en
+  - name: IEEE Spectrum Semiconductors
+    url: https://spectrum.ieee.org/feeds/topic/semiconductors.rss
+    lang: en
+  - name: Semiconductor Digest
+    url: https://www.semiconductor-digest.com/feed/
+    lang: en
+  - name: EE Times
+    url: https://www.eetimes.com/feed/
+    lang: en

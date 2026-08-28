@@ -1,0 +1,37 @@
+# 机器人行业档案
+id: robotics
+name: "机器人"
+name_en: "Robotics"
+data_folder: "Robotics"
+aliases: ["人形机器人", "具身智能", "humanoid", "robotics"]
+depth: "beginner"
+description: "人形机器人、核心零部件、具身智能与行业应用"
+value_chain_template: "机器人"
+
+keywords:
+  - "机器人"
+  - "人形机器人"
+  - "具身智能"
+  - "减速器"
+  - "伺服"
+  - "机器狗"
+  - "robotics"
+  - "humanoid"
+  - "embodied AI"
+  - "manipulation"
+
+arxiv_categories:
+  - "cs.RO"
+  - "cs.AI"
+  - "cs.LG"
+
+semantic_scholar_fields:
+  - "Computer Science"
+  - "Engineering"
+
+tracked_companies:
+  - { name: "汇川技术", symbol: "300124" }
+  - { name: "绿的谐波", symbol: "688017" }
+  - { name: "埃斯顿", symbol: "002747" }
+
+extra_rss_feeds: {}

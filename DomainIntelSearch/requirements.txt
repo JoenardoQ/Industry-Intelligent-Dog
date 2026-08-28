@@ -1,0 +1,17 @@
+# Domain Intelligence System
+# 领域情报系统 - 核心依赖
+
+# HTTP 请求
+requests>=2.31.0
+
+# RSS 解析
+feedparser>=6.0.11
+
+# YAML 配置
+PyYAML>=6.0.1
+
+# 日期处理
+python-dateutil>=2.8.2
+
+# 可选金融行情依赖见 requirements-finance.txt，或：
+# python -m pip install -e ".[finance]"

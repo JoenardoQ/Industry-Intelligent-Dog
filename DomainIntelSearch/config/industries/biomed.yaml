@@ -1,0 +1,40 @@
+# 生物医药行业档案
+id: biomed
+name: "生物医药"
+name_en: "Biomedicine"
+data_folder: "Biomed"
+aliases: ["创新药", "biotech", "医药", "drug"]
+depth: "beginner"
+description: "创新药、临床试验、AI 制药与商业化"
+value_chain_template: "生物医药"
+
+keywords:
+  - "生物医药"
+  - "创新药"
+  - "临床试验"
+  - "靶点"
+  - "抗体"
+  - "ADC"
+  - "双抗"
+  - "基因编辑"
+  - "biotech"
+  - "drug discovery"
+  - "clinical trial"
+  - "CRISPR"
+
+arxiv_categories:
+  - "q-bio.BM"
+  - "q-bio.QM"
+  - "cs.LG"
+
+semantic_scholar_fields:
+  - "Biology"
+  - "Chemistry"
+  - "Medicine"
+
+tracked_companies:
+  - { name: "恒瑞医药", symbol: "600276" }
+  - { name: "百济神州", symbol: "688235" }
+  - { name: "药明康德", symbol: "603259" }
+
+extra_rss_feeds: {}
