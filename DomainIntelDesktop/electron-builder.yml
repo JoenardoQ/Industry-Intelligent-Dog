@@ -31,7 +31,7 @@ mac:
   gatekeeperAssess: false
   target:
     - target: dmg
-      arch: [universal]
+      arch: [x64]
 linux:
   artifactName: IntDog-${version}-linux-${arch}.${ext}
   icon: ../DomainIntelApp/app/icon-512.png
