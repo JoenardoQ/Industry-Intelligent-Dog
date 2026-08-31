@@ -4,14 +4,14 @@
 
 本次基线的最终发行目标扩展为 Windows、macOS 与 Linux 三个平台。当前机器上的 Windows 11 + WSL `Ubuntu-D` 路径用于已有行为回归，但正式产物必须分别在三个原生宿主构建，不能把 WSL 或源码启动视为跨平台安装包。
 
-本次已创建三个发行跟踪 Issue，并允许在原生门槛通过后创建 `4.0.0-test.1` 未签名 GitHub Pre-release；稳定版仍受签名门槛约束。本次尚未获得 Git commit/push 的单独授权；不调用付费模型，不发送邮件，不执行真实联网采集，不永久删除生产数据，也不承诺商业数据库级覆盖。
+本次已创建三个发行跟踪 Issue，并在原生门槛通过后发布 `4.0.0-test.1` 未签名 GitHub Pre-release；稳定版仍受签名门槛约束。用户已明确授权已审计提交、push 到 `main` 及三个公开 Pre-release。本次未调用付费模型，未发送邮件，未执行真实联网采集，未永久删除生产数据，也不承诺商业数据库级覆盖。
 
 ## 支持边界
 
 - 目标支持路径：平台原生桌面壳 → 同平台后端 sidecar → 随机 localhost 端口与会话凭证 → 内嵌 Chromium 工作台。Windows WSL 快捷方式降为开发兼容入口，不作为发行包。
 - 数据：生产数据只读检查；写入、删除、恢复、任务和错误注入使用隔离的临时数据根。
 - 网络：应用只监听 `127.0.0.1`；会话令牌、Host 与 Origin 必须通过边界检查。
-- 兼容性：Windows x64、macOS arm64/x64、Linux x64 分别产出安装包；每个平台必须由对应 runner 原生构建与烟雾测试。当前已有本机 Windows/WSL 兼容入口与 Linux x64 AppImage 运行证据；Windows/macOS 原生安装包仍须 CI 证明。
+- 兼容性：Windows x64、macOS Apple Silicon arm64、Linux x64 分别由匹配的原生 runner 构建并烟雾测试。Intel macOS 不在本次测试版支持边界内；Windows/WSL 快捷方式仍是独立的开发兼容路径。
 
 ## 已批准的打包架构
 
@@ -27,10 +27,14 @@ Windows 和 macOS 稳定版 Release 必须签名，macOS 还必须完成公证�
 
 ## 当前原生证据
 
+- 共同门禁 [run 33377497831](https://github.com/JoenardoQ/Industry-Intelligent-Dog/actions/runs/33377497831) 在提交 `7709e8821cda4a865f215f8f4cef52aec6645049` 上通过 Windows、macOS arm64 与 Linux。三个原生任务均通过 sidecar 冒烟、打包、安装或挂载、启动、关闭和重开。
+- Windows Pre-release：128,282,964 字节 NSIS `.exe`，SHA-256 `1f71cc0262805ddbff6ebc4750720cecb38107c6cc731db5242cb8030e1d6842`。
+- macOS Pre-release：143,706,681 字节 Apple Silicon `.dmg`，SHA-256 `2513556746e00bf5eaa0f0ec83b57ea45a35b0e52e263c326100fa70f0a54074`。
+- Linux Pre-release：155,840,155 字节 `.AppImage`，SHA-256 `b83cbb370ea46ccc23ef8c6d1a43c24989e46309e611d26fa053795d2cda9571`。
 - Linux x64 sidecar：17 MB；同一冻结文件同时通过 `cli industries`、FastAPI 健康检查、会话保护和正常关机。
 - Linux x64 AppImage：142,063,476 字节（约 135.5 MiB），SHA-256 为 `863844d3f8c1a26c598199c4113796587b87f9fc7bca8c1361a39d7ed0e777d2`；在 WSLg 中以隔离数据与配置目录连续完成两次 UI/后端启动、就绪、正常关闭与重开。
 - 安装包只包含当前平台 sidecar。Electron/Chromium 是主要体积来源；Python sidecar 不是体积主因。
-- 当前结论仍为 `NOT_READY`：修复后的共同门禁仍需取得 macOS arm64 原生构建与安装生命周期证据。测试包按计划不签名；签名与公证仍是正式版门槛。
+- 当前结论：`READY_FOR_PUBLIC_TESTING`，但尚未达到稳定生产版门槛。三个包按计划不签名；Windows 签名、macOS 签名与公证仍是稳定版要求。
 
 ## 风险覆盖矩阵
 

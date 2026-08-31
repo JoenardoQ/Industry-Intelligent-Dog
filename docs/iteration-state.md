@@ -1,7 +1,7 @@
 # IntDog Iteration State
 
 - Lifecycle phase: BASELINE
-- Execution status: ACTIVE — unsigned test-release path selected; commit/push pending authorization
+- Execution status: COMPLETE — audited refactor pushed and three unsigned public test releases published
 - Current round: 3 of 3
 - Current baseline: IntDog 4.0 user-facing release readiness; no new optimization round authorized
 - Release contract: `docs/release-readiness.zh-CN.md` / `docs/release-readiness.md`
@@ -10,18 +10,18 @@
   one installer, Issue, build job and Release per platform. Shared architecture
   changes invalidate and rerun all three platform gates.
 - Platform release tracking: Windows Issue #1, macOS Issue #2, Linux Issue #3.
-- Native evidence: Linux x64 sidecar (17 MB) and AppImage (142,063,476 bytes) passed
-  two consecutive isolated start-ready-close-reopen cycles. Overall release remains
-  NOT_READY until native Windows and macOS gates pass.
+- Native evidence: shared gate run 33377497831 passed Windows x64, macOS arm64,
+  and Linux x64 package lifecycle tests from commit 7709e88. Three platform
+  Pre-releases were published from the same commit; status is READY_FOR_PUBLIC_TESTING.
 - Release channel: `4.0.0-test.1` unsigned GitHub Pre-release. Signing Secrets are
   intentionally not inherited by the three test-release workflows. Stable Windows
   and macOS releases remain blocked until signing/notarization is configured.
-- Baseline HEAD: 75e1f463af4b098e4176304c948c1a6b9b61822c
+- Release HEAD: 7709e8821cda4a865f215f8f4cef52aec6645049
 - Baseline working-tree diff SHA-256: 9b476402c2d80b2f340c4a2c664b29f0584eb82f1855983a63c1deb65b4dca68
 - Data root: /home/joenardo/My Projects/IntDog/DomainIntelData
 - Deletion authority: AI/, intdog.sqlite3, intdog.sqlite3-wal, intdog.sqlite3-shm, _trash/, _jobs/
 - Preserve: README.md, skill/, source, docs, config, runtime, unrelated changes
-- Commit/push/deploy authority: none
+- Commit/push/release authority: explicitly granted and exercised for this release task
 - Active baseline contract: `docs/2026-08-30-iios-workbench-baseline.md`
 - Requested optimization rounds after baseline: 3
 - Production data mutation authority for this request: executed within the user-confirmed Round 3 reset and fresh-workflow scope

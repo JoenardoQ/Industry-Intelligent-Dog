@@ -4,14 +4,14 @@
 
 The final release target now spans Windows, macOS, and Linux. The current Windows 11 + WSL `Ubuntu-D` path remains useful for regression evidence, but distributable artifacts must be built natively for all three platforms; WSL or source-based startup is not a cross-platform application package.
 
-This work creates three release-tracking Issues and permits unsigned `4.0.0-test.1` GitHub Pre-releases after native gates pass. Stable Releases remain subject to signing gates. Separate authorization for Git commit and push has not yet been given. This work does not call paid models, send email, perform live network collection, permanently delete production data, or promise commercial-database coverage.
+This work created three release-tracking Issues and published unsigned `4.0.0-test.1` GitHub Pre-releases after the native gates passed. Stable Releases remain subject to signing gates. The user explicitly authorized the audited commits, push to `main`, and the three public Pre-releases. This work did not call paid models, send email, perform live network collection, permanently delete production data, or promise commercial-database coverage.
 
 ## Supported Boundary
 
 - Target path: platform-native desktop shell → same-platform backend sidecar → random localhost port plus session credential → embedded Chromium workbench. The Windows WSL shortcut becomes a development compatibility path, not the release package.
 - Data: production data receives read-only checks; writes, deletion, recovery, jobs, and fault injection use an isolated temporary data root.
 - Network: the application listens only on `127.0.0.1`; session token, Host, and Origin checks must hold at the boundary.
-- Compatibility: Windows x64, macOS arm64/x64, and Linux x64 each receive an installer built and smoke-tested on a native runner. The local Windows/WSL compatibility path and a Linux x64 AppImage now have runtime evidence; native Windows and macOS packages still require CI evidence.
+- Compatibility: Windows x64, macOS Apple Silicon arm64, and Linux x64 each receive an installer built and smoke-tested on a matching native runner. Intel macOS is outside this test-release boundary. The Windows/WSL shortcut remains a separate development compatibility path.
 
 ## Approved Packaging Architecture
 
@@ -27,10 +27,14 @@ Platform delivery is tracked by [Windows Issue #1](https://github.com/JoenardoQ/
 
 ## Current Native Evidence
 
+- Shared gate [run 33377497831](https://github.com/JoenardoQ/Industry-Intelligent-Dog/actions/runs/33377497831) passed Windows, macOS arm64, and Linux from commit `7709e8821cda4a865f215f8f4cef52aec6645049`. Each native job passed sidecar smoke, package build, install or mount, launch, close, and reopen.
+- Windows Pre-release: 128,282,964-byte NSIS `.exe`, SHA-256 `1f71cc0262805ddbff6ebc4750720cecb38107c6cc731db5242cb8030e1d6842`.
+- macOS Pre-release: 143,706,681-byte Apple Silicon `.dmg`, SHA-256 `2513556746e00bf5eaa0f0ec83b57ea45a35b0e52e263c326100fa70f0a54074`.
+- Linux Pre-release: 155,840,155-byte `.AppImage`, SHA-256 `b83cbb370ea46ccc23ef8c6d1a43c24989e46309e611d26fa053795d2cda9571`.
 - Linux x64 sidecar: 17 MB; the same frozen executable passed `cli industries`, FastAPI health, session enforcement, and graceful shutdown.
 - Linux x64 AppImage: 142,063,476 bytes (about 135.5 MiB), SHA-256 `863844d3f8c1a26c598199c4113796587b87f9fc7bca8c1361a39d7ed0e777d2`; under WSLg and isolated data/config roots, it completed two consecutive UI/backend start, ready, graceful close, and reopen cycles.
 - Each installer carries only its native sidecar. Electron/Chromium is the dominant size component; the Python sidecar is not the main contributor.
-- The current conclusion remains `NOT_READY`: the repaired shared gate still needs native macOS arm64 build and install-lifecycle evidence. Test packages are intentionally unsigned; signing and notarization remain formal-release requirements.
+- Current conclusion: `READY_FOR_PUBLIC_TESTING`, not ready for a stable production release. The three packages are intentionally unsigned; Windows signing and macOS signing/notarization remain stable-release requirements.
 
 ## Risk Coverage Matrix
 
