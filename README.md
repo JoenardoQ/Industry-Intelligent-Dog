@@ -80,7 +80,7 @@ Use `--industry` for a name or alias and `--folder` for an exact data folder.
 The approved package is an Electron shell plus one PyInstaller API/CLI sidecar. Each installer contains only its native runtime:
 
 - Windows x64: NSIS `.exe`
-- macOS Intel x64: `.dmg` (Apple Silicon test users need Rosetta 2)
+- macOS Apple Silicon arm64: `.dmg`
 - Linux x64: `.AppImage`
 
 Every shared architecture, API, schema, runtime, or UI change triggers all three native package gates. Test builds use `4.0.0-test.*`, are marked GitHub Pre-release, and are unsigned. Windows SmartScreen or macOS Gatekeeper may therefore require manual approval. Stable Windows and macOS releases require signing; macOS also requires notarization. See the aligned [release contract](docs/release-readiness.md) and [Chinese release contract](docs/release-readiness.zh-CN.md).

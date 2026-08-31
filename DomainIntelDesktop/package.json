@@ -11,7 +11,7 @@
     "test": "node --test test/*.test.cjs",
     "prepare:resources": "python3 scripts/prepare_resources.py",
     "dist:windows": "electron-builder --win nsis --x64 --publish never",
-    "dist:macos": "electron-builder --mac dmg --x64 --publish never",
+    "dist:macos": "electron-builder --mac dmg --arm64 --publish never",
     "dist:linux": "electron-builder --linux AppImage --x64 --publish never"
   },
   "devDependencies": {

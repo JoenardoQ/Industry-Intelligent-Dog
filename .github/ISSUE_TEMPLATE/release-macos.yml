@@ -1,5 +1,5 @@
 name: macOS platform release
-description: Track one unsigned macOS x64 test release.
+description: Track one unsigned macOS Apple Silicon test release.
 title: "prerelease(macos): IntDog "
 labels: [release, macos]
 body:
@@ -12,7 +12,7 @@ body:
     attributes:
       label: Native gates
       options:
-        - { label: Native x64 sidecar smoke passed on macOS, required: true }
+        - { label: Native arm64 sidecar smoke passed on macOS, required: true }
         - { label: Unsigned DMG mount-launch-close-reopen passed, required: true }
         - { label: Release is marked Pre-release and warns about Gatekeeper, required: true }
         - { label: Shared three-platform architecture gate is green, required: true }

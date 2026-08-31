@@ -112,7 +112,7 @@ cd ..
 ## 原生测试版
 
 原生包采用 Electron 桌面壳与单一 PyInstaller API/CLI sidecar。Windows x64 生成 NSIS
-`.exe`，macOS Intel x64 生成 `.dmg`（Apple Silicon 测试用户需安装 Rosetta 2），Linux x64 生成 `.AppImage`；每个安装包只携带
+`.exe`，macOS Apple Silicon arm64 生成 `.dmg`，Linux x64 生成 `.AppImage`；每个安装包只携带
 本平台运行时。共享架构、API、Schema、运行时或 UI 发生变化时，三平台门槛必须同时重跑。
 
 `4.0.0-test.*` 标记为 GitHub Pre-release 且不签名，因此 Windows SmartScreen 或 macOS

@@ -15,7 +15,7 @@ This work creates three release-tracking Issues and permits unsigned `4.0.0-test
 
 ## Approved Packaging Architecture
 
-The approved route is an Electron desktop shell plus one PyInstaller Python/FastAPI/CLI sidecar and `electron-builder`. Electron supplies consistent Chromium rendering, windows, and lifecycle behavior; one sidecar handles both the API and research commands so Python is not bundled twice. Native CI runners produce a Windows x64 `.exe`, a macOS Intel x64 `.dmg`, and a Linux x64 `.AppImage`. Apple Silicon test users need Rosetta 2. Each installer carries only its own platform runtime and never embeds binaries for the other platforms.
+The approved route is an Electron desktop shell plus one PyInstaller Python/FastAPI/CLI sidecar and `electron-builder`. Electron supplies consistent Chromium rendering, windows, and lifecycle behavior; one sidecar handles both the API and research commands so Python is not bundled twice. Native CI runners produce a Windows x64 `.exe`, a macOS Apple Silicon arm64 `.dmg`, and a Linux x64 `.AppImage`. Each installer carries only its own platform runtime and never embeds binaries for the other platforms.
 
 Each platform has one GitHub Issue, one independent build job, and one platform Release. Any change to the shared Electron main process, Python sidecar interface, Schema, or overall architecture invalidates all three platform jobs and requires all three to rebuild and pass. The project must not maintain three divergent business implementations. Electron has a fixed Chromium size cost even with platform separation; separate distribution avoids cross-platform binary bundling but does not remove Chromium.
 
@@ -30,7 +30,7 @@ Platform delivery is tracked by [Windows Issue #1](https://github.com/JoenardoQ/
 - Linux x64 sidecar: 17 MB; the same frozen executable passed `cli industries`, FastAPI health, session enforcement, and graceful shutdown.
 - Linux x64 AppImage: 142,063,476 bytes (about 135.5 MiB), SHA-256 `863844d3f8c1a26c598199c4113796587b87f9fc7bca8c1361a39d7ed0e777d2`; under WSLg and isolated data/config roots, it completed two consecutive UI/backend start, ready, graceful close, and reopen cycles.
 - Each installer carries only its native sidecar. Electron/Chromium is the dominant size component; the Python sidecar is not the main contributor.
-- The current conclusion remains `NOT_READY`: the repaired shared gate still needs native macOS x64 build and install-lifecycle evidence. Test packages are intentionally unsigned; signing and notarization remain formal-release requirements.
+- The current conclusion remains `NOT_READY`: the repaired shared gate still needs native macOS arm64 build and install-lifecycle evidence. Test packages are intentionally unsigned; signing and notarization remain formal-release requirements.
 
 ## Risk Coverage Matrix
 

@@ -15,7 +15,7 @@
 
 ## 已批准的打包架构
 
-采用 Electron 桌面壳 + 单一 PyInstaller Python/FastAPI/CLI sidecar + `electron-builder`。Electron 提供三平台一致的 Chromium、窗口与生命周期，单一 sidecar 同时承担 API 与研究命令，避免重复捆绑 Python。CI 在 Windows/macOS/Linux 原生 runner 分别生成 Windows x64 `.exe`、macOS Intel x64 `.dmg` 和 Linux x64 `.AppImage`；Apple Silicon 测试用户需安装 Rosetta 2。每个包只携带本平台运行时，不混装其他平台二进制。
+采用 Electron 桌面壳 + 单一 PyInstaller Python/FastAPI/CLI sidecar + `electron-builder`。Electron 提供三平台一致的 Chromium、窗口与生命周期，单一 sidecar 同时承担 API 与研究命令，避免重复捆绑 Python。CI 在 Windows/macOS/Linux 原生 runner 分别生成 Windows x64 `.exe`、macOS Apple Silicon arm64 `.dmg` 和 Linux x64 `.AppImage`；每个包只携带本平台运行时，不混装其他平台二进制。
 
 三个平台各有一个 GitHub Issue、一个独立构建任务和一个平台 Release。共享 Electron 主进程、Python sidecar 接口、Schema 或整体架构发生变化时，三项平台任务必须全部重新构建并通过；禁止维护三个分叉的业务实现。Electron 自带 Chromium，因此即使分平台仍有固定体积成本；分发拆分的收益是避免跨平台二进制混装，而不是消除 Chromium。
 
@@ -30,7 +30,7 @@ Windows 和 macOS 稳定版 Release 必须签名，macOS 还必须完成公证�
 - Linux x64 sidecar：17 MB；同一冻结文件同时通过 `cli industries`、FastAPI 健康检查、会话保护和正常关机。
 - Linux x64 AppImage：142,063,476 字节（约 135.5 MiB），SHA-256 为 `863844d3f8c1a26c598199c4113796587b87f9fc7bca8c1361a39d7ed0e777d2`；在 WSLg 中以隔离数据与配置目录连续完成两次 UI/后端启动、就绪、正常关闭与重开。
 - 安装包只包含当前平台 sidecar。Electron/Chromium 是主要体积来源；Python sidecar 不是体积主因。
-- 当前结论仍为 `NOT_READY`：修复后的共同门禁仍需取得 macOS x64 原生构建与安装生命周期证据。测试包按计划不签名；签名与公证仍是正式版门槛。
+- 当前结论仍为 `NOT_READY`：修复后的共同门禁仍需取得 macOS arm64 原生构建与安装生命周期证据。测试包按计划不签名；签名与公证仍是正式版门槛。
 
 ## 风险覆盖矩阵
 
