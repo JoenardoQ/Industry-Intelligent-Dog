@@ -1,5 +1,6 @@
 """学术爬虫：arXiv + Semantic Scholar."""
 
+import os
 from datetime import datetime
 
 import feedparser
@@ -63,8 +64,7 @@ class ArxivCrawler(BaseCrawler):
             en_kw = [k for k in self.domain_cfg.get("keywords", [])
                      if k and k.isascii()]
             matched = [a for a in articles
-                       if any(k.lower() in f"{a.title} {a.summary}".lower()
-                              for k in en_kw)] if en_kw else []
+                       if self.match_keywords(f"{a.title} {a.summary}")] if en_kw else []
             for a in articles:
                 a.extra["keyword_match"] = a in matched
             # Profiles with searchable English terms must not silently fall
@@ -103,7 +103,7 @@ class SemanticScholarCrawler(BaseCrawler):
             "year": datetime.now().year,
         }
         headers = {}
-        api_key = self.config.get("news", {}).get("semantic_scholar_key", "")
+        api_key = os.environ.get("SEMANTIC_SCHOLAR_API_KEY", "")
         if api_key:
             headers["x-api-key"] = api_key
         try:

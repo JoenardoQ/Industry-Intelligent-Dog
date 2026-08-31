@@ -139,7 +139,8 @@ def build_discovery_task(industry_name: str, industry_en: str = "") -> dict:
     prompt = f"""你是"{industry_name}"({en})行业的资深情报分析师。
 请为这个行业梳理一份**权威信息源清单**，供持续监控使用。
 
-要求按以下类别分别列出（每类 3-8 个，给出 name / url / 一句话 note）：
+要求覆盖以下来源类别；每类只保留权威、有代表性或能补足明确知识缺口的来源，
+不要为满足固定数量而凑数（给出 name / url / 一句话 note）：
 {cats}
 
 筛选标准：
@@ -149,16 +150,27 @@ def build_discovery_task(industry_name: str, industry_en: str = "") -> dict:
 - 财报要官方披露渠道（SEC/巨潮/港交所/公司 IR 页）
 - 自媒体要该领域有公信力的大V/公众号/专栏
 
-总量目标 45 个左右，其中中文原生网站约 18 个、外文原生网站约 27 个，
-即中文:外文约 1:1.5（允许 1:1.2 到 1:1.8）。中文网站必须是中国发布者的原生站点，
+不要预设总量或 Top 10。先把搜索空间拆成 region × subdomain × value_chain_stage ×
+entity_type × source_type × event_type × time_horizon 的覆盖单元，优先搜索仍为空或证据
+单薄的单元；记录每条实际搜索 query、选择理由、发现 URL，并在边际新增低或访问受限时
+给出 stopping_reason。不设中外数量比例硬限制，但要尽可能扩大中国发布者原生来源，
+重点补充政府/监管、官方媒体、垂直媒体和有行业公信力的自媒体。中文网站必须是中国发布者的原生站点，
 不能把外国网站的中文翻译页算中文源。每个源额外给出
 tier(primary/authoritative/secondary/signal)、coverage（覆盖主题数组）、
 publisher_country、language(zh/en)、origin(china/international)、
-access（rss/api/web）、selection_reason。不要虚构网址。
-输出为 JSON（只输出 JSON，不要 Markdown）：
-{{"official":[{{"name","url","note","tier","coverage","publisher_country","language","origin","access","selection_reason"}}],
+access（rss/api/web）、selection_reason、monitoring_status(active/recommended_manual)、access_note；
+若存在稳定 RSS/Atom，必须额外填写 rss_url，
+且 rss_url 必须是实际订阅地址而不是栏目首页。不要虚构网址。
+优质但因登录、付费墙、反爬或没有 RSS 而无法自动抓取的来源仍应推荐，标为
+recommended_manual 并准确说明限制；社交媒体与自媒体内容只能作为线索。
+输出为 JSON（只输出 JSON，不要 Markdown）。除九类来源外，必须包含 coverage_ledger、
+query_ledger、stopping_reason；coverage/query 只是待验证发现记录，不得声称已核验：
+{{"official":[{{"name","url","rss_url","note","tier","coverage","publisher_country","language","origin","access","selection_reason"}}],
   "associations":[...], "blogs":[...], "platforms":[...], "self_media":[...],
-  "news":[...], "journals":[...], "financials":[...], "finance":[...]}}
+  "news":[...], "journals":[...], "financials":[...], "finance":[...],
+  "coverage_ledger":[{{"dimensions":{{"region","subdomain","chain_stage","entity_type","source_type","event_type","time_horizon"}},"status":"gap|thin|candidate","rationale"}}],
+  "query_ledger":[{{"dimensions":{{...}},"query","rationale","discovered_urls":[],"stopping_reason"}}],
+  "stopping_reason":"本轮停止原因"}}
 """
     return {
         "type": "source_discovery",
@@ -171,27 +183,28 @@ access（rss/api/web）、selection_reason。不要虚构网址。
 
 def merge_sources(base: dict, extra: dict) -> dict:
     """把 LLM 回写的信息源合并进现有 sources（按 url 去重）."""
+    from intdog_core.models import canonical_url
+
     out = dict(base)
     for cat, _ in SOURCE_CATEGORIES:
-        seen = {s.get("url") for s in out.get(cat, [])}
+        seen = {canonical_url(s.get("url", "")) for s in out.get(cat, [])
+                if isinstance(s, dict)}
         for s in extra.get(cat, []) or []:
-            if isinstance(s, dict) and s.get("url") and s["url"] not in seen:
-                out.setdefault(cat, []).append(s)
-                seen.add(s["url"])
+            url = canonical_url(s.get("url", "")) if isinstance(s, dict) else ""
+            if url and url not in seen:
+                out.setdefault(cat, []).append({**s, "url": url})
+                seen.add(url)
+    for key in ("coverage_ledger", "query_ledger", "stopping_reason"):
+        if extra.get(key):
+            out[key] = extra[key]
     out["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     return out
 
 
 def balance_source_origins(sources: dict, minimum_per_category: int = 3,
                            target_max: float = 1.8) -> dict:
-    """Trim only redundant, lower-value foreign sources to satisfy the origin gate.
-
-    Model output can land just outside the requested ratio after trusted seed sources
-    are merged.  Keep every category at its requested minimum and prefer removing
-    signal/secondary sources before authoritative or primary sources.
-    """
+    """Annotate origin coverage without deleting useful sources (legacy API name)."""
     out = dict(sources)
-    tier_rank = {"signal": 0, "secondary": 1, "authoritative": 2, "primary": 3}
 
     def counts() -> tuple[int, int]:
         items = [item for key, _ in SOURCE_CATEGORIES
@@ -200,26 +213,9 @@ def balance_source_origins(sources: dict, minimum_per_category: int = 3,
                 sum(source_origin(item) == "foreign" for item in items))
 
     china, foreign = counts()
-    while china and foreign / china > target_max:
-        removable = []
-        for category, _ in SOURCE_CATEGORIES:
-            items = out.get(category, []) or []
-            if len(items) <= minimum_per_category:
-                continue
-            for index, item in enumerate(items):
-                if isinstance(item, dict) and source_origin(item) == "foreign":
-                    reachable = (item.get("access_check") or {}).get("reachable", True)
-                    removable.append((reachable,
-                                      tier_rank.get(str(item.get("tier", "")).lower(), 1),
-                                      -len(items), category, index))
-        if not removable:
-            break
-        _, _, _, category, index = min(removable)
-        out[category] = [item for pos, item in enumerate(out[category]) if pos != index]
-        china, foreign = counts()
     out["origin_balance"] = {
-        "target_foreign_per_china": 1.5,
-        "allowed_range": [1.2, target_max],
+        "policy": "advisory_domestic_recall_preferred",
+        "hard_limit": False,
         "china": china,
         "foreign": foreign,
     }

@@ -14,8 +14,8 @@
 ## 调用方式（在 DomainIntelSearch/ 目录下）
 
 ```bash
-# 每日情报：抓取 + 生成日报（HTML）+ 归档到 DomainIntelData
-python -m src.main daily --industry 半导体 --days 1
+# 当前主路径：按行业写入六类每日情报
+python -m src.main crawl-daily --industry 半导体 --days 1
 
 # 只抓取原始数据（不生成报告、不发邮件）
 python -m src.main collect --industry 半导体 --days 3
@@ -34,11 +34,13 @@ python -m src.main timeline --industry 半导体 --days 365
 - 行业档案（`config/industries/<id>.yaml`）：关键词、arXiv 分类、跟踪公司、RSS 源。
 - `settings.yaml`：邮件、学术源、输出路径。
 
-## 输出位置（全部在 DomainIntelData/ 内）
-- 结构化条目：`data/<年>/<YYYY-MM-DD>/<类别>.json`
-- 报告：`reports/daily|weekly|timeline/<文件>.html`
-- 查询库：`db/intelligence.db`
-- 总索引：`index/master_index.json`
+## 输出位置
+- 规范事实库：`DomainIntelData/intdog.sqlite3`
+- 兼容视图：`DomainIntelData/<Industry>/periodic/daily/<YYYY-MM-DD>/<类别>.json`
+- 周/月/季产物：`DomainIntelData/<Industry>/periodic/{weekly,monthly,quarterly}/`
+
+`daily/weekly/collect/timeline` 是保留的旧扁平归档命令，产物进入 `_archive/`；新工作流优先使用
+`crawl-*`。
 
 ## 保证
 - 每条记录都带 `url` 和 `references[]`（来源链接），可溯源。

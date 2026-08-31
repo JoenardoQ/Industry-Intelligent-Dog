@@ -59,6 +59,18 @@ def _matches(text: str, keywords: list[str]) -> list[str]:
     return hits
 
 
+def _search_terms(keywords: list[str], limit: int = 8) -> list[str]:
+    """Prefer discriminative English technical terms for global search APIs."""
+    unique = list(dict.fromkeys(str(value).strip() for value in keywords if str(value).strip()))
+    def rank(value: str):
+        ascii_term = value.isascii()
+        generic = value.lower() in {"ai", "it", "ic", "tech", "technology"}
+        return (0 if ascii_term and not generic and len(value) >= 4 else
+                1 if ascii_term and not generic else
+                2 if not ascii_term else 3, -len(value))
+    return sorted(unique, key=rank)[:limit]
+
+
 def _published_date(entry) -> str:
     for key in ("published_parsed", "updated_parsed"):
         parsed = entry.get(key)
@@ -82,7 +94,7 @@ def fetch_github(keywords: list[str], per_kw: int = 5, days: int = 30) -> list[d
     from .http_utils import fetch_url
     since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
     out, seen = [], set()
-    for kw in keywords[:5]:  # 控制请求数，避免限流
+    for kw in _search_terms(keywords):  # 控制请求数，优先高区分度英文技术词
         q = f"{kw} pushed:>={since}"
         try:
             r = fetch_url(
@@ -106,6 +118,7 @@ def fetch_github(keywords: list[str], per_kw: int = 5, days: int = 30) -> list[d
                                  date=(repo.get("pushed_at") or "")[:10],
                                  origin="foreign", source_language="en",
                                  classification_reason={"domain": [kw], "type": ["repository"]},
+                                 relevance_score=1.0,
                                  metrics={"stars": stars,
                                           "language": repo.get("language") or ""}))
         except (requests.RequestException, ValueError):

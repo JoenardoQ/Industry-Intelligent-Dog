@@ -6,10 +6,10 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from dataclasses import dataclass, field, asdict
-from datetime import datetime
+
+from intdog_core import stable_id, utc_now
 
 
 VALID_TYPES = {
@@ -17,10 +17,12 @@ VALID_TYPES = {
     "technology", "learning", "timeline", "value_chain", "industry",
     "social", "report", "task",
 }
+EVIDENCE_STATES = {"candidate", "collected", "verified", "corroborated", "rejected"}
+REVIEW_STATES = {"unreviewed", "draft_review_required", "reviewed", "published"}
 
 
 def record_id(*parts: str) -> str:
-    return hashlib.sha1("||".join(p or "" for p in parts).encode("utf-8")).hexdigest()[:16]
+    return stable_id("rec", *parts)
 
 
 @dataclass
@@ -36,7 +38,7 @@ class IIOSRecord:
 
     type: str
     title: str
-    schema_version: str = "2.0"
+    schema_version: str = "3.0"
     summary: str = ""
     source: str = ""
     url: str = ""
@@ -45,7 +47,13 @@ class IIOSRecord:
     region: str = "global"
     industry: str = ""
     published: str = ""                                 # YYYY-MM-DD
+    observed_at: str = ""
+    valid_from: str = ""
+    valid_to: str = ""
+    evidence_status: str = "candidate"
+    review_status: str = "unreviewed"
     references: list = field(default_factory=list)      # [{title, url}]
+    provenance: dict = field(default_factory=dict)
     impact: Impact = field(default_factory=Impact)
     extra: dict = field(default_factory=dict)
     id: str = ""
@@ -65,6 +73,10 @@ class IIOSRecord:
             raise ValueError("confidence 必须位于 0-1")
         if not isinstance(self.references, list):
             raise ValueError("references 必须是数组")
+        if self.evidence_status not in EVIDENCE_STATES:
+            raise ValueError(f"非法 evidence_status: {self.evidence_status}")
+        if self.review_status not in REVIEW_STATES:
+            raise ValueError(f"非法 review_status: {self.review_status}")
         self.references = [reference for reference in self.references
                            if isinstance(reference, dict) and reference.get("url")]
         if isinstance(self.impact, dict):
@@ -78,7 +90,9 @@ class IIOSRecord:
         if not self.id:
             self.id = record_id(self.type, self.title, self.url or self.source)
         if not self.last_updated:
-            self.last_updated = datetime.now().isoformat(timespec="seconds")
+            self.last_updated = utc_now()
+        if not self.observed_at:
+            self.observed_at = self.last_updated
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -112,6 +126,8 @@ class IIOSRecord:
             source=art_dict.get("source", ""),
             url=art_dict.get("url", ""),
             published=art_dict.get("published", ""),
+            valid_from=art_dict.get("published", ""),
+            evidence_status="collected",
             tags=[art_dict.get("lang", "")] if art_dict.get("lang") else [],
             industry=industry,
             references=refs,

@@ -1,0 +1,42 @@
+name: Three-platform architecture gates
+
+on:
+  pull_request:
+    paths:
+      - DomainIntelDesktop/**
+      - DomainIntelApp/packaging/**
+      - DomainIntelApp/runtime/**
+      - DomainIntelSearch/src/**
+      - DomainIntelSearch/intdog_core/**
+      - DomainIntelSearch/config/**
+      - DomainIntelWeb/api/**
+      - DomainIntelWeb/src/**
+      - DomainIntelWeb/package-lock.json
+      - .github/workflows/**
+  push:
+    branches: [main]
+    paths:
+      - DomainIntelDesktop/**
+      - DomainIntelApp/packaging/**
+      - DomainIntelApp/runtime/**
+      - DomainIntelSearch/src/**
+      - DomainIntelSearch/intdog_core/**
+      - DomainIntelSearch/config/**
+      - DomainIntelWeb/api/**
+      - DomainIntelWeb/src/**
+      - DomainIntelWeb/package-lock.json
+      - .github/workflows/**
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    uses: ./.github/workflows/_native-package.yml
+    with: { platform: windows }
+  macos:
+    uses: ./.github/workflows/_native-package.yml
+    with: { platform: macos }
+  linux:
+    uses: ./.github/workflows/_native-package.yml
+    with: { platform: linux }

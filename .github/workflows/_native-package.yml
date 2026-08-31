@@ -1,0 +1,153 @@
+name: Native package (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      platform:
+        required: true
+        type: string
+      version:
+        required: false
+        type: string
+        default: 4.0.0
+      issue_number:
+        required: false
+        type: string
+        default: ""
+      formal_release:
+        required: false
+        type: boolean
+        default: false
+      publish_prerelease:
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      WINDOWS_CSC_LINK: { required: false }
+      WINDOWS_CSC_KEY_PASSWORD: { required: false }
+      MACOS_CSC_LINK: { required: false }
+      MACOS_CSC_KEY_PASSWORD: { required: false }
+      APPLE_ID: { required: false }
+      APPLE_APP_SPECIFIC_PASSWORD: { required: false }
+      APPLE_TEAM_ID: { required: false }
+
+permissions:
+  actions: read
+  contents: write
+  issues: write
+
+jobs:
+  package:
+    name: ${{ inputs.platform }} native package
+    runs-on: ${{ inputs.platform == 'windows' && 'windows-2025' || inputs.platform == 'macos' && 'macos-14' || 'ubuntu-24.04' }}
+    env:
+      CSC_LINK: ${{ inputs.platform == 'windows' && secrets.WINDOWS_CSC_LINK || inputs.platform == 'macos' && secrets.MACOS_CSC_LINK || '' }}
+      CSC_KEY_PASSWORD: ${{ inputs.platform == 'windows' && secrets.WINDOWS_CSC_KEY_PASSWORD || inputs.platform == 'macos' && secrets.MACOS_CSC_KEY_PASSWORD || '' }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Require a green shared three-platform architecture gate
+        if: inputs.formal_release || inputs.publish_prerelease
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gate="$(gh run list --workflow platform-gates.yml --commit "$GITHUB_SHA" --status completed --json conclusion,databaseId --jq '[.[] | select(.conclusion == "success")][0].databaseId // ""')"
+          test -n "$gate"
+          echo "Using three-platform gate run $gate"
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: |
+            DomainIntelWeb/package-lock.json
+            DomainIntelDesktop/package-lock.json
+      - name: Require formal-release credentials
+        if: inputs.formal_release && inputs.platform == 'windows'
+        shell: bash
+        run: test -n "$CSC_LINK" && test -n "$CSC_KEY_PASSWORD"
+      - name: Require signing and notarization credentials
+        if: inputs.formal_release && inputs.platform == 'macos'
+        shell: bash
+        run: test -n "$CSC_LINK" && test -n "$CSC_KEY_PASSWORD" && test -n "$APPLE_ID" && test -n "$APPLE_APP_SPECIFIC_PASSWORD" && test -n "$APPLE_TEAM_ID"
+      - name: Install Python build dependencies
+        shell: bash
+        run: python -m pip install --disable-pip-version-check -e ./DomainIntelSearch pyinstaller==6.22.2
+      - name: Set release version
+        shell: bash
+        run: npm version "${{ inputs.version }}" --no-git-tag-version --allow-same-version --prefix DomainIntelDesktop
+      - name: Build Web workbench
+        shell: bash
+        run: npm ci --prefix DomainIntelWeb && npm run build --prefix DomainIntelWeb
+      - name: Install and test desktop shell
+        shell: bash
+        run: npm ci --prefix DomainIntelDesktop && npm test --prefix DomainIntelDesktop
+      - name: Stage platform-neutral resources
+        shell: bash
+        run: python DomainIntelDesktop/scripts/prepare_resources.py
+      - name: Build native sidecar
+        shell: bash
+        run: python DomainIntelApp/packaging/build_sidecar.py ${{ inputs.platform == 'macos' && '--target-arch universal2' || '' }}
+      - name: Smoke-test native sidecar
+        shell: bash
+        run: python DomainIntelDesktop/scripts/smoke_sidecar.py --executable DomainIntelDesktop/build/backend/intdog-runtime${{ inputs.platform == 'windows' && '.exe' || '' }}
+      - name: Build Windows installer
+        if: inputs.platform == 'windows'
+        shell: bash
+        run: npm run dist:windows --prefix DomainIntelDesktop
+      - name: Install, launch, close, and reopen Windows installer
+        if: inputs.platform == 'windows'
+        shell: bash
+        run: python DomainIntelDesktop/scripts/smoke_desktop.py --artifact DomainIntelDesktop/dist/IntDog-${{ inputs.version }}-windows-x86_64.exe --kind windows-nsis
+      - name: Build macOS installer
+        if: inputs.platform == 'macos'
+        shell: bash
+        run: npm run dist:macos --prefix DomainIntelDesktop
+      - name: Mount, launch, close, and reopen macOS installer
+        if: inputs.platform == 'macos'
+        shell: bash
+        run: python DomainIntelDesktop/scripts/smoke_desktop.py --artifact DomainIntelDesktop/dist/IntDog-${{ inputs.version }}-macos-universal.dmg --kind macos-dmg
+      - name: Build Linux installer
+        if: inputs.platform == 'linux'
+        shell: bash
+        run: npm run dist:linux --prefix DomainIntelDesktop
+      - name: Launch, close, and reopen Linux AppImage
+        if: inputs.platform == 'linux'
+        shell: bash
+        run: xvfb-run -a python DomainIntelDesktop/scripts/smoke_desktop.py --artifact DomainIntelDesktop/dist/IntDog-${{ inputs.version }}-linux-x86_64.AppImage --kind appimage
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: intdog-${{ inputs.platform }}-${{ inputs.version }}
+          path: |
+            DomainIntelDesktop/dist/*.exe
+            DomainIntelDesktop/dist/*.dmg
+            DomainIntelDesktop/dist/*.AppImage
+          if-no-files-found: error
+      - name: Publish platform Release
+        if: inputs.formal_release || inputs.publish_prerelease
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v${{ inputs.version }}-${{ inputs.platform }}"
+          channel=()
+          warning=""
+          if [ "${{ inputs.publish_prerelease }}" = "true" ]; then
+            channel+=(--prerelease)
+            warning=" UNSIGNED TEST BUILD: Windows SmartScreen or macOS Gatekeeper may require manual approval."
+          fi
+          gh release create "$tag" DomainIntelDesktop/dist/*.${{ inputs.platform == 'windows' && 'exe' || inputs.platform == 'macos' && 'dmg' || 'AppImage' }} "${channel[@]}" --title "IntDog ${{ inputs.version }} · ${{ inputs.platform }}" --notes "Native ${{ inputs.platform }} distribution. Built and tested on its matching GitHub-hosted runner.${warning}"
+      - name: Close the platform release Issue
+        if: (inputs.formal_release || inputs.publish_prerelease) && inputs.issue_number != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment "${{ inputs.issue_number }}" --body "Released as \`v${{ inputs.version }}-${{ inputs.platform }}\` after the shared three-platform gate and native package lifecycle passed."
+          gh issue close "${{ inputs.issue_number }}" --reason completed

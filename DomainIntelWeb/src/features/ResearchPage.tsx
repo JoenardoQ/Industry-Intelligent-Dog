@@ -1,0 +1,49 @@
+import { useCallback, useEffect, useState } from 'react'
+import { Compass, FlaskConical, Play, RefreshCw } from 'lucide-react'
+import { api, type CoveragePayload, type GenerateResult, type HistoryCoveragePayload, type ResearchPayload } from '../api'
+import { Empty, Header, Loading, type Toast } from './shared'
+
+const reportKinds = [
+  ['trend_5y','五年发展轨迹'],['popular_2y','两年热点'],['tech_6m','半年技术前沿'],
+]
+const deepKinds = [['quarterly','季度全景'],['chain','产业链深研'],['landscape','竞争格局'],['market','市场研究']]
+const historyKinds = [
+  ['weekly','周 · 目标 28'],['monthly','月 · 目标 120'],
+  ['quarterly','季 · 目标 360'],['semiannual','半年 · 目标 720'],
+  ['biennial','两年 · 目标 2,800'],['fiveyear','五年 · 目标 7,200'],
+]
+const horizonLabels: Record<string,string> = {weekly:'周',monthly:'月',quarterly:'季',semiannual:'半年',biennial:'两年',fiveyear:'五年'}
+
+export default function ResearchPage({ industry, notify }: { industry: string; notify: (t: Toast) => void }) {
+  const [data, setData] = useState<ResearchPayload | null>(null); const [coverage, setCoverage] = useState<CoveragePayload | null>(null); const [history, setHistory] = useState<HistoryCoveragePayload | null>(null)
+  const [error, setError] = useState(''); const [busy, setBusy] = useState(false)
+  const [action, setAction] = useState('bootstrap')
+  const [kind, setKind] = useState('')
+  const load = useCallback(() => { setError(''); Promise.all([
+    api<ResearchPayload>(`/industries/${industry}/research`),
+    api<CoveragePayload>(`/industries/${industry}/coverage`),
+    api<HistoryCoveragePayload>(`/industries/${industry}/history`),
+  ]).then(([research, frontier, historical]) => { setData(research); setCoverage(frontier); setHistory(historical) }).catch(e => { setError(String(e)); notify({kind:'error',text:String(e)}) }) }, [industry, notify])
+  useEffect(() => { setData(null); setCoverage(null); setHistory(null); void load() }, [load])
+  const generate = async (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); setBusy(true); const values=Object.fromEntries(new FormData(event.currentTarget)); try { const result=await api<GenerateResult>(`/industries/${industry}/generate`,{method:'POST',body:JSON.stringify(values)}); notify({kind:'ok',text:`任务已进入队列 · ${result.run_id.slice(0,12)}`}); location.hash='/jobs' } catch(e) { notify({kind:'error',text:String(e)}) } finally { setBusy(false) } }
+  const initialize = async () => { await api(`/industries/${industry}/coverage/initialize`,{method:'POST'}); notify({kind:'ok',text:'覆盖地图已按产业链端点建立'}); await load() }
+  const plan = async () => { const result=await api<{items:{query:string}[]}>(`/industries/${industry}/coverage/plan`,{method:'POST'}); notify({kind:'ok',text:`已生成 ${result.items.length} 条待验证搜索计划`}); await load() }
+  if (error) return <Empty title="研究助手不可用" body={error}/>
+  return <><Header eyebrow="RESEARCH STUDIO" title="研究助手与 Intelligence Lab" body="直接创建研究产物；覆盖地图持续显示知识边界、搜索计划、边际新增和停止理由。"/>
+    <section className="section-card studio"><div className="section-title"><div><h2>直接生成</h2><p className="subtle">所有生成任务保留状态、输入、来源、模型和限制；本系统不会自动发送邮件。</p></div></div><form className="studio-form" onSubmit={generate}>
+      <label><span>任务类型</span><select name="action" required value={action} onChange={event=>{setAction(event.target.value);setKind('')}}><option value="bootstrap">初始化行业研究</option><option value="coverage">执行覆盖搜索</option><option value="history">长周期历史证据</option><option value="report">行业报告</option><option value="deep_report">深度研究</option><option value="impact">事件影响分析</option><option value="lab">Intelligence Lab</option><option value="daily">每日采集</option><option value="weekly">每周产物</option><option value="monthly">每月产物</option><option value="quarterly">季度产物</option></select></label>
+      <label><span>周期 / 报告类型</span><select name="kind" value={kind} onChange={event=>setKind(event.target.value)} required={['report','deep_report','history'].includes(action)} disabled={!['report','deep_report','history'].includes(action)}><option value="">{['report','deep_report','history'].includes(action)?'请选择类型':'当前任务不需要'}</option>{action==='report'?reportKinds.map(([value,label])=><option key={value} value={value}>{label}</option>):action==='deep_report'?deepKinds.map(([value,label])=><option key={value} value={value}>{label}</option>):action==='history'?historyKinds.map(([value,label])=><option key={value} value={value}>{label}</option>):null}</select></label>
+      <label className="studio-event"><span>事件描述</span><input name="event" required={action==='impact'} disabled={action!=='impact'} placeholder={action==='impact'?'例如：先进制程设备出口管制升级':'仅事件影响分析需要'}/></label>
+      <label><span>模型提供方式</span><select name="provider"><option value="">系统默认</option><option value="codex">Codex 套餐登录</option><option value="openai">OpenAI API</option></select></label>
+      <button className="button primary" disabled={busy}>{busy?<RefreshCw className="spin"/>:<Play/>}{busy?'正在创建任务':'开始生成'}</button>
+    </form></section>
+    <section className="section-card history-panel"><div className="section-title"><div><h2>长周期证据覆盖</h2><p className="subtle">全量证据入库；按日、周或月分桶。总量、时间覆盖和至少 5 个发布者同时达标后才生成完整报告。</p></div><button className="button secondary" onClick={load}><RefreshCw/>刷新状态</button></div>
+      {!history?<Loading label="正在核对历史覆盖…"/>:<div className="history-grid">{history.items.map(item=><article key={item.horizon} className={item.ready?'ready':''}><div><span>{horizonLabels[item.horizon]}</span><b>{item.ready?'已过生成门槛':'待补齐'}</b></div><strong>{item.admitted_total.toLocaleString()} <small>/ 目标 {item.target.toLocaleString()}</small></strong><p>生成门槛 {item.required_total.toLocaleString()} · 时间桶 {item.buckets_covered}/{item.required_buckets} · 发布者 {item.publisher_count}</p><progress aria-label={`${horizonLabels[item.horizon]}证据目标进度`} max={item.target} value={Math.min(item.admitted_total,item.target)}/><button className="button tertiary" onClick={()=>{setAction('history');setKind(item.horizon);scrollTo({top:0,behavior:'smooth'})}}>采集该周期</button></article>)}</div>}
+    </section>
+    <div className="research-grid"><section className="section-card"><div className="section-title"><h2>研究议程</h2><span className="subtle">{data?.agenda?.length || 0} 项</span></div>{!data ? <Loading label="正在读取议程…"/> : !(data.agenda||[]).length?<Empty title="暂无研究议程" body="初始化行业研究或运行 Lab 后将生成可审计议程。" compact/>:(data.agenda || []).slice(0,12).map(item => <div className="agenda-row" key={item.id}><span className={`agenda-status ${item.status}`}/><div><strong>{item.question || item.title || item.id}</strong><p>{item.rationale || item.note || '等待研究定义'}</p></div><span className="tag">{item.status || 'open'}</span></div>)}</section>
+      <section className="section-card"><div className="section-title"><h2>证据与实验</h2><FlaskConical/></div><div className="lab-stats"><div><strong>{data?.lab?.evidence?.nodes?.length || 0}</strong><span>证据节点</span></div><div><strong>{data?.lab?.scenarios?.length || 0}</strong><span>产业情景</span></div><div><strong>{data?.tasks?.length || 0}</strong><span>研究任务</span></div><div><strong>{data?.impacts?.length || 0}</strong><span>影响分析</span></div></div><p className="research-note">证据不足时显示未知。流畅文本不是事实，单一发布者也不是交叉印证。</p></section></div>
+    <section className="section-card coverage-panel"><div className="section-title"><div><h2>开放世界覆盖地图</h2><p className="subtle">不是固定 Top 10：按地区、子领域、产业链端点、实体、来源、事件与时间范围持续补缺。</p></div><div className="section-actions"><button className="button secondary" onClick={initialize}><Compass/>建立/补全地图</button><button className="button secondary" onClick={plan}><Play/>生成搜索计划</button><button className="button primary" onClick={()=>setAction('coverage')}><Play/>执行覆盖搜索</button></div></div>
+      <div className="coverage-stats"><div><strong>{coverage?.summary.total||0}</strong><span>覆盖单元</span></div><div><strong>{coverage?.summary.gaps||0}</strong><span>待补缺口</span></div><div><strong>{coverage?.summary.source_yield||0}</strong><span>新增来源</span></div><div><strong>{coverage?.summary.entity_yield||0}</strong><span>新增实体</span></div></div>
+      {!coverage?<Loading label="正在读取覆盖边界…"/>:!coverage.cells.length?<Empty title="尚未建立覆盖地图" body="点击“建立/补全地图”，系统会从当前产业链端点开始。" compact/>:<div className="coverage-table">{coverage.cells.map(cell=><article key={cell.id}><span className={`coverage coverage-${cell.status}`}>{cell.status}</span><div><strong>{cell.dimensions.chain_stage} · {cell.dimensions.region}</strong><p>{Object.entries(cell.dimensions).map(([k,v])=>`${k}: ${v}`).join(' · ')}</p><small>{cell.rationale||'等待定义'} · {cell.attempts} 次尝试 · 来源 +{cell.source_yield} · 实体 +{cell.entity_yield}</small>{cell.attempt_history?.[0]&&<code>{cell.attempt_history[0].query}</code>}</div><b>{cell.priority}</b></article>)}</div>}</section>
+  </>
+}

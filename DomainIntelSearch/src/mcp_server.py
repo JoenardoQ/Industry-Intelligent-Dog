@@ -9,9 +9,9 @@ Model Context Protocol 调用数据，而不是把抓取/读取逻辑耦合在 A
 工具清单（tools/list 可见）：
   list_industries                       列出全部行业文件夹
   get_daily(industry, category?, date?) 读取每日情报（六类，含可信度/引用）
-  get_knowledge(industry)               三层知识结构（行业→产业链→实体）
-  get_sources(industry)                 信息源清单（七类）
-  get_landscape(industry)               竞争格局（四类玩家 + 历史快照）
+  get_knowledge(industry)               知识兼容视图 + 规范关系图 + 覆盖统计
+  get_sources(industry)                 结构化信息源清单（九类）
+  get_landscape(industry)               竞争格局（含 Watchlist + 历史快照）
   get_impact_events(industry)           检测到的行业事件清单
   get_impact(industry, slug?)           某事件的影响分析（公司/供应链/论文/政策）
   list_report_tasks(industry)           报告任务包清单（三报告 + 深度报告）
@@ -28,14 +28,18 @@ Model Context Protocol 调用数据，而不是把抓取/读取逻辑耦合在 A
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
 SERVER_NAME = "domain-intel"
-SERVER_VERSION = "1.1.0"
+SERVER_VERSION = "3.0.0"
 PROTOCOL_VERSION = "2024-11-05"   # 兼容主流客户端；initialize 时回显请求版本
 
-DATA_ROOT: Path = Path("D:/IntDog/DomainIntelData")  # serve_stdio() 启动时覆盖
+PROJECT_ROOT = Path(os.environ.get("INTDOG_PROJECT_ROOT") or
+                    Path(__file__).resolve().parents[2]).resolve()
+DEFAULT_DATA_ROOT = PROJECT_ROOT / "DomainIntelData"
+DATA_ROOT: Path = DEFAULT_DATA_ROOT  # serve_stdio() 启动时覆盖
 
 SKIP_DIRS = {"skill", "domains", "images", "_trash", "__pycache__"}
 
@@ -71,15 +75,17 @@ def _read_json(path: Path, default):
     return default
 
 
+def _service():
+    from intdog_core import IntDogService
+    return IntDogService(DATA_ROOT)
+
+
 def tool_list_industries(_args: dict):
     out = []
-    if DATA_ROOT.exists():
-        for d in sorted(DATA_ROOT.iterdir()):
-            if d.is_dir() and d.name not in SKIP_DIRS and not d.name.startswith("."):
-                if (d / "control.json").exists():
-                    ctrl = _read_json(d / "control.json", {})
-                    out.append({"folder": d.name,
-                                "periodic_enabled": ctrl.get("periodic_enabled", False)})
+    for row in _service().repo.list_industries():
+        ctrl = _read_json(DATA_ROOT / row["folder"] / "control.json", {})
+        out.append({"folder": row["folder"], "name": row["name"],
+                    "periodic_enabled": ctrl.get("periodic_enabled", False)})
     return {"data_root": str(DATA_ROOT), "industries": out}
 
 
@@ -100,16 +106,24 @@ def tool_get_daily(args: dict):
 def tool_get_knowledge(args: dict):
     folder = args["industry"]
     base = _industry_dir(folder) / "one_time" / "knowledge"
+    service = _service()
     return {
         "industry": _read_json(base / "industry.json", {}),
         "chains": _read_json(base / "chains.json", []),
         "entities": _read_json(base / "entities.json", []),
+        "graph": service.repo.graph(folder),
+        "coverage": service.repo.knowledge_stats(folder),
     }
 
 
 def tool_get_sources(args: dict):
     folder = args["industry"]
-    return _read_json(_industry_dir(folder) / "sources.json", {})
+    _industry_dir(folder)
+    grouped = {key: [] for key in ("official", "associations", "blogs", "platforms",
+                                   "self_media", "news", "journals", "financials", "finance")}
+    for item in _service().repo.list_sources(folder):
+        grouped.setdefault(item.pop("category"), []).append(item)
+    return {"industry": folder, **grouped}
 
 
 def tool_get_landscape(args: dict):
@@ -179,19 +193,67 @@ def tool_search_items(args: dict):
     kw = (args.get("keyword") or "").strip()
     if not kw:
         raise ValueError("keyword 不能为空")
-    from .industry_store import IndustryStore
-    store = IndustryStore(DATA_ROOT, folder)
-    items = store.list_daily(date=args.get("date") or None)
-    low = kw.lower()
-    hits = []
-    for it in items:
-        blob = ((it.get("title", "") or "") + " "
-                + (it.get("abstract", "") or "")).lower()
-        if low in blob:
-            it = dict(it)
-            it.pop("_file", None)
-            hits.append(it)
+    hits = _service().repo.search_documents(folder, kw, limit=100)
+    if args.get("date"):
+        hits = [item for item in hits if item["observed_date"] == args["date"]]
     return {"industry": folder, "keyword": kw, "count": len(hits), "items": hits}
+
+
+def _lab_artifact(folder: str, kind: str) -> dict:
+    base = _industry_dir(folder) / "one_time" / "intelligence"
+    pointer = _read_json(base / "latest" / f"{kind}.json", {})
+    bundle = pointer.get("bundle", "")
+    if bundle:
+        path = _safe_child(base, bundle) / "artifact.json"
+        artifact = _read_json(path, {})
+        if artifact:
+            return artifact
+    compatibility = {"evidence_graph": "evidence_graph.json",
+                     "source_observatory": "source_observatory.json",
+                     "research_agenda": "research_agenda.json"}
+    return _read_json(base / compatibility.get(kind, "missing.json"), {})
+
+
+def tool_get_evidence_graph(args: dict):
+    return _lab_artifact(args["industry"], "evidence_graph")
+
+
+def tool_get_source_observatory(args: dict):
+    return _lab_artifact(args["industry"], "source_observatory")
+
+
+def tool_list_scenarios(args: dict):
+    folder = args["industry"]
+    base = _industry_dir(folder) / "one_time" / "intelligence"
+    from src.lab.artifacts import list_valid_bundles
+    items = list_valid_bundles(base, "chain_scenario")
+    for item in items:
+        item.pop("_bundle_path", None)
+    return {"industry": folder, "count": len(items), "scenarios": items}
+
+
+def tool_list_research_agenda(args: dict):
+    folder = args["industry"]
+    _industry_dir(folder)
+    include_closed = args.get("include_closed") is True
+    return {"industry": folder, "items": _service().repo.list_research_agenda(
+        folder, include_closed=include_closed)}
+
+
+def tool_explain_scenario_path(args: dict):
+    artifact_id = args["artifact_id"]
+    node_id = args["node_id"]
+    scenarios = tool_list_scenarios(args)["scenarios"]
+    scenario = next((item for item in scenarios
+                     if item.get("artifact_id") == artifact_id), None)
+    if not scenario:
+        raise ValueError("情景产物不存在")
+    impact = next((item for item in scenario.get("impacts", [])
+                   if item.get("node_id") == node_id), None)
+    if not impact:
+        raise ValueError("该节点不在情景传播路径中")
+    return {"artifact_id": artifact_id, "event": scenario.get("event"),
+            "score_semantics": scenario.get("score_semantics"), "impact": impact}
 
 
 # ----------------------------------------------------------------------
@@ -221,17 +283,17 @@ TOOLS = {
         "fn": tool_get_daily,
     },
     "get_knowledge": {
-        "description": "读取某行业三层知识结构：行业→产业链→企业/高校实体",
+        "description": "读取行业、产业链兼容视图、规范实体关系图和覆盖统计",
         "inputSchema": _schema({"industry": ("string", "行业文件夹名")}, ["industry"]),
         "fn": tool_get_knowledge,
     },
     "get_sources": {
-        "description": "读取某行业信息源清单（博客/平台/自媒体/新闻/期刊/财报/金融）",
+        "description": "读取某行业九类结构化信息源清单",
         "inputSchema": _schema({"industry": ("string", "行业文件夹名")}, ["industry"]),
         "fn": tool_get_sources,
     },
     "get_landscape": {
-        "description": "读取竞争格局：Leader/Challenger/Emerging/Declining + 历史快照列表",
+        "description": "读取竞争格局：Leader/Challenger/Emerging/Declining/Watchlist + 历史快照",
         "inputSchema": _schema({"industry": ("string", "行业文件夹名")}, ["industry"]),
         "fn": tool_get_landscape,
     },
@@ -270,6 +332,36 @@ TOOLS = {
             "date": ("string", "可选，YYYY-MM-DD"),
         }, ["industry", "keyword"]),
         "fn": tool_search_items,
+    },
+    "get_evidence_graph": {
+        "description": "读取最新的、带证据状态和独立发布者统计的 Evidence Graph",
+        "inputSchema": _schema({"industry": ("string", "行业文件夹名")}, ["industry"]),
+        "fn": tool_get_evidence_graph,
+    },
+    "get_source_observatory": {
+        "description": "读取最新 Source Observatory（来源链接与唯一文档口径分离）",
+        "inputSchema": _schema({"industry": ("string", "行业文件夹名")}, ["industry"]),
+        "fn": tool_get_source_observatory,
+    },
+    "list_scenarios": {
+        "description": "列出所有校验通过的版本化产业链情景产物",
+        "inputSchema": _schema({"industry": ("string", "行业文件夹名")}, ["industry"]),
+        "fn": tool_list_scenarios,
+    },
+    "list_research_agenda": {
+        "description": "列出知识边界研究议程；默认不含已关闭条目",
+        "inputSchema": _schema({"industry": ("string", "行业文件夹名"),
+                                 "include_closed": ("boolean", "是否包含关闭条目")},
+                                ["industry"]),
+        "fn": tool_list_research_agenda,
+    },
+    "explain_scenario_path": {
+        "description": "解释版本化情景中某节点的逐边传播路径、证据数、效应和滞后",
+        "inputSchema": _schema({"industry": ("string", "行业文件夹名"),
+                                 "artifact_id": ("string", "情景产物 ID"),
+                                 "node_id": ("string", "目标产业链节点 ID")},
+                                ["industry", "artifact_id", "node_id"]),
+        "fn": tool_explain_scenario_path,
     },
 }
 
@@ -365,4 +457,4 @@ def serve_stdio(data_root: str | Path):
 
 
 if __name__ == "__main__":
-    serve_stdio(sys.argv[1] if len(sys.argv) > 1 else "D:/IntDog/DomainIntelData")
+    serve_stdio(sys.argv[1] if len(sys.argv) > 1 else DEFAULT_DATA_ROOT)

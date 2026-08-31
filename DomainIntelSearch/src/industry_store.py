@@ -24,11 +24,15 @@
 from __future__ import annotations
 
 import json
-import hashlib
 import re
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+from intdog_core import IntDogService, stable_id
+from .deduplication import (collapse_batch, content_fingerprint, plan_history,
+                            suppress_replays)
+from .source_governance import govern_sources
 
 DAILY_CATEGORIES = ("news", "github", "funding", "hiring", "ceo", "papers")
 PERIOD_KINDS = ("daily", "weekly", "monthly", "quarterly")
@@ -59,6 +63,10 @@ class IndustryStore:
         self.tasks = self.one_time / "tasks"
         self.periodic = self.root / "periodic"
         self._ensure()
+        self.service = IntDogService(self.data_root)
+        self.service.repo.ensure_industry(self.folder, self.name)
+        self.service.migrate_legacy([self.folder])
+        self.service.reconcile_compat([self.folder])
 
     def _ensure(self):
         for d in (self.knowledge, self.reports, self.tasks, self.periodic):
@@ -86,30 +94,34 @@ class IndustryStore:
         return self._read_json(self.control_path, dict(DEFAULT_CONTROL))
 
     def set_periodic_enabled(self, enabled: bool) -> dict:
-        c = self.get_control()
-        c["periodic_enabled"] = bool(enabled)
-        c["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self._write_json(self.control_path, c)
-        return c
+        return self.service.update_control(
+            self.folder, {"periodic_enabled": bool(enabled)})
 
     def update_control(self, **changes) -> dict:
         """Atomically merge scheduler state into ``control.json``."""
-        control = self.get_control()
-        control.update(changes)
-        control["updated_at"] = datetime.now().isoformat(timespec="seconds")
-        self._write_json(self.control_path, control)
-        return control
+        return self.service.update_control(self.folder, changes)
 
     # ------------------------------------------------------------------
     # sources.json（信息源）
     # ------------------------------------------------------------------
     def get_sources(self) -> dict:
-        return self._read_json(self.sources_path, {})
+        payload = self._read_json(self.sources_path, {})
+        rows = self.service.repo.list_sources(self.folder)
+        if rows:
+            for category in ("official", "associations", "blogs", "platforms",
+                             "self_media", "news", "journals", "financials", "finance"):
+                payload[category] = []
+            for item in rows:
+                payload.setdefault(item.pop("category"), []).append(item)
+        return payload
 
     def save_sources(self, sources: dict):
-        sources = dict(sources)
+        chains = self._read_json(self.knowledge / "chains.json", [])
+        sources = govern_sources(dict(sources), len(chains) if isinstance(chains, list) else 0)
         sources["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.service.import_sources(self.folder, sources, replace=True)
         self._write_json(self.sources_path, sources)
+        self.service.repo.mark_compat_clean(self.folder, "sources")
 
     def save_task(self, name: str, task: dict) -> Path:
         """Persist an executable task package instead of only printing it."""
@@ -130,13 +142,27 @@ class IndustryStore:
         day_dir.mkdir(parents=True, exist_ok=True)
         fpath = day_dir / f"{category}.json"
         existing = self._read_json(fpath, [])
-        merged = {self._key(it): it for it in existing if self._key(it)}
+        candidates = []
+        candidates.extend(self._normalize_item(it, category, date) for it in existing)
         for it in items:
             normalized = self._normalize_item(it, category, date)
             if normalized is not None:
-                merged[self._key(normalized)] = normalized
-        out = list(merged.values())
+                candidates.append(normalized)
+        candidates = [item for item in candidates if item is not None]
+        out, batch_audit = collapse_batch(candidates)
+        historical = [item for item in self.service.repo.list_documents(
+            self.folder, limit=5000)
+            if not (item.get("date") == date and item.get("category") == category)]
+        out, replay_audit = suppress_replays(out, historical)
+        self.service.import_daily(self.folder, category, date, out)
         self._write_json(fpath, out)
+        audit_path = day_dir / "dedup_audit.json"
+        audit = self._read_json(audit_path, {})
+        audit[category] = {"batch": batch_audit, "history": replay_audit,
+                           "updated_at": datetime.now().isoformat(timespec="seconds")}
+        self._write_json(audit_path, audit)
+        self.service.repo.mark_compat_clean(
+            self.folder, f"daily:{date}:{category}")
         return fpath
 
     def save_period(self, kind: str, payload: dict, key: str = None) -> Path:
@@ -150,34 +176,36 @@ class IndustryStore:
         self._write_json(fpath, payload)
         return fpath
 
+    def deduplicate_history(self, *, apply: bool = False) -> dict:
+        """Audit all active document links and optionally suppress duplicates."""
+        plan = plan_history(self.service.repo.list_documents(self.folder, limit=100_000))
+        summary = {key: value for key, value in plan.items() if key != "duplicate_groups"}
+        summary["group_count"] = len(plan["duplicate_groups"])
+        summary["applied"] = False
+        if apply and plan["suppressed_links"]:
+            summary["applied_links"] = self.service.repo.apply_document_dedup_plan(
+                self.folder, plan)
+            result = self.service.reconcile_compat([self.folder])
+            if result["failed"]:
+                raise OSError(result["errors"][0]["error"])
+            summary["applied"] = True
+        return summary
+
     # ------------------------------------------------------------------
     # 定期数据读取 / 删除
     # ------------------------------------------------------------------
     def list_daily(self, date: str = None, category: str = None) -> list[dict]:
-        """读取定期条目。date 为空则取最近一天；category 为空则全部类别."""
-        daily_root = self.periodic / "daily"
-        if not daily_root.exists():
+        """Read the latest structured records; JSON paths remain provenance hints."""
+        if date is None:
+            dates = self.service.repo.list_document_dates(self.folder)
+            date = dates[0] if dates else None
+        if not date:
             return []
-        dates = [date] if date else sorted(
-            (d.name for d in daily_root.iterdir() if d.is_dir()), reverse=True)
-        out: list[dict] = []
-        for d in dates:
-            day_dir = daily_root / d
-            if not day_dir.exists():
-                continue
-            cats = [category] if category else [p.stem for p in day_dir.glob("*.json")
-                                                if not p.stem.startswith("_")]
-            for c in cats:
-                f = day_dir / f"{c}.json"
-                for it in self._read_json(f, []):
-                    it = dict(it)
-                    it["_file"] = str(f)
-                    out.append(it)
-            if date:
-                break
-            if out:  # 只取最近有数据的一天
-                break
-        return out
+        items = self.service.repo.list_documents(self.folder, date=date, category=category)
+        for item in items:
+            item["_file"] = str(self.periodic / "daily" / date /
+                                f"{item['category']}.json")
+        return items
 
     def list_daily_range(self, days: int = 7, category: str = None,
                          end_date: str = None) -> list[dict]:
@@ -205,6 +233,15 @@ class IndustryStore:
             out.extend(self.list_daily(date=day, category=category))
         return out
 
+    def list_daily_window(self, window, category: str = None) -> list[dict]:
+        """Read records intersecting an explicit timezone-aware collection window."""
+        from .time_windows import intersects_item
+
+        days = max(1, (window.end.date() - window.start.date()).days + 1)
+        candidates = self.list_daily_range(
+            days=days, category=category, end_date=window.end.strftime("%Y-%m-%d"))
+        return [item for item in candidates if intersects_item(window, item)]
+
     def list_period(self, kind: str) -> list[dict]:
         """列出某周期的全部产物（新→旧）."""
         d = self.periodic / kind
@@ -225,20 +262,17 @@ class IndustryStore:
         new = [it for it in items if self._key(it) != key]
         if len(new) == len(items):
             return False
+        document_ids = [stable_id("doc", self._canonical_url(it.get("url", "")))
+                        for it in items if self._key(it) == key and it.get("url")]
+        self.service.repo.soft_delete_documents(self.folder, document_ids, actor="search")
         self._write_json(fpath, new)
+        self.service.repo.mark_compat_clean(
+            self.folder, f"daily:{date}:{category}")
         return True
 
     def delete_period(self, kind: str, key: str) -> bool:
         """删除周/月/季产物：移入回收站（可恢复），不永久删除."""
-        fpath = self.periodic / kind / f"{key}.json"
-        if not fpath.exists():
-            return False
-        trash = self.data_root / "_trash"
-        trash.mkdir(parents=True, exist_ok=True)
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        dest = trash / f"{self.folder}_{kind}_{key}_{ts}.json"
-        fpath.replace(dest)
-        return True
+        return self.service.delete_period(self.folder, kind, key)
 
     # ------------------------------------------------------------------
     # 内部工具
@@ -286,9 +320,7 @@ class IndustryStore:
             from .source_discovery import source_origin
             out["origin"] = source_origin(out)
         out.setdefault("source_language", "zh" if out.get("origin") == "china" else "en")
-        digest_text = f"{title}\n{out.get('abstract', '')}\n{url}"
-        out.setdefault("content_hash", hashlib.sha256(
-            digest_text.encode("utf-8")).hexdigest()[:24])
+        out["content_hash"] = content_fingerprint(out)
         return out
 
     @staticmethod

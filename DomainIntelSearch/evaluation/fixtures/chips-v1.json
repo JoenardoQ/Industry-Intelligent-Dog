@@ -1,0 +1,11 @@
+{
+  "fixture_version": "1.0.0",
+  "industry": "Chips",
+  "license": "CC0-1.0 synthetic evaluation fixture",
+  "retrieval": [{"id":"r1","relevant":true},{"id":"r2","relevant":true},{"id":"r3","relevant":true}],
+  "publisher_attribution": [{"id":"p1","gold":"TSMC","predicted":"TSMC"},{"id":"p2","gold":"ASML","predicted":"ASML"}],
+  "stories": [{"id":"d1","gold_story":"s1","predicted_story":"s1"},{"id":"d2","gold_story":"s1","predicted_story":"s1"},{"id":"d3","gold_story":"s2","predicted_story":"s2"}],
+  "entity_links": [{"mention":"台积电","gold":"org:tsmc","predicted":"org:tsmc"},{"mention":"EUV","gold":"tech:euv","predicted":"tech:euv"}],
+  "claims": [{"id":"c1","risk":"high","citations":["doc:r1","doc:r2"]}],
+  "thresholds": {"retrieval_precision":0.8,"publisher_attribution_accuracy":1,"story_pairwise_precision":1,"story_pairwise_recall":1,"entity_link_accuracy":1,"high_risk_citation_coverage":1}
+}

@@ -1,0 +1,21 @@
+{
+  "name": "intdog-desktop",
+  "productName": "IntDog",
+  "version": "4.0.0",
+  "description": "Local-first industry intelligence research workbench",
+  "author": "JoenardoQ",
+  "desktopName": "IntDog",
+  "private": true,
+  "main": "src/main.cjs",
+  "scripts": {
+    "test": "node --test test/*.test.cjs",
+    "prepare:resources": "python3 scripts/prepare_resources.py",
+    "dist:windows": "electron-builder --win nsis --x64 --publish never",
+    "dist:macos": "electron-builder --mac dmg --universal --publish never",
+    "dist:linux": "electron-builder --linux AppImage --x64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "44.0.0",
+    "electron-builder": "26.15.3"
+  }
+}

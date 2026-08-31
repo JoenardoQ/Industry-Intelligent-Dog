@@ -10,17 +10,17 @@ from pathlib import Path
 import yaml
 
 
-BASE_DIR = Path(__file__).resolve().parent.parent  # domain-intelligence/
-PROJECT_DIR = BASE_DIR.parent
+BASE_DIR = Path(os.environ.get("INTDOG_SEARCH_ROOT") or
+                Path(__file__).resolve().parent.parent).resolve()
+PROJECT_DIR = Path(os.environ.get("INTDOG_PROJECT_ROOT") or BASE_DIR.parent).resolve()
 
 
 def resolve_config_path(value: str | Path, *, base_dir: Path = BASE_DIR) -> Path:
     """Resolve a configured path without binding the project to one machine.
 
-    Relative paths are anchored at ``DomainIntelSearch``.  The historical
-    ``D:/IntDog/...`` defaults are mapped back into the repository when the
-    code runs on a non-Windows host, so an old config cannot accidentally
-    create a literal ``D:`` directory in the working tree.
+    Relative paths are anchored at ``DomainIntelSearch``. Historical Windows
+    paths are mapped back into the current repository on non-Windows hosts so
+    an old config cannot create a literal drive-letter directory.
     """
     raw = os.path.expandvars(os.path.expanduser(str(value or ""))).strip()
     if not raw:
@@ -37,7 +37,7 @@ def resolve_config_path(value: str | Path, *, base_dir: Path = BASE_DIR) -> Path
 
 def data_root(config: dict) -> Path:
     """Canonical root for all current per-industry data."""
-    override = os.environ.get("INTDOG_DATA_ROOT")
+    override = os.environ.get("DOMAIN_INTEL_DATA_ROOT") or os.environ.get("INTDOG_DATA_ROOT")
     if override:
         return resolve_config_path(override)
     configured = (config.get("data_layer", {}) or {}).get("root", "../DomainIntelData")

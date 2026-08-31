@@ -1,0 +1,18 @@
+name: Linux platform release
+description: Track one Linux x64 AppImage test release.
+title: "prerelease(linux): IntDog "
+labels: [release, linux]
+body:
+  - type: input
+    id: version
+    attributes: { label: Version, placeholder: 4.0.0 }
+    validations: { required: true }
+  - type: checkboxes
+    id: gates
+    attributes:
+      label: Native gates
+      options:
+        - { label: Linux native sidecar smoke passed, required: true }
+        - { label: AppImage launch-close-reopen passed, required: true }
+        - { label: Release is marked Pre-release, required: true }
+        - { label: Shared three-platform architecture gate is green, required: true }

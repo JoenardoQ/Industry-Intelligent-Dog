@@ -2,6 +2,13 @@
 
 > **注意**：本文包含目标架构和历史设计，并不表示所有条目都已落地。
 > 当前实现状态以 [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md) 为准。
+> 其中 `industry/<行业>`、行业独立 `db/`、`ArchiveStore` 唯一入口、固定 Top 10 和
+> 单一三层知识树属于 v1/v2 历史方案；v3 以 [`IIOS_SPEC.md`](DomainIntelSearch/IIOS_SPEC.md)
+> 的共享 `intdog_core`、开放世界覆盖、规范实体与 Claim–Evidence 模型为准。
+> 当前 Schema v10 还包含发布者/转载簇、产业链节点、可取证有向边、时态实体角色、外部标识、
+> Intelligence Lab 分析快照、议程历史和有预算边界的研究任务；
+> App 可通过 application service 写入，并使用持久化 Job Manager/任务中心。后文与此冲突时
+> 一律视为历史记录。
 
 > **版本**: 2.0 | **日期**: 2026-07-31 | **目标行数**: 5000–10000 行
 >
@@ -147,7 +154,7 @@ IntDog/
 
 ## 2. 目录结构
 
-### 2.1 项目根目录 `D:\IntDog\`
+### 2.1 项目根目录（位置无关，生产环境位于 WSL home）
 
 ```
 IntDog/
@@ -232,12 +239,12 @@ IntDog/
 │   ├── domains/                #   占位（领域分目录）
 │   └── images/                 #   占位（图片分目录）
 │
-└── DomainIntelApp/             # ⑤ 图形界面
-    ├── desktop/
-    │   ├── __init__.py
-    │   ├── main.py              #   启动入口（python -m desktop.main）
-    │   ├── app.py               #   五标签交互界面（IntelApp）
-    │   └── dataio.py            #   直连 DomainIntelData JSON（零 src 依赖）
+├── DomainIntelWeb/             # ⑤ React/FastAPI 本地工作台
+│   ├── api/                    #   localhost API、调度与安全边界
+│   └── src/                    #   七个懒加载研究页面
+└── DomainIntelApp/             # ⑥ 桌面启动与通用运行时
+    ├── runtime/                #   数据访问、任务、DPI、单实例
+    ├── launch_intdog.py        #   环境构建与 app-mode 启动
     ├── scripts/
     │   └── make_icons.py        #   图标生成脚本
     ├── run_app.bat              #   Windows 双击启动
@@ -1047,7 +1054,7 @@ for article in articles ORDER BY date DESC LIMIT 500:
 
 **触发命令**：`python -m src.main plan --industry 半导体 --level beginner --region global`
 
-**Step 1 — 行业档案加载**：`config/industries/semiconductor.yaml → apply_profile() → 覆盖 domain/academic 配置；data_folder = "Chips" → 行业数据根 = D:/IntDog/DomainIntelData/Chips/`
+**Step 1 — 行业档案加载**：`config/industries/semiconductor.yaml → apply_profile() → 覆盖 domain/academic 配置；data_folder = "Chips" → 行业数据根 = <repo>/DomainIntelData/Chips/`
 
 **Step 2 — PlannerAgent 生成 DAG**：AgentContext(industry/level/region/lang) → plan.json + plan.mmd + 调用7个研究Agent
 
@@ -1115,13 +1122,14 @@ for article in articles ORDER BY date DESC LIMIT 500:
 
 ### DomainIntelApp
 
-`cd DomainIntelApp && python -m desktop.main` 或双击 `run_app.bat`；`INTDOG_DATA_ROOT` 环境变量覆盖数据根
+仓库根目录运行 `./run_intdog.sh`，或在原生 Windows checkout 双击 `run_app.bat`；
+`DOMAIN_INTEL_DATA_ROOT` 环境变量可覆盖数据根。
 
 ### 关键配置项
 
 | 路径 | 默认值 | 说明 |
 |------|--------|------|
-| `data_layer.root` | `D:/IntDog/DomainIntelData` | 按行业分目录（新版） |
+| `data_layer.root` | `../DomainIntelData` | 相对当前仓库解析，按行业分目录 |
 | `archive.root` | `_archive` 子目录 | 旧版扁平归档（已解耦） |
 | `llm.provider` | `none` | LLM 提供商（none/ openai/deepseek/qwen） |
 
@@ -1136,7 +1144,7 @@ cd DomainIntelSearch
 pip install -r requirements.txt          # pyyaml requests feedparser
 python -m src.main init-industry --industry 芯片
 python -m src.main crawl-daily --industry 芯片 --days 1
-cd ../DomainIntelApp && python -m desktop.main  # 或双击 run_app.bat
+cd .. && ./run_intdog.sh
 ```
 
 ### 7.2 无人值守定期监控
@@ -1297,8 +1305,7 @@ python -m src.main industries        # 行业列表
 python -m src.main knowledge --industry 芯片  # 三层树
 
 # App 端
-cd DomainIntelApp
-python -c "from desktop import dataio; assert dataio.find_data_root().exists()"
+python -c "import sys; sys.path.insert(0, 'DomainIntelApp'); from runtime import dataio; assert dataio.find_data_root().exists()"
 ```
 
 ### 9.2 集成测试场景

@@ -1,0 +1,4410 @@
+{
+  "components": {
+    "schemas": {
+      "ArchiveState": {
+        "properties": {
+          "archived_to": {
+            "title": "Archived To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "archived_to"
+        ],
+        "title": "ArchiveState",
+        "type": "object"
+      },
+      "ArtifactState": {
+        "additionalProperties": true,
+        "description": "Common, inspectable metadata for every research artifact card.",
+        "properties": {
+          "_file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File"
+          },
+          "_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "event": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event"
+          },
+          "generated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated At"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "limitations": {
+            "items": {},
+            "title": "Limitations",
+            "type": "array"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "references": {
+            "items": {},
+            "title": "References",
+            "type": "array"
+          },
+          "report_file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report File"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "visualization": {
+            "additionalProperties": true,
+            "title": "Visualization",
+            "type": "object"
+          },
+          "window_end": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window End"
+          }
+        },
+        "title": "ArtifactState",
+        "type": "object"
+      },
+      "AuditState": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "title": "Details",
+            "type": "object"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "object_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Id"
+          },
+          "object_type": {
+            "title": "Object Type",
+            "type": "string"
+          },
+          "occurred_at": {
+            "title": "Occurred At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "occurred_at",
+          "actor",
+          "action",
+          "object_type",
+          "details"
+        ],
+        "title": "AuditState",
+        "type": "object"
+      },
+      "AutomationState": {
+        "properties": {
+          "email_delivery": {
+            "default": false,
+            "title": "Email Delivery",
+            "type": "boolean"
+          },
+          "schedules": {
+            "items": {
+              "$ref": "#/components/schemas/ScheduleState"
+            },
+            "title": "Schedules",
+            "type": "array"
+          }
+        },
+        "required": [
+          "schedules"
+        ],
+        "title": "AutomationState",
+        "type": "object"
+      },
+      "CancelState": {
+        "properties": {
+          "cancelled": {
+            "title": "Cancelled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "cancelled"
+        ],
+        "title": "CancelState",
+        "type": "object"
+      },
+      "CountState": {
+        "properties": {
+          "deleted": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "boolean"
+              }
+            ],
+            "title": "Deleted"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "title": "CountState",
+        "type": "object"
+      },
+      "CoverageAttemptCreate": {
+        "properties": {
+          "actor": {
+            "default": "local-user",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Actor",
+            "type": "string"
+          },
+          "entity_yield": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Entity Yield",
+            "type": "integer"
+          },
+          "evidence": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "maxItems": 200,
+            "title": "Evidence",
+            "type": "array"
+          },
+          "manual_correction": {
+            "const": true,
+            "title": "Manual Correction",
+            "type": "boolean"
+          },
+          "query": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          },
+          "rationale": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "source_yield": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Source Yield",
+            "type": "integer"
+          },
+          "status": {
+            "default": "planned",
+            "enum": [
+              "planned",
+              "running",
+              "completed",
+              "failed",
+              "stopped"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "stopping_reason": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Stopping Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "manual_correction",
+          "query"
+        ],
+        "title": "CoverageAttemptCreate",
+        "type": "object"
+      },
+      "CoverageAttemptState": {
+        "properties": {
+          "cell_id": {
+            "title": "Cell Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "entity_yield": {
+            "title": "Entity Yield",
+            "type": "integer"
+          },
+          "evidence": {
+            "items": {},
+            "title": "Evidence",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "source_yield": {
+            "title": "Source Yield",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "stopping_reason": {
+            "title": "Stopping Reason",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "cell_id",
+          "query",
+          "rationale",
+          "status",
+          "source_yield",
+          "entity_yield",
+          "evidence",
+          "stopping_reason",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CoverageAttemptState",
+        "type": "object"
+      },
+      "CoverageCellCreate": {
+        "properties": {
+          "dimensions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Dimensions",
+            "type": "object"
+          },
+          "priority": {
+            "default": 50,
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Priority",
+            "type": "integer"
+          },
+          "rationale": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "status": {
+            "default": "gap",
+            "enum": [
+              "gap",
+              "thin",
+              "covered",
+              "paused"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dimensions"
+        ],
+        "title": "CoverageCellCreate",
+        "type": "object"
+      },
+      "CoverageCellState": {
+        "properties": {
+          "attempt_history": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageAttemptState"
+            },
+            "title": "Attempt History",
+            "type": "array"
+          },
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "dimensions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Dimensions",
+            "type": "object"
+          },
+          "entity_yield": {
+            "title": "Entity Yield",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_attempt_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Attempt At"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "integer"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "source_yield": {
+            "title": "Source Yield",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "dimensions",
+          "priority",
+          "status",
+          "rationale",
+          "attempts",
+          "source_yield",
+          "entity_yield",
+          "updated_at",
+          "created_at"
+        ],
+        "title": "CoverageCellState",
+        "type": "object"
+      },
+      "CoverageState": {
+        "properties": {
+          "cells": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageCellState"
+            },
+            "title": "Cells",
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/CoverageSummaryState"
+          }
+        },
+        "required": [
+          "cells",
+          "summary"
+        ],
+        "title": "CoverageState",
+        "type": "object"
+      },
+      "CoverageSummaryState": {
+        "properties": {
+          "entity_yield": {
+            "title": "Entity Yield",
+            "type": "integer"
+          },
+          "gaps": {
+            "title": "Gaps",
+            "type": "integer"
+          },
+          "source_yield": {
+            "title": "Source Yield",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "gaps",
+          "source_yield",
+          "entity_yield"
+        ],
+        "title": "CoverageSummaryState",
+        "type": "object"
+      },
+      "DailyIdentity": {
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "category",
+          "key"
+        ],
+        "title": "DailyIdentity",
+        "type": "object"
+      },
+      "DailyState": {
+        "properties": {
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "dates": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Dates",
+            "type": "array"
+          },
+          "items": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "origins": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Origins",
+            "type": "object"
+          },
+          "selection_scope": {
+            "const": "current_page",
+            "title": "Selection Scope",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "selection_scope",
+          "dates",
+          "counts",
+          "origins"
+        ],
+        "title": "DailyState",
+        "type": "object"
+      },
+      "DeleteDailyRequest": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DailyIdentity"
+            },
+            "maxItems": 5000,
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "DeleteDailyRequest",
+        "type": "object"
+      },
+      "GenerateRequest": {
+        "properties": {
+          "action": {
+            "enum": [
+              "daily",
+              "weekly",
+              "monthly",
+              "quarterly",
+              "report",
+              "deep_report",
+              "impact",
+              "lab",
+              "bootstrap",
+              "coverage",
+              "history"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "event": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Event",
+            "type": "string"
+          },
+          "kind": {
+            "default": "",
+            "maxLength": 80,
+            "title": "Kind",
+            "type": "string"
+          },
+          "pipeline_mode": {
+            "default": "generate",
+            "enum": [
+              "aggregate",
+              "generate"
+            ],
+            "title": "Pipeline Mode",
+            "type": "string"
+          },
+          "provider": {
+            "default": "",
+            "maxLength": 80,
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "GenerateRequest",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthState": {
+        "properties": {
+          "active_jobs": {
+            "title": "Active Jobs",
+            "type": "integer"
+          },
+          "automation_running": {
+            "title": "Automation Running",
+            "type": "boolean"
+          },
+          "data_root": {
+            "title": "Data Root",
+            "type": "string"
+          },
+          "database": {
+            "title": "Database",
+            "type": "boolean"
+          },
+          "session_required": {
+            "title": "Session Required",
+            "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "data_root",
+          "database",
+          "active_jobs",
+          "automation_running",
+          "session_required"
+        ],
+        "title": "HealthState",
+        "type": "object"
+      },
+      "HistoryCoverageState": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryHorizonState"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "HistoryCoverageState",
+        "type": "object"
+      },
+      "HistoryHorizonState": {
+        "properties": {
+          "admitted_total": {
+            "title": "Admitted Total",
+            "type": "integer"
+          },
+          "attempts": {
+            "default": 0,
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "buckets_covered": {
+            "title": "Buckets Covered",
+            "type": "integer"
+          },
+          "buckets_total": {
+            "title": "Buckets Total",
+            "type": "integer"
+          },
+          "horizon": {
+            "enum": [
+              "weekly",
+              "monthly",
+              "quarterly",
+              "semiannual",
+              "biennial",
+              "fiveyear"
+            ],
+            "title": "Horizon",
+            "type": "string"
+          },
+          "publisher_count": {
+            "title": "Publisher Count",
+            "type": "integer"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "required_buckets": {
+            "title": "Required Buckets",
+            "type": "integer"
+          },
+          "required_total": {
+            "title": "Required Total",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "integer"
+          },
+          "target_range": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Target Range",
+            "type": "array"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "window_end": {
+            "title": "Window End",
+            "type": "string"
+          },
+          "window_start": {
+            "title": "Window Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "horizon",
+          "window_start",
+          "window_end",
+          "target",
+          "target_range",
+          "required_total",
+          "admitted_total",
+          "buckets_total",
+          "buckets_covered",
+          "required_buckets",
+          "publisher_count",
+          "ready",
+          "status"
+        ],
+        "title": "HistoryHorizonState",
+        "type": "object"
+      },
+      "IndustryCreate": {
+        "properties": {
+          "folder": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Folder",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "maxLength": 120,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "folder"
+        ],
+        "title": "IndustryCreate",
+        "type": "object"
+      },
+      "IndustryMutationState": {
+        "properties": {
+          "folder": {
+            "title": "Folder",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "folder",
+          "name"
+        ],
+        "title": "IndustryMutationState",
+        "type": "object"
+      },
+      "IndustryRename": {
+        "properties": {
+          "folder": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Folder",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "maxLength": 120,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "folder"
+        ],
+        "title": "IndustryRename",
+        "type": "object"
+      },
+      "IndustryState": {
+        "additionalProperties": true,
+        "properties": {
+          "folder": {
+            "title": "Folder",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "periodic_enabled": {
+            "default": false,
+            "title": "Periodic Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "folder",
+          "name"
+        ],
+        "title": "IndustryState",
+        "type": "object"
+      },
+      "JobAccepted": {
+        "properties": {
+          "action": {
+            "default": "",
+            "title": "Action",
+            "type": "string"
+          },
+          "email_delivery": {
+            "default": false,
+            "title": "Email Delivery",
+            "type": "boolean"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "status"
+        ],
+        "title": "JobAccepted",
+        "type": "object"
+      },
+      "JobOutputState": {
+        "properties": {
+          "output": {
+            "title": "Output",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "output"
+        ],
+        "title": "JobOutputState",
+        "type": "object"
+      },
+      "JobState": {
+        "additionalProperties": true,
+        "properties": {
+          "active": {
+            "default": false,
+            "title": "Active",
+            "type": "boolean"
+          },
+          "artifact_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Path"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "operation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation"
+          },
+          "parent_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Run Id"
+          },
+          "progress": {
+            "default": 0.0,
+            "title": "Progress",
+            "type": "number"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
+          "stalled": {
+            "default": false,
+            "title": "Stalled",
+            "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "default": "",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "status"
+        ],
+        "title": "JobState",
+        "type": "object"
+      },
+      "KnowledgeEntityDetail": {
+        "additionalProperties": true,
+        "properties": {
+          "aliases": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
+          "canonical_name": {
+            "title": "Canonical Name",
+            "type": "string"
+          },
+          "chain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chain"
+          },
+          "claims": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Claims",
+            "type": "array"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "evidence_count": {
+            "title": "Evidence Count",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "name_en": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name En"
+          },
+          "relations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Relations",
+            "type": "array"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "roles": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Roles",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "canonical_name",
+          "status",
+          "aliases",
+          "roles",
+          "relations",
+          "claims",
+          "evidence_count"
+        ],
+        "title": "KnowledgeEntityDetail",
+        "type": "object"
+      },
+      "KnowledgeEntityPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeEntitySummary"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "next_offset": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Offset"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "title": "KnowledgeEntityPage",
+        "type": "object"
+      },
+      "KnowledgeEntitySummary": {
+        "properties": {
+          "chain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chain"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "name_en": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name En"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "status"
+        ],
+        "title": "KnowledgeEntitySummary",
+        "type": "object"
+      },
+      "OverviewState": {
+        "properties": {
+          "chain": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Chain",
+            "type": "array"
+          },
+          "entities": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Entities",
+            "type": "array"
+          },
+          "industry": {
+            "additionalProperties": true,
+            "title": "Industry",
+            "type": "object"
+          },
+          "latest_document_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Document Date"
+          },
+          "source_categories": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Source Categories",
+            "type": "object"
+          },
+          "stats": {
+            "additionalProperties": true,
+            "title": "Stats",
+            "type": "object"
+          }
+        },
+        "required": [
+          "industry",
+          "stats",
+          "chain",
+          "entities",
+          "source_categories"
+        ],
+        "title": "OverviewState",
+        "type": "object"
+      },
+      "PeriodicArtifactsState": {
+        "properties": {
+          "monthly": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactState"
+            },
+            "title": "Monthly",
+            "type": "array"
+          },
+          "quarterly": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactState"
+            },
+            "title": "Quarterly",
+            "type": "array"
+          },
+          "weekly": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactState"
+            },
+            "title": "Weekly",
+            "type": "array"
+          }
+        },
+        "required": [
+          "weekly",
+          "monthly",
+          "quarterly"
+        ],
+        "title": "PeriodicArtifactsState",
+        "type": "object"
+      },
+      "ProductsState": {
+        "properties": {
+          "deep_reports": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactState"
+            },
+            "title": "Deep Reports",
+            "type": "array"
+          },
+          "impacts": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactState"
+            },
+            "title": "Impacts",
+            "type": "array"
+          },
+          "periodic": {
+            "$ref": "#/components/schemas/PeriodicArtifactsState"
+          },
+          "reports": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactState"
+            },
+            "title": "Reports",
+            "type": "array"
+          }
+        },
+        "required": [
+          "periodic",
+          "reports",
+          "deep_reports",
+          "impacts"
+        ],
+        "title": "ProductsState",
+        "type": "object"
+      },
+      "ResearchState": {
+        "properties": {
+          "agenda": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Agenda",
+            "type": "array"
+          },
+          "impacts": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactState"
+            },
+            "title": "Impacts",
+            "type": "array"
+          },
+          "lab": {
+            "additionalProperties": true,
+            "title": "Lab",
+            "type": "object"
+          },
+          "tasks": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Tasks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "lab",
+          "agenda",
+          "tasks",
+          "impacts"
+        ],
+        "title": "ResearchState",
+        "type": "object"
+      },
+      "RestorePreviewState": {
+        "properties": {
+          "collisions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Collisions",
+            "type": "array"
+          },
+          "folder": {
+            "title": "Folder",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "industry",
+              "daily"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "restorable": {
+            "title": "Restorable",
+            "type": "boolean"
+          },
+          "restore_count": {
+            "title": "Restore Count",
+            "type": "integer"
+          },
+          "skip_count": {
+            "title": "Skip Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "folder",
+          "restorable",
+          "restore_count",
+          "skip_count",
+          "collisions"
+        ],
+        "title": "RestorePreviewState",
+        "type": "object"
+      },
+      "RestoreState": {
+        "properties": {
+          "folder": {
+            "title": "Folder",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "industry",
+              "daily"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "restored": {
+            "title": "Restored",
+            "type": "integer"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "folder",
+          "restored",
+          "skipped"
+        ],
+        "title": "RestoreState",
+        "type": "object"
+      },
+      "ScheduleState": {
+        "properties": {
+          "action": {
+            "enum": [
+              "daily",
+              "weekly",
+              "monthly",
+              "quarterly"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "attempted_period_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempted Period Key"
+          },
+          "catch_up": {
+            "title": "Catch Up",
+            "type": "boolean"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "last_artifact_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Artifact Path"
+          },
+          "last_attempt_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Attempt At"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_job_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Job Run Id"
+          },
+          "last_period_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Period Key"
+          },
+          "last_success_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Success At"
+          },
+          "local_time": {
+            "title": "Local Time",
+            "type": "string"
+          },
+          "monthday": {
+            "title": "Monthday",
+            "type": "integer"
+          },
+          "next_run_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Run At"
+          },
+          "pipeline_mode": {
+            "default": "generate",
+            "enum": [
+              "aggregate",
+              "generate"
+            ],
+            "title": "Pipeline Mode",
+            "type": "string"
+          },
+          "provider": {
+            "default": "codex",
+            "title": "Provider",
+            "type": "string"
+          },
+          "retry_after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry After"
+          },
+          "retry_count": {
+            "default": 0,
+            "title": "Retry Count",
+            "type": "integer"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "weekday": {
+            "title": "Weekday",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "action",
+          "enabled",
+          "local_time",
+          "weekday",
+          "monthday",
+          "timezone",
+          "catch_up"
+        ],
+        "title": "ScheduleState",
+        "type": "object"
+      },
+      "ScheduleUpdate": {
+        "properties": {
+          "catch_up": {
+            "default": true,
+            "title": "Catch Up",
+            "type": "boolean"
+          },
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "local_time": {
+            "default": "08:00",
+            "pattern": "^\\d{2}:\\d{2}$",
+            "title": "Local Time",
+            "type": "string"
+          },
+          "monthday": {
+            "default": 1,
+            "maximum": 28.0,
+            "minimum": 1.0,
+            "title": "Monthday",
+            "type": "integer"
+          },
+          "pipeline_mode": {
+            "default": "generate",
+            "enum": [
+              "aggregate",
+              "generate"
+            ],
+            "title": "Pipeline Mode",
+            "type": "string"
+          },
+          "provider": {
+            "default": "codex",
+            "enum": [
+              "codex",
+              "openai"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "timezone": {
+            "default": "Asia/Shanghai",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Timezone",
+            "type": "string"
+          },
+          "weekday": {
+            "default": 0,
+            "maximum": 6.0,
+            "minimum": 0.0,
+            "title": "Weekday",
+            "type": "integer"
+          }
+        },
+        "title": "ScheduleUpdate",
+        "type": "object"
+      },
+      "ShutdownState": {
+        "properties": {
+          "status": {
+            "const": "stopping",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "ShutdownState",
+        "type": "object"
+      },
+      "SourceCreate": {
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "note": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Note",
+            "type": "string"
+          },
+          "publisher_country": {
+            "default": "",
+            "maxLength": 100,
+            "title": "Publisher Country",
+            "type": "string"
+          },
+          "tier": {
+            "default": "representative",
+            "maxLength": 80,
+            "title": "Tier",
+            "type": "string"
+          },
+          "url": {
+            "maxLength": 2000,
+            "minLength": 8,
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "category",
+          "name",
+          "url"
+        ],
+        "title": "SourceCreate",
+        "type": "object"
+      },
+      "SourceMutationState": {
+        "properties": {
+          "added": {
+            "title": "Added",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "added"
+        ],
+        "title": "SourceMutationState",
+        "type": "object"
+      },
+      "SourcesState": {
+        "properties": {
+          "categories": {
+            "additionalProperties": {
+              "items": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "title": "Categories",
+            "type": "object"
+          },
+          "industry": {
+            "title": "Industry",
+            "type": "string"
+          }
+        },
+        "required": [
+          "industry",
+          "categories"
+        ],
+        "title": "SourcesState",
+        "type": "object"
+      },
+      "StoryDetailState": {
+        "properties": {
+          "canonical_title": {
+            "title": "Canonical Title",
+            "type": "string"
+          },
+          "claims": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Claims",
+            "type": "array"
+          },
+          "clustering_version": {
+            "title": "Clustering Version",
+            "type": "string"
+          },
+          "corroborated": {
+            "title": "Corroborated",
+            "type": "boolean"
+          },
+          "document_count": {
+            "default": 0,
+            "title": "Document Count",
+            "type": "integer"
+          },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/StoryDocumentState"
+            },
+            "title": "Documents",
+            "type": "array"
+          },
+          "first_seen_at": {
+            "title": "First Seen At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "title": "Last Seen At",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "publisher_count": {
+            "default": 0,
+            "title": "Publisher Count",
+            "type": "integer"
+          },
+          "reviews": {
+            "items": {
+              "$ref": "#/components/schemas/StoryReviewState"
+            },
+            "title": "Reviews",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "story_family": {
+            "title": "Story Family",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "canonical_title",
+          "story_family",
+          "status",
+          "clustering_version",
+          "first_seen_at",
+          "last_seen_at",
+          "documents",
+          "corroborated",
+          "reviews"
+        ],
+        "title": "StoryDetailState",
+        "type": "object"
+      },
+      "StoryDocumentState": {
+        "properties": {
+          "abstract": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abstract"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "editorially_locked": {
+            "default": false,
+            "title": "Editorially Locked",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "observed_date": {
+            "title": "Observed Date",
+            "type": "string"
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Origin"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "publisher_cluster": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher Cluster"
+          },
+          "relation": {
+            "title": "Relation",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "url",
+          "category",
+          "observed_date",
+          "relation"
+        ],
+        "title": "StoryDocumentState",
+        "type": "object"
+      },
+      "StoryListState": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/StorySummaryState"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "StoryListState",
+        "type": "object"
+      },
+      "StoryMergeRequest": {
+        "properties": {
+          "source_story_id": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Source Story Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_story_id"
+        ],
+        "title": "StoryMergeRequest",
+        "type": "object"
+      },
+      "StoryReviewState": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "title": "Details",
+            "type": "object"
+          },
+          "occurred_at": {
+            "title": "Occurred At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "actor",
+          "details",
+          "occurred_at"
+        ],
+        "title": "StoryReviewState",
+        "type": "object"
+      },
+      "StorySplitRequest": {
+        "properties": {
+          "document_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Document Ids",
+            "type": "array"
+          },
+          "title": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_ids",
+          "title"
+        ],
+        "title": "StorySplitRequest",
+        "type": "object"
+      },
+      "StorySummaryState": {
+        "properties": {
+          "canonical_title": {
+            "title": "Canonical Title",
+            "type": "string"
+          },
+          "clustering_version": {
+            "title": "Clustering Version",
+            "type": "string"
+          },
+          "document_count": {
+            "default": 0,
+            "title": "Document Count",
+            "type": "integer"
+          },
+          "first_seen_at": {
+            "title": "First Seen At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "title": "Last Seen At",
+            "type": "string"
+          },
+          "publisher_count": {
+            "default": 0,
+            "title": "Publisher Count",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "story_family": {
+            "title": "Story Family",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "canonical_title",
+          "story_family",
+          "status",
+          "clustering_version",
+          "first_seen_at",
+          "last_seen_at"
+        ],
+        "title": "StorySummaryState",
+        "type": "object"
+      },
+      "StoryUnlockRequest": {
+        "properties": {
+          "document_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Document Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "document_ids"
+        ],
+        "title": "StoryUnlockRequest",
+        "type": "object"
+      },
+      "TrashItemState": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "folder": {
+            "title": "Folder",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "item_count": {
+            "title": "Item Count",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "industry",
+              "daily"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "folder",
+          "name",
+          "created_at",
+          "item_count"
+        ],
+        "title": "TrashItemState",
+        "type": "object"
+      },
+      "TrashRestoreRequest": {
+        "properties": {
+          "desired_folder": {
+            "default": "",
+            "maxLength": 80,
+            "title": "Desired Folder",
+            "type": "string"
+          }
+        },
+        "title": "TrashRestoreRequest",
+        "type": "object"
+      },
+      "TrashState": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TrashItemState"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "permanent_delete_available": {
+            "title": "Permanent Delete Available",
+            "type": "boolean"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "permanent_delete_available"
+        ],
+        "title": "TrashState",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "IntDog Local API",
+    "version": "4.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/artifact": {
+      "get": {
+        "operationId": "artifact_api_artifact_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "maxLength": 4000,
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Artifact",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/api/health": {
+      "get": {
+        "operationId": "health_api_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/api/industries": {
+      "get": {
+        "operationId": "industries_api_industries_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/IndustryState"
+                  },
+                  "title": "Response Industries Api Industries Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Industries",
+        "tags": [
+          "industries"
+        ]
+      },
+      "post": {
+        "operationId": "create_industry_api_industries_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IndustryCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IndustryMutationState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Industry",
+        "tags": [
+          "industries"
+        ]
+      }
+    },
+    "/api/industries/{folder}": {
+      "delete": {
+        "operationId": "archive_industry_api_industries__folder__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchiveState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Industry",
+        "tags": [
+          "industries"
+        ]
+      },
+      "patch": {
+        "operationId": "rename_industry_api_industries__folder__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IndustryRename"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IndustryMutationState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rename Industry",
+        "tags": [
+          "industries"
+        ]
+      }
+    },
+    "/api/industries/{folder}/automation": {
+      "get": {
+        "operationId": "schedules_api_industries__folder__automation_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Schedules",
+        "tags": [
+          "automation"
+        ]
+      }
+    },
+    "/api/industries/{folder}/automation/{action}": {
+      "put": {
+        "operationId": "configure_api_industries__folder__automation__action__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "action",
+            "required": true,
+            "schema": {
+              "enum": [
+                "daily",
+                "weekly",
+                "monthly",
+                "quarterly"
+              ],
+              "title": "Action",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduleUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Configure",
+        "tags": [
+          "automation"
+        ]
+      }
+    },
+    "/api/industries/{folder}/automation/{action}/run": {
+      "post": {
+        "operationId": "run_now_api_industries__folder__automation__action__run_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "action",
+            "required": true,
+            "schema": {
+              "enum": [
+                "daily",
+                "weekly",
+                "monthly",
+                "quarterly"
+              ],
+              "title": "Action",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Now",
+        "tags": [
+          "automation"
+        ]
+      }
+    },
+    "/api/industries/{folder}/coverage": {
+      "get": {
+        "operationId": "coverage_api_industries__folder__coverage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverageState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Coverage",
+        "tags": [
+          "intelligence"
+        ]
+      }
+    },
+    "/api/industries/{folder}/coverage/cells": {
+      "post": {
+        "operationId": "create_coverage_cell_api_industries__folder__coverage_cells_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CoverageCellCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverageCellState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Coverage Cell",
+        "tags": [
+          "intelligence"
+        ]
+      }
+    },
+    "/api/industries/{folder}/coverage/cells/{cell_id}/attempts": {
+      "post": {
+        "operationId": "record_attempt_api_industries__folder__coverage_cells__cell_id__attempts_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "cell_id",
+            "required": true,
+            "schema": {
+              "title": "Cell Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CoverageAttemptCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverageAttemptState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Attempt",
+        "tags": [
+          "intelligence"
+        ]
+      }
+    },
+    "/api/industries/{folder}/coverage/initialize": {
+      "post": {
+        "operationId": "initialize_coverage_api_industries__folder__coverage_initialize_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Initialize Coverage Api Industries  Folder  Coverage Initialize Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Initialize Coverage",
+        "tags": [
+          "intelligence"
+        ]
+      }
+    },
+    "/api/industries/{folder}/coverage/plan": {
+      "post": {
+        "operationId": "plan_coverage_api_industries__folder__coverage_plan_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Plan Coverage Api Industries  Folder  Coverage Plan Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Plan Coverage",
+        "tags": [
+          "intelligence"
+        ]
+      }
+    },
+    "/api/industries/{folder}/daily": {
+      "delete": {
+        "operationId": "delete_daily_api_industries__folder__daily_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteDailyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CountState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Daily",
+        "tags": [
+          "daily"
+        ]
+      },
+      "get": {
+        "operationId": "daily_api_industries__folder__daily_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "title",
+              "enum": [
+                "title",
+                "category",
+                "source"
+              ],
+              "title": "Sort",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 200,
+              "title": "Query",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 500,
+              "title": "Cursor",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DailyState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Daily",
+        "tags": [
+          "daily"
+        ]
+      }
+    },
+    "/api/industries/{folder}/generate": {
+      "post": {
+        "operationId": "generate_api_industries__folder__generate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Generate",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/api/industries/{folder}/history": {
+      "get": {
+        "description": "Read live long-horizon coverage without mutating compatibility files.",
+        "operationId": "history_api_industries__folder__history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryCoverageState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "History",
+        "tags": [
+          "intelligence"
+        ]
+      }
+    },
+    "/api/industries/{folder}/knowledge/entities": {
+      "get": {
+        "operationId": "knowledge_entities_api_industries__folder__knowledge_entities_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 200,
+              "title": "Query",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 80,
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "country",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 100,
+              "title": "Country",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 80,
+              "title": "Status",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "chain",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 200,
+              "title": "Chain",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeEntityPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Knowledge Entities",
+        "tags": [
+          "intelligence"
+        ]
+      }
+    },
+    "/api/industries/{folder}/knowledge/entities/{entity_id}": {
+      "get": {
+        "operationId": "knowledge_entity_api_industries__folder__knowledge_entities__entity_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "entity_id",
+            "required": true,
+            "schema": {
+              "title": "Entity Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeEntityDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Knowledge Entity",
+        "tags": [
+          "intelligence"
+        ]
+      }
+    },
+    "/api/industries/{folder}/overview": {
+      "get": {
+        "operationId": "overview_api_industries__folder__overview_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OverviewState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Overview",
+        "tags": [
+          "industries"
+        ]
+      }
+    },
+    "/api/industries/{folder}/products": {
+      "get": {
+        "operationId": "products_api_industries__folder__products_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductsState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Products",
+        "tags": [
+          "content"
+        ]
+      }
+    },
+    "/api/industries/{folder}/research": {
+      "get": {
+        "operationId": "research_api_industries__folder__research_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Research",
+        "tags": [
+          "content"
+        ]
+      }
+    },
+    "/api/industries/{folder}/sources": {
+      "delete": {
+        "operationId": "remove_source_api_industries__folder__sources_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": true,
+            "schema": {
+              "title": "Category",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "url",
+            "required": true,
+            "schema": {
+              "title": "Url",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CountState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Source",
+        "tags": [
+          "sources"
+        ]
+      },
+      "get": {
+        "operationId": "sources_api_industries__folder__sources_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourcesState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sources",
+        "tags": [
+          "sources"
+        ]
+      },
+      "post": {
+        "operationId": "add_source_api_industries__folder__sources_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceMutationState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Source",
+        "tags": [
+          "sources"
+        ]
+      }
+    },
+    "/api/industries/{folder}/stories": {
+      "get": {
+        "operationId": "stories_api_industries__folder__stories_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryListState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stories",
+        "tags": [
+          "intelligence"
+        ]
+      }
+    },
+    "/api/industries/{folder}/stories/{story_id}": {
+      "get": {
+        "operationId": "story_api_industries__folder__stories__story_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "story_id",
+            "required": true,
+            "schema": {
+              "title": "Story Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryDetailState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Story",
+        "tags": [
+          "intelligence"
+        ]
+      }
+    },
+    "/api/industries/{folder}/stories/{story_id}/merge": {
+      "post": {
+        "operationId": "merge_story_api_industries__folder__stories__story_id__merge_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "story_id",
+            "required": true,
+            "schema": {
+              "title": "Story Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoryMergeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryDetailState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Merge Story",
+        "tags": [
+          "intelligence"
+        ]
+      }
+    },
+    "/api/industries/{folder}/stories/{story_id}/split": {
+      "post": {
+        "operationId": "split_story_api_industries__folder__stories__story_id__split_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "story_id",
+            "required": true,
+            "schema": {
+              "title": "Story Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StorySplitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryDetailState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Split Story",
+        "tags": [
+          "intelligence"
+        ]
+      }
+    },
+    "/api/industries/{folder}/stories/{story_id}/unlock": {
+      "post": {
+        "operationId": "unlock_story_api_industries__folder__stories__story_id__unlock_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "story_id",
+            "required": true,
+            "schema": {
+              "title": "Story Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoryUnlockRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryDetailState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unlock Story",
+        "tags": [
+          "intelligence"
+        ]
+      }
+    },
+    "/api/jobs": {
+      "get": {
+        "operationId": "list_jobs_api_jobs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/JobState"
+                  },
+                  "title": "Response List Jobs Api Jobs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Jobs",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/api/jobs/{run_id}/cancel": {
+      "post": {
+        "operationId": "cancel_job_api_jobs__run_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CancelState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Job",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/api/jobs/{run_id}/output": {
+      "get": {
+        "operationId": "job_output_api_jobs__run_id__output_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOutputState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Job Output",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/api/jobs/{run_id}/retry": {
+      "post": {
+        "operationId": "retry_job_api_jobs__run_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Job",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/api/shutdown": {
+      "post": {
+        "operationId": "shutdown_api_shutdown_post",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShutdownState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Shutdown",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/api/trash": {
+      "get": {
+        "operationId": "trash_api_trash_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrashState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Trash",
+        "tags": [
+          "recovery"
+        ]
+      }
+    },
+    "/api/trash/audits/recent": {
+      "get": {
+        "operationId": "audits_api_trash_audits_recent_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AuditState"
+                  },
+                  "title": "Response Audits Api Trash Audits Recent Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Audits",
+        "tags": [
+          "recovery"
+        ]
+      }
+    },
+    "/api/trash/{item_id}/preview": {
+      "get": {
+        "operationId": "preview_api_trash__item_id__preview_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestorePreviewState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview",
+        "tags": [
+          "recovery"
+        ]
+      }
+    },
+    "/api/trash/{item_id}/restore": {
+      "post": {
+        "operationId": "restore_api_trash__item_id__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrashRestoreRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestoreState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Restore",
+        "tags": [
+          "recovery"
+        ]
+      }
+    }
+  }
+}

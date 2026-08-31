@@ -4,8 +4,8 @@ rem  IntDog one-click launcher. Creates/updates an isolated runtime on demand.
 rem ============================================================
 cd /d "%~dp0"
 
-rem Optional: point to a custom data folder (uncomment and edit)
-rem set INTDOG_DATA_ROOT=D:\IntDog\DomainIntelData
+rem This batch file is for a native Windows checkout. For the production WSL
+rem checkout under /home, use the desktop shortcut created by create_shortcut.ps1.
 
 where py >nul 2>nul
 if %errorlevel%==0 (

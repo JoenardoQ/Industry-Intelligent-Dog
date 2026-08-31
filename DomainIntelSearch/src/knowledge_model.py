@@ -16,17 +16,13 @@ technology / product / facility。
 
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 
+from intdog_core import IntDogService, stable_id
+
 ENTITY_TYPES = ("company", "research_group", "regulator", "association",
                 "person", "technology", "product", "facility")
-
-
-def _id(*parts: str) -> str:
-    raw = "|".join(p.lower() for p in parts if p)
-    return hashlib.md5(raw.encode("utf-8")).hexdigest()[:12]
 
 
 class KnowledgeModel:
@@ -38,6 +34,8 @@ class KnowledgeModel:
         self.industry_path = self.dir / "industry.json"
         self.chains_path = self.dir / "chains.json"
         self.entities_path = self.dir / "entities.json"
+        self.folder = self.dir.parents[1].name
+        self.service = IntDogService(self.dir.parents[2])
 
     # ------------------------------------------------------------------
     # 行业（第一层）
@@ -45,7 +43,7 @@ class KnowledgeModel:
     def set_industry(self, name: str, name_en: str = "", description: str = "",
                      references: list = None) -> dict:
         ind = {
-            "id": _id("industry", name),
+            "id": self.service.repo.ensure_industry(self.folder, name),
             "name": name,
             "name_en": name_en,
             "description": description,
@@ -63,22 +61,49 @@ class KnowledgeModel:
     def add_chain(self, name: str, description: str = "", order: int = 0,
                   references: list = None, **extra) -> dict:
         chains = self.get_chains()
-        cid = _id("chain", name)
         for c in chains:
-            if c["id"] == cid:
+            if c.get("name") == name:
                 return c
         chain = {
-            "id": cid, "name": name, "description": description,
+            "name": name, "description": description,
             "order": order, "references": references or [],
         }
         chain.update({key: value for key, value in extra.items() if key not in chain})
+        chain["id"] = self.service.repo.upsert_chain_node(self.folder, chain)
+        activity_id = self.service.repo.upsert_entity(self.folder, {
+            "name": name, "type": "supply_chain_activity",
+            "description": description, "references": references or [],
+            "status": "candidate", **extra})
+        chain["activity_entity_id"] = activity_id
         chains.append(chain)
         chains.sort(key=lambda c: c.get("order", 0))
         self._write(self.chains_path, chains)
+        self.service.repo.mark_compat_clean(self.folder, "chains")
         return chain
 
     def get_chains(self) -> list[dict]:
-        return self._read(self.chains_path, [])
+        rows = self.service.repo.list_chain_nodes(self.folder)
+        return rows if rows else self._read(self.chains_path, [])
+
+    def add_chain_edge(self, src_name: str, dst_name: str, relation: str = "supplies",
+                       **metadata) -> str:
+        chains = {item["name"]: item for item in self.get_chains()}
+        if src_name not in chains or dst_name not in chains:
+            raise ValueError("产业链边引用了未知节点")
+        references = metadata.pop("references", []) or []
+        edge_id = self.service.repo.upsert_chain_edge(self.folder, {
+            "src_node_id": chains[src_name]["id"], "dst_node_id": chains[dst_name]["id"],
+            "relation": relation, **metadata})
+        for reference in references:
+            if isinstance(reference, str):
+                reference = {"url": reference}
+            if isinstance(reference, dict) and reference.get("url"):
+                self.service.repo.add_chain_edge_evidence(
+                    edge_id, reference.get("relation", "supports"), url=reference["url"],
+                    excerpt=reference.get("title", ""),
+                    publisher_cluster=reference.get("publisher_cluster", ""),
+                    confidence=reference.get("confidence"))
+        return edge_id
 
     # ------------------------------------------------------------------
     # 实体（第三层）
@@ -90,9 +115,9 @@ class KnowledgeModel:
         if etype not in ENTITY_TYPES:
             etype = "company"
         entities = self.get_entities()
-        eid = _id("entity", chain, name)
+        eid = stable_id("ent", etype, name, country)
         for e in entities:
-            if e["id"] == eid:
+            if e["id"] == eid and e.get("chain") == chain:
                 return e
         ent = {
             "id": eid, "name": name, "name_en": name_en, "type": etype,
@@ -101,9 +126,19 @@ class KnowledgeModel:
         }
         ent.update({key: value for key, value in extra.items() if key not in ent})
         entities.append(ent)
-        self._write(self.entities_path, entities)
+        canonical_entity_id = self.service.repo.upsert_entity(self.folder, ent, chain)
         # 确保所属 chain 存在
-        self.add_chain(chain)
+        chain_entity = self.add_chain(chain)
+        activity_id = chain_entity.get("activity_entity_id") or self.service.repo.upsert_entity(
+            self.folder, {"name": chain, "type": "supply_chain_activity",
+                          "status": "candidate"})
+        self.service.repo.upsert_relation(
+            self.folder, canonical_entity_id, "participates_in",
+            activity_id,
+            confidence=extra.get("confidence"),
+            metadata={"references": references or [], "role": etype})
+        self._write(self.entities_path, entities)
+        self.service.repo.mark_compat_clean(self.folder, "entities")
         return ent
 
     def get_entities(self, chain: str = None, etype: str = None) -> list[dict]:
@@ -115,17 +150,16 @@ class KnowledgeModel:
         return ents
 
     def delete_entity(self, entity_id: str) -> bool:
-        ents = self.get_entities()
-        new = [e for e in ents if e.get("id") != entity_id]
-        if len(new) == len(ents):
-            return False
-        self._write(self.entities_path, new)
-        return True
+        return self.service.delete_entity(self.folder, entity_id)
 
     def reset_generated(self) -> None:
         """Clear generated chains/entities before an authoritative bootstrap replace."""
+        self.service.repo.clear_industry_entities(self.folder)
+        self.service.repo.clear_chain_nodes(self.folder)
         self._write(self.chains_path, [])
         self._write(self.entities_path, [])
+        self.service.repo.mark_compat_clean(self.folder, "entities")
+        self.service.repo.mark_compat_clean(self.folder, "chains")
 
     # ------------------------------------------------------------------
     # 汇总视图（三层树）

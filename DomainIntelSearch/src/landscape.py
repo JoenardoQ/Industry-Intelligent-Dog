@@ -20,11 +20,14 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from intdog_core import tracked_function
+
 TIER_LABELS = {
     "leader": "领导者 Leader",
     "challenger": "挑战者 Challenger",
     "emerging": "新兴 Emerging",
     "declining": "衰退 Declining",
+    "watchlist": "观察名单 Watchlist",
 }
 
 # 衰退信号关键词
@@ -64,6 +67,7 @@ def _hits_kw(name: str, items: list[dict], kws: list[str]) -> int:
     return cnt
 
 
+@tracked_function("landscape")
 def build_landscape(store, pcfg: dict) -> dict:
     """计算并保存某行业的竞争格局，返回结构化结果（含写盘路径）."""
     from .knowledge_model import KnowledgeModel
@@ -74,19 +78,23 @@ def build_landscape(store, pcfg: dict) -> dict:
     funding = [it for it in daily if (it.get("category") == "funding"
                                        or it.get("_cat") == "funding")]
 
-    leaders = _names_from_profile(pcfg)
+    leaders = list(dict.fromkeys(_names_from_profile(pcfg)))
     km = KnowledgeModel(store.knowledge)
-    entity_companies = [e["name"] for e in km.get_entities(etype="company")]
-    tiers = {"leader": [], "challenger": [], "emerging": [], "declining": []}
+    entity_companies = list(dict.fromkeys(
+        e["name"] for e in km.get_entities(etype="company") if e.get("name")))
+    tiers = {"leader": [], "challenger": [], "emerging": [], "declining": [],
+             "watchlist": []}
 
     # tracked_companies 只是观察名单，不等于市场领导者。没有份额证据时放入
     # challenger 候选，等待 market_share_task 校正。
     for name in leaders:
-        tiers["challenger"].append({
+        mentions = _mention_count(name, daily)
+        target = "challenger" if mentions >= 2 else "watchlist"
+        tiers[target].append({
             "name": name,
-            "mentions": _mention_count(name, daily),
+            "mentions": mentions,
             "signal": "tracked_candidate",
-            "reason": "重点观察名单；尚无市场份额证据，不自动认定为 Leader",
+            "reason": "重点观察名单；只有近期证据充分时才进入 Challenger",
         })
 
     for name in entity_companies:
@@ -106,9 +114,9 @@ def build_landscape(store, pcfg: dict) -> dict:
                                         "signal": "rising_mentions",
                                         "reason": "近期被新闻/融资频繁提及"})
         else:
-            tiers["challenger"].append({"name": name, "mentions": m,
-                                        "signal": "known_entity",
-                                        "reason": "知识库收录企业"})
+            tiers["watchlist"].append({"name": name, "mentions": m,
+                                       "signal": "known_entity",
+                                       "reason": "仅为知识库收录企业，暂无近期竞争地位证据"})
 
     # 各档按提及量降序
     for t in tiers.values():
@@ -121,7 +129,7 @@ def build_landscape(store, pcfg: dict) -> dict:
         "tiers": tiers,
         "labels": TIER_LABELS,
         "market_share_task": task,
-        "note": "这是候选骨架，不是公司排名。Leader 默认留空；只有经市场份额/规模证据核验后才能进入。",
+        "note": "这是候选骨架，不是公司排名。零/低证据公司留在 Watchlist；只有经近期或市场份额证据核验后才能进入竞争分层。",
     }
 
     # 写最新 + 历史快照
@@ -169,6 +177,7 @@ def _build_task(industry: str, tiers: dict) -> dict:
 - 挑战者 Challenger：{names('challenger')}
 - 新兴 Emerging：{names('emerging')}
 - 衰退 Declining：{names('declining')}
+- 观察名单 Watchlist（证据不足，不得直接视作挑战者）：{names('watchlist')}
 
 请输出一份【竞争格局分析】（Markdown）：
 1. 按"市场份额/技术领先度/增长势能"校正上述四类归属（可移动、可增删，给出理由）

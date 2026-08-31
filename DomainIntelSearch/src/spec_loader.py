@@ -132,7 +132,8 @@ def summarize(spec: DataSpec) -> str:
 
 if __name__ == "__main__":
     import sys
-    p = sys.argv[1] if len(sys.argv) > 1 else "D:/IntDog/DomainIntelData"
+    p = (sys.argv[1] if len(sys.argv) > 1
+         else Path(__file__).resolve().parents[2] / "DomainIntelData")
     s = load_spec(p)
     print(summarize(s))
     print("domains:", s.domains)

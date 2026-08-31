@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 import requests
 
@@ -45,10 +46,15 @@ class LLMService:
         cfg = config.get("llm", {}) or {}
         self.provider = (provider or cfg.get("provider") or "none").lower()
         self.model = str(cfg.get("model") or "").strip()
-        self.base = str(cfg.get("api_base") or self.DEFAULT_BASES.get(self.provider, "")).rstrip("/")
+        configured_provider = str(cfg.get("provider") or "none").lower()
+        configured_base = str(cfg.get("api_base") or "").strip()
+        env_base = os.environ.get("INTDOG_LLM_API_BASE", "").strip()
+        self.base = (env_base or
+                     (configured_base if configured_provider == self.provider else "") or
+                     self.DEFAULT_BASES.get(self.provider, "")).rstrip("/")
         generic_key = os.environ.get("INTDOG_LLM_API_KEY")
         provider_key = os.environ.get(self.KEY_ENV.get(self.provider, ""), "")
-        self.api_key = generic_key or provider_key or str(cfg.get("api_key") or "")
+        self.api_key = generic_key or provider_key
         self.timeout = int(cfg.get("timeout_seconds", 180))
         self.web_search = bool(cfg.get("web_search", True))
         self.reasoning_effort = str(cfg.get("reasoning_effort") or "").strip().lower()
@@ -64,6 +70,10 @@ class LLMService:
             raise LLMConfigurationError(f"缺少 API 密钥；请设置 {env} 或 INTDOG_LLM_API_KEY")
         if not self.base:
             raise LLMConfigurationError("缺少 llm.api_base")
+        parsed = urlsplit(self.base)
+        local = parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+        if parsed.scheme != "https" and not (parsed.scheme == "http" and local):
+            raise LLMConfigurationError("非本机 API Base 必须使用 HTTPS")
 
     def complete(self, prompt: str) -> LLMResult:
         if self.provider == "openai":

@@ -56,6 +56,12 @@ tracked_companies:
   symbol: '603986'
 extra_rss_feeds:
   general:
+  - name: 中国电子报
+    url: https://www.cena.com.cn/index.rss
+    lang: zh
+    origin: china
+    tier: authoritative
+    source_category: news
   - name: Semiconductor Engineering
     url: https://semiengineering.com/feed/
     lang: en

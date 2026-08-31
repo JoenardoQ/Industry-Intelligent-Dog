@@ -30,7 +30,7 @@ class EmailService:
         self.port = int(cfg.get("smtp_port", 465))
         self.use_ssl = cfg.get("use_ssl", True)
         self.sender = cfg.get("sender", "")
-        self.password = os.environ.get("INTDOG_SMTP_PASSWORD") or cfg.get("password", "")
+        self.password = os.environ.get("INTDOG_SMTP_PASSWORD", "")
         self.recipients = cfg.get("recipients", [])
         # 如果用户填写了 provider 别名（如 "qq"），自动补全
         alias = (cfg.get("provider") or "").lower()

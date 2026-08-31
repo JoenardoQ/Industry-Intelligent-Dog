@@ -23,16 +23,22 @@ UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) DomainIntelSearch
 
 # 本次运行中失败的源：[{name, url, error}]
 _FAILURES: list[dict] = []
+_SUCCESSES: list[dict] = []
 
 
 def reset_feed_failures():
     """一次 crawl 开始前清空失败清单."""
     _FAILURES.clear()
+    _SUCCESSES.clear()
 
 
 def feed_failures() -> list[dict]:
     """返回失败清单（只读拷贝）."""
     return list(_FAILURES)
+
+
+def feed_successes() -> list[dict]:
+    return list(_SUCCESSES)
 
 
 def _record(name: str, url: str, error: str):
@@ -84,7 +90,13 @@ def parse_feed(url: str, name: str = "", timeout: int = 15):
     except requests.RequestException:
         return None
     try:
-        return feedparser.parse(r.content)
+        parsed = feedparser.parse(r.content)
+        if getattr(parsed, "bozo", False) and not getattr(parsed, "entries", []):
+            error = getattr(parsed, "bozo_exception", "malformed feed")
+            _record(name or url, url, f"解析失败: {str(error)[:120]}")
+            return None
+        _SUCCESSES.append({"name": name or url, "url": url})
+        return parsed
     except Exception as e:  # feedparser 极端输入也可能炸
         _record(name or url, url, f"解析失败: {type(e).__name__}: {str(e)[:60]}")
         return None

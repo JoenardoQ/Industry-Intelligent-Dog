@@ -21,19 +21,18 @@ from __future__ import annotations
 import copy
 import hashlib
 import re
-import sys
 from pathlib import Path
 
 import yaml
 
-INDUSTRIES_DIR = Path(__file__).resolve().parent.parent / "config" / "industries"
+from src.utils import BASE_DIR
+
+INDUSTRIES_DIR = BASE_DIR / "config" / "industries"
 
 
 def _industry_dirs() -> list[Path]:
     """行业档案搜索目录：打包模式下 exe 旁目录优先（用户可编辑），开发时为项目目录."""
     dirs = []
-    if getattr(sys, "frozen", False):
-        dirs.append(Path(sys.executable).parent / "config" / "industries")
     dirs.append(INDUSTRIES_DIR)
     seen, out = set(), []
     for d in dirs:

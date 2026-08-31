@@ -68,7 +68,8 @@ class Orchestrator:
             # 返回任务清单，由任何 agent（Codex/WorkBuddy/Claude Code/自写脚本）执行
             return self.build_research_brief()
         from .agents.base import AgentContext
-        from .services.llm_service import LLMService
+        from .services.provider_factory import create_provider
+        ctx = AgentContext.from_config(self.config)
         brief = self.build_research_brief()["brief"]
         tasks = []
         for name, prompt in brief["tasks"].items():
@@ -78,8 +79,7 @@ class Orchestrator:
             "你正在执行一份行业研究任务包。严格区分事实与研判；事实必须附可访问 URL、"
             "发布日期和统计口径；未知信息写 N/A，禁止猜测。输出 Markdown。\n\n"
             + "\n\n".join(tasks))
-        result = LLMService(self.config, provider=provider).complete(combined)
-        ctx = AgentContext.from_config(self.config)
+        result = create_provider(self.config, provider, ctx.industry_root).complete(combined)
         out_dir = ctx.industry_dir / "api_runs"
         out_dir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")

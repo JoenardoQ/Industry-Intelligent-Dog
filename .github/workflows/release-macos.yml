@@ -1,0 +1,14 @@
+name: Release · macOS
+on:
+  workflow_dispatch:
+    inputs:
+      version: { description: Test SemVer without v, required: true, default: 4.0.0-test.1, type: string }
+      issue_number: { description: macOS release Issue number, required: true, type: string }
+permissions:
+  actions: read
+  contents: write
+  issues: write
+jobs:
+  release:
+    uses: ./.github/workflows/_native-package.yml
+    with: { platform: macos, version: "${{ inputs.version }}", issue_number: "${{ inputs.issue_number }}", publish_prerelease: true }

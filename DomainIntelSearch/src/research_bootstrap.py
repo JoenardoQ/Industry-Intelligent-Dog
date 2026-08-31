@@ -12,7 +12,11 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import urlsplit
+from html.parser import HTMLParser
+from urllib.parse import urljoin, urlsplit
+
+from intdog_core import tracked_function
+from .services.provider_factory import create_provider
 
 from .knowledge_model import KnowledgeModel
 from .source_discovery import (SOURCE_CATEGORIES, balance_source_origins,
@@ -83,10 +87,10 @@ def audit_sources(sources: dict) -> dict:
     china = origin_counts["china"]
     foreign = origin_counts["foreign"]
     foreign_per_china = foreign / china if china else 999.0
-    checks["china_foreign_balance"] = (
-        china >= 8 and foreign >= 12 and 1.2 <= foreign_per_china <= 1.8)
+    balance_advisory = china < 8 or (foreign_per_china > 2.0 if china else True)
     if access_checks:
-        checks["live_reachability"] = sum(access_checks) / len(access_checks) >= 0.7
+        required_live = min(10, max(3, (len(access_checks) + 2) // 3))
+        checks["live_reachability"] = sum(access_checks) >= required_live
     return {"passed": all(checks.values()), "checks": checks, "total": total,
             "unique_domains": len(domains), "primary_count": primary,
             "category_coverage": round(coverage, 3), "counts": counts,
@@ -94,13 +98,54 @@ def audit_sources(sources: dict) -> dict:
             "live_reachable": sum(access_checks),
             "origin_counts": origin_counts,
             "foreign_per_china": round(foreign_per_china, 3),
+            "balance_policy": "advisory_domestic_recall_preferred",
+            "advisories": (["国内来源偏少；继续扩充官方媒体、垂直媒体和优质自媒体"]
+                           if balance_advisory else []),
             "invalid_urls": invalid, "verification_scope": "structure_and_provenance",
             "note": "通过表示来源结构合格，不表示每条内容事实已经复核。"}
 
 
+def _apply_access_classification(item: dict, access_check: dict) -> None:
+    result = dict(access_check)
+    code = result.get("status_code")
+    declared_access = str(item.get("access") or "").lower()
+    result["reachable"] = (
+        isinstance(code, int) and 200 <= code < 400 and
+        "paywall" not in declared_access)
+    item["access_check"] = result
+    if result["reachable"]:
+        item["monitoring_status"] = "active"
+        item.pop("access_note", None)
+    else:
+        item["monitoring_status"] = "recommended_manual"
+        item["access_note"] = (
+            "优质候选源当前无法稳定自动抓取；保留用于人工关注或后续接入。")
+
+
+def reconcile_source_audit(store) -> dict:
+    """Reclassify persisted checks and refresh the bootstrap source audit offline."""
+    sources = store.get_sources()
+    for category, _ in SOURCE_CATEGORIES:
+        for item in sources.get(category, []) or []:
+            if isinstance(item, dict) and isinstance(item.get("access_check"), dict):
+                _apply_access_classification(item, item["access_check"])
+    store.save_sources(sources)
+    audit = audit_sources(store.get_sources())
+    status = store._read_json(store.root / "bootstrap_status.json", {})
+    status.setdefault("stages", {})
+    stage = dict(status["stages"].get("sources") or {})
+    stage.update({"state": "passed" if audit["passed"] else "failed", "audit": audit})
+    status["stages"]["sources"] = stage
+    if not audit["passed"]:
+        status["state"] = "blocked_by_source_gate"
+    status["updated_at"] = _now()
+    _write(store.root / "bootstrap_status.json", status)
+    return status
+
+
 def check_source_accessibility(sources: dict, timeout: int = 8,
                                workers: int = 8) -> dict:
-    """Live-check candidate URLs; 401/403 still prove an endpoint exists."""
+    """Live-check candidate URLs and distinguish access from mere existence."""
     import requests
 
     entries = []
@@ -121,8 +166,8 @@ def check_source_accessibility(sources: dict, timeout: int = 8,
             code = response.status_code
             final_url = response.url
             response.close()
-            return {"checked_at": _now(), "reachable": code not in {404, 410} and code < 500,
-                    "status_code": code, "final_url": final_url}
+            return {"checked_at": _now(), "status_code": code,
+                    "final_url": final_url}
         except requests.RequestException as exc:
             return {"checked_at": _now(), "reachable": False,
                     "error": type(exc).__name__}
@@ -130,7 +175,79 @@ def check_source_accessibility(sources: dict, timeout: int = 8,
     with ThreadPoolExecutor(max_workers=max(1, min(workers, 16))) as pool:
         futures = {pool.submit(probe, item): item for item in entries}
         for future in as_completed(futures):
-            futures[future]["access_check"] = future.result()
+            item = futures[future]
+            _apply_access_classification(item, future.result())
+    return sources
+
+
+class _FeedLinkParser(HTMLParser):
+    def __init__(self):
+        super().__init__(); self.links = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag.lower() != "link":
+            return
+        values = {str(key).lower(): str(value or "") for key, value in attrs}
+        blob = f"{values.get('rel', '')} {values.get('type', '')} {values.get('href', '')}".lower()
+        if values.get("href") and "alternate" in blob and any(
+                token in blob for token in ("rss", "atom", "feed")):
+            self.links.append(values["href"])
+
+
+def discover_rss_endpoints(sources: dict, timeout: int = 8,
+                           workers: int = 8) -> dict:
+    """Discover declared RSS/Atom links from monitorable source homepages."""
+    import requests
+    monitorable = {"blogs", "platforms", "self_media", "news", "finance"}
+    targets = []
+    for category, _ in SOURCE_CATEGORIES:
+        if category not in monitorable:
+            continue
+        for item in sources.get(category, []) or []:
+            if isinstance(item, dict) and item.get("url") and not (
+                    item.get("rss_url") or item.get("feed_url")):
+                targets.append(item)
+
+    def inspect(item):
+        try:
+            response = requests.get(str(item["url"]), timeout=timeout,
+                                    headers={"User-Agent": "IntDog/2.2 feed-discovery"})
+            if response.status_code >= 400 or "html" not in response.headers.get(
+                    "content-type", "").lower():
+                return item, ""
+            parser = _FeedLinkParser(); parser.feed(response.text[:1_000_000])
+            if parser.links:
+                return item, urljoin(response.url, parser.links[0])
+            # Some Chinese publishers expose feeds without declaring <link rel=alternate>.
+            # Probe common endpoints, but persist only a response that is actually XML/RSS/Atom.
+            if source_origin(item) == "china":
+                parts = urlsplit(response.url)
+                base = f"{parts.scheme}://{parts.netloc}/"
+                for suffix in ("feed/", "rss.xml", "index.rss"):
+                    candidate = urljoin(base, suffix)
+                    try:
+                        feed = requests.get(candidate, timeout=min(timeout, 6),
+                                            headers={"User-Agent": "IntDog/2.2 feed-discovery"})
+                        head = feed.text[:1000].lower()
+                        content_type = feed.headers.get("content-type", "").lower()
+                        if feed.status_code < 400 and (
+                                "rss" in content_type or "atom" in content_type or
+                                "xml" in content_type and ("<rss" in head or "<feed" in head)):
+                            return item, feed.url
+                    except requests.RequestException:
+                        continue
+            return item, ""
+        except (requests.RequestException, ValueError):
+            return item, ""
+
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        futures = [pool.submit(inspect, item) for item in targets]
+        for future in as_completed(futures):
+            item, feed_url = future.result()
+            if feed_url:
+                item["rss_url"] = feed_url
+                item["access"] = "rss"
+                item["rss_discovered_at"] = _now()
     return sources
 
 
@@ -211,6 +328,29 @@ def _persist_knowledge(store, industry_en: str, chains: list[dict],
                      technology_barriers=chain.get("technology_barriers", []),
                      geographies=chain.get("geographies", []),
                      confidence=chain.get("confidence"))
+    chain_names = {chain["name"] for chain in chains}
+    explicit_edges = chain_result.get("edges", []) if isinstance(chain_result, dict) else []
+    explicit_pairs = set()
+    for edge in explicit_edges:
+        source, target = edge.get("source"), edge.get("target")
+        if source not in chain_names or target not in chain_names or source == target:
+            continue
+        explicit_pairs.add((source, target))
+        references = edge.get("references", []) or []
+        km.add_chain_edge(source, target, edge.get("relation", "supplies"),
+                          confidence=edge.get("confidence"),
+                          status="collected" if references else "candidate",
+                          effect=edge.get("effect", "uncertain"),
+                          lag_days=edge.get("lag_days"), references=references)
+    for chain in chains:
+        for downstream in chain.get("downstream", []) or []:
+            pair = (chain["name"], downstream)
+            if downstream in chain_names and downstream != chain["name"] and pair not in explicit_pairs:
+                km.add_chain_edge(*pair, "supplies", status="candidate")
+        for upstream in chain.get("upstream", []) or []:
+            pair = (upstream, chain["name"])
+            if upstream in chain_names and upstream != chain["name"] and pair not in explicit_pairs:
+                km.add_chain_edge(*pair, "supplies", status="candidate")
     for entity in entities:
         if not entity.get("name") or not entity.get("chain"):
             continue
@@ -270,12 +410,18 @@ def build_tasks(industry: str, industry_en: str = "") -> list[dict]:
         "depends_on": [],
         "prompt": f"""为“{industry} / {industry_en or industry}”建立全面的信息源地图。先搜索再作答。
 只输出 JSON 对象；类别必须包含 official, associations, blogs, platforms, self_media,
-news, journals, financials, finance。每类 3-8 个，总量约45个：中文原生网站约18个，
-外文原生网站约27个（中文:外文=1:1.5，容差1:1.2到1:1.8）。每项字段：
+news, journals, financials, finance。不要设置总量、每类数量或 Top 10 配额；先建立
+region × subdomain × value_chain_stage × entity_type × source_type × event_type ×
+time_horizon 覆盖单元，按缺口和边际新增搜索。不设中外比例硬限制，但要尽可能提高
+中国发布者原生来源覆盖，尤其是政府/监管、官方媒体、垂直媒体与可靠行业自媒体。每项字段：
 name,url,note,tier,coverage,publisher_country,language(zh/en),
-origin(china/international),access,selection_reason。中文源必须是中国发布者原生网站，
+origin(china/international),access,selection_reason,monitoring_status(active/recommended_manual),
+access_note。中文源必须是中国发布者原生网站，
 不得用外站中文翻译页充数。优先政府/监管/统计、标准组织、公司披露、同行评审论文；
-媒体用于交叉验证，社交媒体只能作为线索。禁止虚构 URL。""",
+媒体用于交叉验证，社交媒体只能作为线索。优质但因登录、付费墙、反爬或无 RSS 而无法
+自动抓取的来源仍应推荐，标为 recommended_manual 并说明接入障碍。禁止虚构 URL。
+另输出 coverage_ledger、query_ledger 和 stopping_reason；每条 query 记录 dimensions、
+实际查询词、选择理由、discovered_urls 与停止理由。这些记录一律视为待验证线索。""",
     }
     chain_task = {
         "stage": "value_chain", "title": "02 基于合格来源重建产业链",
@@ -283,8 +429,11 @@ origin(china/international),access,selection_reason。中文源必须是中国�
         "prompt": f"""仅使用阶段 01 通过门槛的来源研究“{industry}”产业链。搜索各来源并只输出 JSON：
 {{"chains":[{{"name","order","description","inputs":[],"outputs":[],"upstream":[],
 "downstream":[],"technology_barriers":[],"geographies":[],"references":[{{"title","url"}}],
-"confidence":0.0}}]}}。覆盖研发、原材料/设备、生产、集成、渠道、应用、服务/回收等适用环节；
-不得把模板当事实，每一环节必须有独立来源。""",
+"confidence":0.0}}],"edges":[{{"source","target","relation","effect","lag_days",
+"references":[{{"title","url"}}],"confidence":0.0}}]}}。relation 仅可为 supplies、depends_on、
+enables、substitutes、competes_capacity。覆盖研发、原材料/设备、生产、集成、渠道、应用、
+服务/回收等适用环节；节点引用不能当作边引用，缺少边专属来源时保留上下游候选字段但不要
+伪造 edges.references。""",
     }
     entity_task = {
         "stage": "entities", "title": "03 按产业链发现实体",
@@ -297,6 +446,41 @@ type 可为 company,research_group,regulator,association,person,technology,produ
 数量不足要明确 coverage_gap，禁止为了凑数虚构实体。""",
     }
     return [source_task, chain_task, entity_task]
+
+
+def _persist_source_coverage(store, candidate: dict) -> dict:
+    """Persist model discovery claims as plans, never as verified yield."""
+    repo = store.service.repo
+    cells: dict[str, str] = {}
+    for item in candidate.get("coverage_ledger", []) or []:
+        if not isinstance(item, dict) or not isinstance(item.get("dimensions"), dict):
+            continue
+        cell_id = repo.upsert_coverage_cell(
+            store.folder, item["dimensions"], priority=int(item.get("priority", 60)),
+            status=(item.get("status") if item.get("status") in
+                    {"gap", "thin", "covered", "paused"} else "gap"),
+            rationale=str(item.get("rationale") or "模型提出；尚待 URL 与发布者验证"))
+        cells[json.dumps(item["dimensions"], ensure_ascii=False, sort_keys=True)] = cell_id
+    recorded = 0
+    for item in candidate.get("query_ledger", []) or []:
+        if not isinstance(item, dict) or not str(item.get("query") or "").strip():
+            continue
+        dimensions = item.get("dimensions") if isinstance(item.get("dimensions"), dict) else {}
+        key = json.dumps(dimensions, ensure_ascii=False, sort_keys=True)
+        cell_id = cells.get(key) or repo.upsert_coverage_cell(
+            store.folder, dimensions, status="gap",
+            rationale="查询计划提出的覆盖单元；尚待验证")
+        evidence = [{"url": url, "validation_status": "unverified_model_lead"}
+                    for url in item.get("discovered_urls", []) if isinstance(url, str)]
+        repo.record_coverage_attempt(
+            store.folder, cell_id, query=str(item["query"]),
+            rationale=str(item.get("rationale") or "模型提出；尚待验证"),
+            status="planned", source_yield=0, entity_yield=0,
+            evidence=evidence,
+            stopping_reason=str(item.get("stopping_reason") or ""))
+        recorded += 1
+    return {"cells": len(cells), "planned_queries": recorded,
+            "model_yield_credited": 0}
 
 
 def prepare_bootstrap(store, industry_en: str = "", profile: dict | None = None) -> dict:
@@ -320,25 +504,32 @@ def prepare_bootstrap(store, industry_en: str = "", profile: dict | None = None)
     return status
 
 
+@tracked_function("refresh-sources", store_position=1)
 def refresh_sources_with_agent(config: dict, store, industry_en: str = "",
                                profile: dict | None = None,
                                provider: str = "codex", progress=print) -> dict:
     """Refresh only the source universe while preserving reviewed chain/entity artifacts."""
-    from .services.llm_service import LLMService
-    from .services.codex_cli_service import CodexCLIService
-
-    client = (CodexCLIService(config, store.root) if provider == "codex"
-              else LLMService(config, provider=provider))
+    existing = store.get_sources()
+    client = create_provider(config, provider, store.root)
     task = build_tasks(store.name, industry_en)[0]
-    progress("[来源] 搜索中文与外文信息源（目标 1:1.5）…")
+    progress("[来源] 搜索可信信息源，并优先扩充国内官方媒体与优质自媒体…")
     candidate = _extract_json(client.complete(task["prompt"]).text)
     if not isinstance(candidate, dict):
         raise ValueError("信息源阶段必须返回 JSON 对象")
+    coverage_metrics = _persist_source_coverage(store, candidate)
     candidate["industry"] = store.name
     candidate = merge_sources(seed_sources(store.name, industry_en, profile), candidate)
+    # A refresh must not erase user-added sources or already validated feed endpoints.
+    preserved = {category: [item for item in existing.get(category, []) or []
+                            if isinstance(item, dict) and
+                            (item.get("added_manually") or item.get("rss_url") or
+                             item.get("feed_url"))]
+                 for category, _ in SOURCE_CATEGORIES}
+    candidate = merge_sources(candidate, preserved)
     candidate = balance_source_origins(candidate)
-    progress("[来源] 验证 URL 可达性与中外比例…")
+    progress("[来源] 验证 URL 可达性；不可抓取的优质源转为人工关注推荐…")
     candidate = check_source_accessibility(candidate)
+    candidate = discover_rss_endpoints(candidate)
     audit = audit_sources(candidate)
     candidate_dir = store.one_time / "research" / "bootstrap"
     _write(candidate_dir / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_sources_candidate.json",
@@ -350,11 +541,12 @@ def refresh_sources_with_agent(config: dict, store, industry_en: str = "",
     status["updated_at"] = _now()
     status["review_required"] = True
     status["stages"]["sources"] = {
-        "state": "passed" if audit["passed"] else "failed", "audit": audit}
+        "state": "passed" if audit["passed"] else "failed", "audit": audit,
+        "coverage_planning": coverage_metrics}
     if not audit["passed"]:
         status["state"] = "blocked_by_source_gate"
         _write(store.root / "bootstrap_status.json", status)
-        raise RuntimeError(f"信息源门槛未通过: {audit['checks']}；比例={audit['origin_counts']}")
+        raise RuntimeError(f"信息源质量门槛未通过: {audit['checks']}（中外分布仅观察，不参与阻断）")
     store.save_sources(candidate)
     status["state"] = "ready_for_review"
     _write(store.root / "bootstrap_status.json", status)
@@ -363,20 +555,18 @@ def refresh_sources_with_agent(config: dict, store, industry_en: str = "",
     return status
 
 
+@tracked_function("bootstrap-industry", store_position=1)
 def run_bootstrap(config: dict, store, industry_en: str = "", profile: dict | None = None,
                   provider: str | None = None, progress=print) -> dict:
-    from .services.llm_service import LLMService
-    from .services.codex_cli_service import CodexCLIService
-
     status = prepare_bootstrap(store, industry_en, profile)
     status["mode"] = "codex" if provider == "codex" else "api"
-    client = (CodexCLIService(config, store.root) if provider == "codex"
-              else LLMService(config, provider=provider))
+    client = create_provider(config, provider, store.root)
     tasks = build_tasks(store.name, industry_en)
     progress("[1/3] 搜索并审计信息源…")
     candidate = _extract_json(client.complete(tasks[0]["prompt"]).text)
     if not isinstance(candidate, dict):
         raise ValueError("信息源阶段必须返回 JSON 对象")
+    coverage_metrics = _persist_source_coverage(store, candidate)
     candidate["industry"] = store.name
     # API/Codex runs rebuild the source universe from a clean, versioned seed
     # instead of accumulating stale sources that make language ratios impossible.
@@ -384,9 +574,11 @@ def run_bootstrap(config: dict, store, industry_en: str = "", profile: dict | No
     candidate = balance_source_origins(candidate)
     progress("[1/3] 正在验证候选来源可达性…")
     candidate = check_source_accessibility(candidate)
+    candidate = discover_rss_endpoints(candidate)
     source_audit = audit_sources(candidate)
-    status["stages"]["sources"] = {"state": "passed" if source_audit["passed"] else "failed",
-                                           "audit": source_audit}
+    status["stages"]["sources"] = {
+        "state": "passed" if source_audit["passed"] else "failed",
+        "audit": source_audit, "coverage_planning": coverage_metrics}
     if not source_audit["passed"]:
         status["state"] = "blocked_by_source_gate"; status["updated_at"] = _now()
         _write(store.root / "bootstrap_status.json", status)

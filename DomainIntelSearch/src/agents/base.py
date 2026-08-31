@@ -119,7 +119,7 @@ class BaseAgent:
         )
 
     def save_tasks(self, records: list[IIOSRecord], bundle_name: str) -> Path:
-        """把任务包写入 industry/<industry>/tasks/ 供 WorkBuddy/Codex 执行."""
+        """把任务包写入当前行业 one_time/research/tasks/."""
         import json
         out_dir = self.ctx.industry_dir / "tasks"
         out_dir.mkdir(parents=True, exist_ok=True)

@@ -1,5 +1,6 @@
 """新闻爬虫：RSS + NewsAPI + GNews 多源聚合."""
 
+import os
 from datetime import datetime
 
 import requests
@@ -18,6 +19,9 @@ class RSSCrawler(BaseCrawler):
         super().__init__(config)
         self.feed_category = feed_category
         self.since = days_ago(since_days)
+        domestic_days = max(since_days, int(config.get("news", {}).get(
+            "domestic_lookback_days", 3) or 3))
+        self.domestic_since = days_ago(domestic_days)
         feeds = config.get("news", {}).get("rss_feeds", {})
         self.feeds = feeds.get(feed_category, [])
 
@@ -25,13 +29,16 @@ class RSSCrawler(BaseCrawler):
         from .http_utils import parse_feed
         articles = []
         for feed in self.feeds:
+            domestic = (str(feed.get("origin", "")).lower() == "china" or
+                        str(feed.get("lang", "")).lower().startswith("zh"))
+            cutoff = self.domestic_since if domestic else self.since
             parsed = parse_feed(feed["url"], name=feed.get("name", "RSS"))
             if parsed is None:
                 continue  # 失败已登记到 http_utils.feed_failures()
             try:
                 for entry in parsed.entries:
                     published = self._parse_date(entry)
-                    if published and published < self.since:
+                    if published and published < cutoff:
                         continue
                     a = Article(
                         title=entry.get("title", ""),
@@ -43,6 +50,13 @@ class RSSCrawler(BaseCrawler):
                         category=self.feed_category,
                     )
                     a.extra["uid"] = article_id(a.url)
+                    a.extra["source_tier"] = feed.get("tier", "secondary")
+                    a.extra["source_category"] = feed.get("source_category", self.feed_category)
+                    a.extra["publisher_country"] = feed.get("publisher_country", "")
+                    a.extra["origin"] = feed.get("origin") or (
+                        "china" if str(feed.get("lang", "")).startswith("zh") else "foreign")
+                    a.extra["collection_window"] = (
+                        "domestic_extended" if domestic else "standard")
                     if a.url:
                         articles.append(a)
             except Exception as e:
@@ -79,7 +93,7 @@ class NewsAPICrawler(BaseCrawler):
 
     def __init__(self, config, since_days=1):
         super().__init__(config)
-        self.api_key = config.get("news", {}).get("newsapi_key", "")
+        self.api_key = os.environ.get("NEWSAPI_KEY", "")
         self.since_days = since_days
 
     def fetch(self) -> list[Article]:
@@ -126,7 +140,7 @@ class GNewsCrawler(BaseCrawler):
 
     def __init__(self, config, since_days=1):
         super().__init__(config)
-        self.api_key = config.get("news", {}).get("gnews_key", "")
+        self.api_key = os.environ.get("GNEWS_API_KEY", "")
         self.since_days = since_days
 
     def fetch(self) -> list[Article]:
@@ -202,7 +216,9 @@ class NewsAggregator:
             unique.append(a)
 
         # 按发布时间排序
-        unique.sort(key=lambda x: x.published, reverse=True)
+        # Stable domestic-first ordering improves visibility without deleting foreign evidence.
+        unique.sort(key=lambda x: (
+            (x.extra or {}).get("origin") == "china", x.published), reverse=True)
         return unique
 
     def mark_seen(self, articles: list[Article]):

@@ -1,211 +1,186 @@
-# Industry Intelligence Operating System (IIOS) — 产品规格文档
+# Industry Intelligence Operating System
 
-**Version**: 1.1 | **Status**: Beta（确定性采集已实现；深度研究主要为待执行任务包）
+**Version:** 3.0 Beta
+**Authority:** 代码与 `IMPLEMENTATION_STATUS.md` 优先；README 是用户入口。
 
-> 本文档描述产品目标与 Agent 契约。真实完成度见仓库根目录 `IMPLEMENTATION_STATUS.md`；
-> 代码与该状态文件优先于本文中的历史路线图描述。
+## 1. 产品目标
 
----
+IIOS 面向任意行业建立开放世界、持续更新、可追溯的知识体系。系统不以固定问题或固定 Top N 作为完成条件，而是持续扩展：
 
-## 1. Objective（目标）
+- 子领域、产业链活动、产品和技术；
+- 头部与长尾企业、初创公司、研究组、人物和机构；
+- 标准、政策、市场、资本和事件；
+- 主张、支持证据、限定证据、反证和未知边界。
 
-开发一个 AI 驱动的行业情报操作系统（IIOS）：针对任意行业（半导体 / AI / 机器人 / 量子计算 /
-生物医药 / 新能源 / 金融等）**自动构建知识体系、持续追踪行业动态、形成长期更新的行业数据库**，
-为 Beginner / Intermediate / Expert 三级用户提供学习路径、研究素材与投资参考。
+Beginner / Intermediate / Expert 只改变解释深度与学习路径，不改变底层知识全集。
 
-系统属性：**长期运行、模块化、可扩展、自动化**。不是一次性 Prompt，是一个软件产品。
+## 2. 架构
 
-## 2. Input（输入）
-
-所有入口统一接受四个参数（CLI / 配置文件 / API 三处一致）：
-
-| 参数 | 取值 | 默认 |
-|---|---|---|
-| `--industry` | 任意行业名（如 semiconductor / 人工智能） | settings.yaml `domain.name` |
-| `--level` | beginner / intermediate / expert | `domain.depth` |
-| `--region` | global / china / us / europe | `iios.region` |
-| `--lang` | zh / en / both | `output.language` |
-
-```bash
-python -m src.main plan --industry 半导体 --level beginner --region global
+```text
+Connectors → Ingestion/Normalization → intdog_core
+                                      ├─ Intelligence/Knowledge
+                                      ├─ Query/Reports
+                                      └─ App/MCP/Email
 ```
 
-## 3. Output（输出）
-
-### 3.1 统一输出 Schema（所有 Agent 强制遵守）
-
-定义于 `src/schema.py::IIOSRecord`，所有 Agent 产出必须序列化为：
-
-```json
-{
-  "id": "sha1", "type": "news|paper|company|policy|...",
-  "title": "", "summary": "", "source": "",
-  "confidence": 0.95, "tags": [], "region": "", "industry": "",
-  "published": "YYYY-MM-DD", "last_updated": "ISO8601",
-  "references": [{"title":"","url":""}],
-  "impact": {"companies": [], "technologies": [], "importance": 1-5},
-  "extra": {}
-}
-```
-
-### 3.2 归档目录（`D:\IntDog\DomainIntelligence`）
-
-```
-DomainIntelligence/
-├── data/<year>/<date>/{news,academic,finance,policy,startup}.json   # 原始数据（时间×类别）
-├── industry/<industry>/            # IIOS 行业知识库（本次新增）
-│   ├── overview.md  value_chain.md  value_chain.mmd
-│   ├── companies/   learning/      technologies/
-│   ├── timeline/    knowledge_graph/
-│   └── reports/
-├── reports/{daily,weekly,briefs}/  # 日报/周报 HTML
-├── db/intelligence.db              # SQLite（articles + 5 张 IIOS 新表）
-├── index/master_index.json         # 可移植双向索引
-└── app/                            # 移动端 PWA
-```
-
-## 4. 总体架构
-
-```
-                 User (CLI / Desktop / API / 自动化)
-                          │
-                    Planner Agent            ← src/agents/planner.py
-                          │  生成 Task DAG
- ┌────────────────────────┴─────────────────────────┐
- │ 研究组（LLM 分析型，产出结构化提示 → WorkBuddy 执行）│
- │   Industry / ValueChain / Company / Technology     │
- │   Learning / Timeline                              │
- │ 情报组（爬虫型，确定性代码直接产出数据）             │
- │   News / Paper / Policy / Finance / Startup / Social│
- │ 综合组                                             │
- │   KnowledgeGraph / Reporter                        │
- └────────────────────────┬─────────────────────────┘
-                          │ IIOSRecord (统一 Schema)
-                  Knowledge Database
-        (SQLite: articles/entities/edges/events/companies/scores)
-                          │
-          Desktop GUI + Email + PWA + query CLI
-```
-
-**设计原则**：
-1. **爬虫与分析分离**：情报组是确定性代码（可测试、可重跑）；研究组产出"分析任务包"
-   （结构化 Prompt + 数据上下文），由 WorkBuddy/Codex/任意 LLM 执行后回写归档。
-2. **Agent 只通过 Schema 交换数据**，禁止互相 import 内部实现。
-3. **本地优先**：数据与索引保存在本地 SQLite + JSON；联网采集、邮件和可选 LLM 执行仍依赖外部服务。
-
-## 5. Agent 职责（15 个）
-
-| Agent | 文件 | 类型 | 职责与输出 |
-|---|---|---|---|
-| Planner | agents/planner.py | 调度 | 按 industry/level/region 生成任务 DAG（JSON），编排全部 Agent |
-| Industry | agents/research.py | LLM | 行业概述/规模/历史/玩家/趋势/挑战/机会/政策影响 → overview.md |
-| ValueChain | agents/research.py | LLM+模板 | 标准化产业链（内置半导体/AI/新能源/机器人/生物医药模板）→ Mermaid + JSON |
-| Company | agents/research.py | LLM | 每层级 Top10 中国 + Top10 全球；24 项指标（见 §6）+ 雷达评分 |
-| Technology | agents/research.py | LLM | 技术方向→子方向→知识模块→关键论文/教材→未来发展 |
-| Learning | agents/research.py | LLM | 按 level 生成带依赖关系的学习 DAG（Mermaid）+ Roadmap/Checklist/预估时长 |
-| Timeline | agents/research.py | LLM | 产业/公司/技术/政策四类时间轴 → events 表 + Mermaid timeline |
-| News | crawlers/news_crawler.py | 爬虫 | RSS/NewsAPI/GNews；输出含影响公司/技术/重要度/可信度 |
-| Paper | crawlers/academic_crawler.py | 爬虫 | arXiv + Semantic Scholar；分类 Survey/SOTA/Application |
-| Policy | crawlers/finance_crawler.py | 爬虫 | 政府 RSS；分类出口管制/投资/关税/补贴/科研经费 |
-| Finance | crawlers/finance_crawler.py | 爬虫 | 财经 RSS + AKShare 市值；财报期由 LLM 分析任务补充 |
-| Startup | crawlers/news_crawler.py | 爬虫 | HN/ProductHunt/36Kr 融资信号（Crunchbase 等需 Key，见路线图） |
-| Social | agents/research.py | LLM+爬虫 | CEO/CTO/创始人发言追踪（受平台 API 限制，RSS 近似） |
-| KnowledgeGraph | agents/kg.py | 代码 | 从 articles/companies 抽取实体关系 → entities/edges 表 + Mermaid |
-| Reporter | generators/digest_generator.py | 代码 | 日报/周报/深度报告 HTML + 邮件推送 |
-
-## 6. 公司分析指标（24 项）
-
-Overview / 成立时间 / CEO / 员工数 / 市值 / 营收 / 净利润 / 毛利率 / 现金流 / PE / PS / PB /
-客户 / 供应商 / 竞争对手 / 产品 / 专利 / 市场份额 / 优势 / 劣势 / 护城河 / 进出口 /
-供应链位置 / 最新战略 / 风险 / 未来展望 / Confidence Score
-
-评分雷达（scores 表，0-10）：Innovation / Financial / SupplyChain / Talent / Research / Market / Policy / Overall
-
-## 7. 数据库 Schema（SQLite `db/intelligence.db`）
-
-```sql
--- 既有
-articles(uid PK, title, url, source, category, published, summary, lang, authors, date_added);
--- IIOS 新增
-entities(id PK, name, etype /*company|technology|person|product|org|policy*/,
-         industry, region, summary, extra_json, updated_at);
-edges(id PK, src_id, dst_id, relation /*supplies|competes|develops|invests|uses|regulates|member_of*/,
-      weight, source, updated_at);
-events(id PK, etype /*industry|company|technology|policy*/, subject, date, title,
-       description, importance, source_url);
-companies(id PK, name, name_en, industry, tier /*产业链层级*/, region, is_china,
-          metrics_json /*24项指标*/, updated_at);
-scores(company_id, dimension, score, rationale, updated_at,
-       PRIMARY KEY(company_id, dimension));
-```
-
-Phase 2 迁移目标：PostgreSQL（结构化）+ Qdrant（向量/RAG）+ Neo4j（图）+ S3（原文）。
-迁移时保持字段名不变，`ArchiveStore` 是唯一存储入口，替换实现即可。
-
-## 8. 任务编排（DAG）与调度
-
-Planner 产出的标准 DAG（`plan` 命令生成 JSON）：
-
-```
-value_chain → industry_overview → company_research → scoring
-technology_map → learning_path
-(并行) news / paper / policy / finance / startup 爬取 → kg_build → report
-```
-
-调度层级（settings.yaml `iios.schedule` + WorkBuddy 自动化）：
-
-| 频率 | 任务 |
+| 边界 | 责任 |
 |---|---|
-| 每天 08:00 | 新闻/论文/CEO发言/GitHub → 日报邮件 |
-| 每周一 09:00 | 行业总结 + 政策总结 + 投融资总结 |
-| 每月 1 日 | 财报跟踪 + 技术趋势 + 竞争分析（LLM 任务包） |
-| 每季度 | 深度行业报告 + 公司排名 + 市场预测（LLM 任务包） |
+| Connectors | RSS、网页、论文、GitHub、金融和模型 Provider |
+| Pipelines | 抓取、规范化、去重、分类、聚类和抽取 |
+| `intdog_core` | Schema、稳定 ID、事务、迁移、锁、Repository 和 application service |
+| Intelligence | 实体关系、主张证据、覆盖矩阵、竞争格局和影响分析 |
+| Presentation | 查询、报告、图表、App、MCP 和邮件 |
 
-## 9. API 设计（Phase 2，FastAPI）
+报告只能消费结构化事实与证据，不能反向授予事实状态。App 的业务写入必须经过 application service。
 
+## 3. 输入
+
+所有研究入口共享：`industry`、`level`、`region`、`lang`。行业名称可映射到档案和稳定数据目录；显示名称不能承担目录或实体主键职责。
+
+执行模式：
+
+- Codex 套餐：本机登录，无 API Key。
+- API：OpenAI、DeepSeek、Qwen 或 Azure，显式认证和计费。
+- 任务包：只生成 prompt，不伪装成成文结论。
+
+Provider 统一通过 factory 创建，并声明联网搜索、认证和结构化输出能力。
+
+## 4. 数据内核
+
+`DomainIntelData/intdog.sqlite3` 是结构化事实库；JSON/Markdown 是可移植兼容产物。
+
+核心对象：
+
+| 对象 | 关键语义 |
+|---|---|
+| Industry | 行业注册与生命周期 |
+| Source | 全局规范来源＋行业分类和监控状态 |
+| Document | 去重文档、原始内容、发布时间和发现时间 |
+| Entity | 全局规范企业/研究组/人物/技术/产品/产业链活动 |
+| Relation | 有方向、带行业/时间/证据的实体关系 |
+| Event | 行业事件及关联文档 |
+| Claim | subject–predicate–object–qualifiers–valid time |
+| Evidence | supports / contradicts / qualifies |
+| Run | 阶段、状态、checkpoint、指标和错误 |
+| Publisher | 规范发布者、官方域名、所有权/转载簇与认证状态 |
+| ValueChainNode | 产业链节点、顺序/父子关系、覆盖状态和证据统计 |
+| ValueChainEdge | 节点间 supplies/depends_on/enables/substitutes 等带时间和证据的有向边 |
+| ChainEdgeEvidence | 对产业链边的 supports/contradicts/qualifies 证据，可关联文档、主张或 URL |
+| EntityChainRole | 实体在某节点的时态角色、置信度与证据数 |
+| AnalysisArtifact | 证据图、来源观测和产业链情景的不可变算法快照 |
+| ResearchAgendaItem | 稳定、可排序、可关闭的知识边界研究项 |
+| ResearchTask | 从议程生成的有预算、验收条件和结果关联的离线任务包 |
+
+数据按 Raw、Normalized、Intelligence、Artifacts 四层组织。周/月/季是查询窗口，不是三套独立事实。
+
+数据库要求：SQLite WAL、外键、busy timeout、顺序迁移、FTS5、行业互斥锁、原子事务。旧 JSON 使用 `migrate-data` 幂等导入，原文件不删除。
+
+Repository 连接必须通过会关闭连接的上下文管理器使用；提交/回滚不等于关闭连接。
+查询接口不得创建行业或修改注册表，只有显式创建、导入和写入入口可以注册行业。
+SQLite 是规范事实源；兼容 JSON 属于物化视图。每次影响兼容视图的事务必须在同一事务内
+标记对应视图为 dirty，JSON 成功落盘后才能标记 clean；进程中断后由对账器从 SQLite
+重建 dirty 视图，不以旧 JSON 反向覆盖较新的数据库事实。
+
+## 5. 时间与状态
+
+时间字段区分：`published_at`、`observed_at`、`retrieved_at`、`valid_from/valid_to`。
+发布者信任不采信模型或来源自行声明的 `tier`；只有系统注册的官方域名或已审计
+发布者可提升先验。转载稿按原始发布者/所有权簇去重，不把多个转载站计为独立印证。
+
+证据状态：`candidate → collected → verified/corroborated`；错误对象可进入 `rejected`。模型产物是 `draft_review_required`，只有明确人工流程能授予 `reviewed/published`。
+
+历史事件主张采用追加与版本化语义。仅当同一主张被修正、否定或替代时才写入
+`superseded_at`；条目离开当前采集/验证窗口不代表事实失效，不得整类覆盖历史主张。
+
+## 6. 全面发现方法
+
+```text
+行业 → 子领域 → 产业链活动 → 产品/技术 → 企业/研究组/人物
+     → 标准/政策 → 市场/资本 → 事件 → 主张/证据
 ```
-GET /industry?name=            GET /companies?industry=&tier=&region=
-GET /papers?days=              GET /news?days=&importance=
-GET /timeline?etype=&subject=  GET /technology?industry=
-GET /policy?category=          GET /learning?level=
-GET /finance?company=          GET /graph?entity=&depth=
+
+系统同时保存已验证实体、待验证候选、明确排除项和未覆盖节点。覆盖矩阵至少包含：
+
+```text
+地域 × 子领域 × 产业链节点 × 实体类型 × 来源类型 × 事件类型 × 时间
 ```
 
-Phase 1 等价能力：`python -m src.main query|kg|serve`（SQLite + 局域网 HTTP）。
+停止扩展由边际新增率、节点覆盖率、来源独立性和长尾发现率共同决定，不由固定数量决定。
 
-## 10. 评估指标（Eval）
+## 7. 可信度
 
-- 爬虫：每日抓取量 > 0；去重率；来源可用率（失败源自动降级）
-- 数据：新闻多源交叉验证覆盖率（≥2 源 → confidence ≥ 0.8）
-- 分析：LLM 任务包引用来源数 ≥ 3；公司指标填充率
-- 系统：调度成功率；归档索引一致性（路径 100% 可解析）
+来源权威性与事实印证分开：
 
-## 11. 技术栈（Beta 当前能力 / 后续目标）
+- 官方披露、监管、统计、标准和同行评审是一手证据候选；
+- 新闻用于交叉验证；社交和自媒体只作为线索；
+- 多个页面若来自同一公告或通讯社，只计算一个发布者簇；
+- 冲突结论保存各自口径、日期、适用范围和证据，不强行合并；
+- `credibility_score` 是可解释评分，`evidence_status` 是生命周期状态。
 
-| 层 | Beta 当前能力 | 后续服务化目标 |
-|---|---|---|
-| 编排 | Planner Agent + WorkBuddy 自动化 | LangGraph / OpenAI Agents SDK |
-| LLM | WorkBuddy（任务包模式） | GPT/Claude/Gemini 可配置 |
-| 采集 | requests + feedparser + RSS | Firecrawl / Playwright / Tavily |
-| 存储 | SQLite + JSON + master_index | PostgreSQL + Qdrant + Neo4j + S3 |
-| 队列/调度 | 线程 + WorkBuddy 自动化 | Celery / Temporal + APScheduler |
-| 前端 | Tkinter 桌面 + PWA | Next.js Dashboard |
-| 可视化 | Mermaid（.mmd 文件） | ECharts + Graphviz |
-| 邮件 | SMTP（QQ/163/Gmail） | Resend / SendGrid |
-| 监控 | 运行日志 + worker_state.json | Langfuse + Prometheus |
-| 工具协议 | — | MCP Server 封装全部数据源 |
+## 8. 算法管线
 
-## 12. 开发路线图
+1. 本体驱动的中英文查询扩展。
+2. URL、内容指纹、事件和转载链四级去重。
+3. 稳定 ID、别名、外部标识和地域辅助的实体消歧。
+4. 事件聚类与 Claim–Evidence 抽取。
+5. 相关性、权威性、时效性、重要性、新颖性和多样性重排。
+6. Precision、Recall、重复率、实体链接、引用有效率和数字可追溯率评测。
 
-- **Beta（部分完成）**：采集 + 归档 + Agent 任务包 + KG(SQLite) + 桌面程序 + 本地调度；生产级审核与数据覆盖尚未完成
-- **Phase 2**：多源交叉验证（Impact Engine 雏形）、FastAPI、向量化 RAG、Crunchbase/SEC 数据源
-- **Phase 3**：Neo4j 知识图谱、Next.js Dashboard、竞争格局追踪（Leader/Challenger/Emerging/Declining）
-- **Phase 4**：MCP Server 化全部数据源、深度研究报告生成器（季度报告/专题研究）
+未实现的语义能力必须在产物中标为候选或路线图，不得伪装为确定结果。
 
-## 13. 对 Coding Agent 的约束（System Prompt 摘要）
+Intelligence Lab 在该管线之上执行四个离线闭环：按发布者簇编译证据状态、按本地文档
+观测来源健康度、按产业链相邻位置执行衰减情景传播、将覆盖空白编译为稳定研究议程。
+情景传播是可解释敏感性分析，不是因果预测。算法契约见
+[`INTELLIGENCE_LAB.md`](INTELLIGENCE_LAB.md)。
 
-1. 新功能必须归属于某个 Agent，禁止写"什么都干"的大脚本。
-2. 所有数据落地必须经过 `ArchiveStore`，输出必须符合 `IIOSRecord` Schema。
-3. 爬虫必须容错降级（单源失败不影响整体），必须去重（seen 缓存）。
-4. 不硬编码行业：一切从 industry/level/region/lang 参数派生。
-5. 改动后必须运行 `python -m src.main plan --industry 测试` 冒烟测试。
+同一 Lab 分析运行必须由 application service 建立行业锁和 Run；Artifact 状态、Run 终态、
+CLI 语义与 App 展示必须一致。结构化快照是事实源，展示文件使用原子替换。重复输入可复用
+同算法版本快照，但不得修改历史快照内容。
+
+边的 `evidence_count` 必须由 `chain_edge_evidence` 计算，禁止由节点引用或模型自报数字赋值。
+情景输出必须称为启发式暴露度而非概率；关系方向、效应、时间滞后和回退拓扑均可检查。
+Artifact Bundle 的 Manifest 是展示层版本边界，只有全部文件哈希通过后才能成为 latest。
+
+## 9. 任务执行
+
+每次长任务记录 `run_id`、kind、stage、status、checkpoint、metrics、错误和开始/结束时间。
+终态区分 `completed`、`partial`、`failed`、`cancelled`和 `interrupted`。进程退出码 0
+只表示命令成功履行了其结果契约；每日采集还必须报告成功/失败类别。全部失败为
+`failed`，部分失败为 `partial`；两者均不推进调度 checkpoint。
+同一行业使用互斥锁；嵌套子阶段可重入。幂等、可恢复、可取消并保留失败原因是验收目标；
+当前可靠取消、跨重启恢复和进程树状态收敛尚未全部达到，见 `IMPLEMENTATION_STATUS.md`。
+
+桌面端进程任务由独立 Job Runner 管理：启动时创建独立进程组，实时日志通过回调交给 UI，
+状态清单原子持久化，取消终止进程组而非只关闭弹窗。App 关闭时请求取消全部本次会话任务，
+并在限时后强制回收仍存活的进程组；同步调度和异步弹窗任务使用相同的等待语义。
+下次启动将遗留的 running/cancelling 清单标为 interrupted。UI 视图不得自行持有重复的
+Popen/线程生命周期实现。
+
+## 10. 接口
+
+- CLI：初始化、采集、验证、覆盖诊断、全文查询、报告、迁移和 Intelligence Lab。
+- App：行业/来源管理、每日情报、知识图、覆盖统计、报告和任务日志。
+- MCP：只读结构化查询，拒绝路径越界。
+- Email：只发送已生成摘要和原始链接；默认关闭。
+
+## 11. 验收
+
+- Schema 迁移可重复执行，旧数据迁移幂等。
+- 所有 Repository 连接在成功和异常路径都会关闭，测试不得产生连接 `ResourceWarning`。
+- 查询不存在的行业返回明确错误且数据库行数不变。
+- SQLite 提交后若兼容 JSON 写入失败，对账器可重建来源、每日数据和实体视图。
+- App 和 Search 不产生不同的业务写入规则。
+- 同一实体或来源跨行业只保存一份规范对象。
+- 文档删除保留恢复材料，运行冲突被锁拒绝；完整恢复工作台仍是后续验收项。
+- 每个 verified/corroborated 主张可追溯到证据文档。
+- 报告中的关键数字包含日期、币种、单位、口径和引用。
+- `doctor` 展示覆盖空白，而不是只输出总数量。
+- Evidence Graph 区分支持、反驳、限定和独立发布者簇；同源转载不增加独立性。
+- 产业链情景的传播分数随跳数单调不增，未命中节点时返回 unresolved 而不是猜测。
+- 研究议程使用稳定 ID 重入更新；分析快照不可变，相同输入可复用，每类保留最近 365 个差异快照。
+- 正式产业链边优先于位置回退；传播步骤暴露关系、方向、证据和衰减依据。
+- 相同输入快照可去重，差异快照可比较；保留策略不得删除人工议程或审计记录。
+- 来源总量按唯一对象和行业链接分别统计，跨类别链接不能重复增加唯一文档数。
+- MCP 对 Lab 保持只读；研究任务执行结果必须关联 Run、Artifact 和验收记录。
+
+商业数据库、完整社交 API、高级语义消歧、转载链识别、多人审核和服务端高可用仍属于后续能力。

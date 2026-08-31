@@ -1,0 +1,11 @@
+{
+  "fixture_version": "1.0.0",
+  "industry": "AI",
+  "license": "CC0-1.0 synthetic evaluation fixture",
+  "retrieval": [{"id":"r1","relevant":true},{"id":"r2","relevant":true},{"id":"r3","relevant":false}],
+  "publisher_attribution": [{"id":"p1","gold":"OpenAI","predicted":"OpenAI"},{"id":"p2","gold":"arXiv authors","predicted":"arXiv authors"}],
+  "stories": [{"id":"d1","gold_story":"s1","predicted_story":"s1"},{"id":"d2","gold_story":"s1","predicted_story":"s1"},{"id":"d3","gold_story":"s2","predicted_story":"s2"}],
+  "entity_links": [{"mention":"OpenAI","gold":"org:openai","predicted":"org:openai"},{"mention":"Gemini","gold":"product:gemini","predicted":"product:gemini"}],
+  "claims": [{"id":"c1","risk":"high","citations":["doc:r1"]},{"id":"c2","risk":"low","citations":[]}],
+  "thresholds": {"retrieval_precision":0.65,"publisher_attribution_accuracy":1,"story_pairwise_precision":1,"story_pairwise_recall":1,"entity_link_accuracy":1,"high_risk_citation_coverage":1}
+}

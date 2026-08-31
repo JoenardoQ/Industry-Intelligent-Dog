@@ -7,7 +7,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from .llm_service import LLMService
+from .provider_factory import create_provider
 
 
 def _load_tasks(path: Path) -> list[dict]:
@@ -42,7 +42,7 @@ def execute_bundle(config: dict, ctx, bundle_path: str | Path,
     tasks = _load_tasks(bundle)
     if not tasks:
         raise ValueError("任务包中没有可执行任务")
-    client = LLMService(config, provider=provider)
+    client = create_provider(config, provider, ctx.industry_root)
     run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     results = []
     for index, task in enumerate(tasks, 1):

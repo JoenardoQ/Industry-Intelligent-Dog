@@ -23,7 +23,7 @@ email:
   smtp_port: 465                 # SSL端口: QQ/163=465, Gmail=465, Outlook=587
   use_ssl: true
   sender: "your_email@qq.com"    # 发件人邮箱
-  password: "your_auth_code"     # 邮箱授权码（非登录密码）
+  # 邮箱授权码只从环境变量 INTDOG_SMTP_PASSWORD 读取
   recipients:                    # 收件人列表
     - "recipient@example.com"
   daily_time: "08:00"            # 每日推送时间
@@ -32,11 +32,13 @@ email:
 
 # ---------- 新闻源设置 ----------
 news:
+  # 国内源更新频率较低：日更时最多回看 3 天，seen 去重避免重复推送。
+  domestic_lookback_days: 3
   # NewsAPI (免费100次/天) - https://newsapi.org/register
-  newsapi_key: ""
+  # Key 只从 NEWSAPI_KEY 环境变量读取
 
   # GNews (免费100次/天) - https://gnews.io/register
-  gnews_key: ""
+  # Key 只从 GNEWS_API_KEY 环境变量读取
 
   # RSS 源（无需API Key，推荐使用）
   rss_feeds:
@@ -85,11 +87,11 @@ academic:
 
 # ---------- LLM / Agent 设置（可选） ----------
 # 重要：DomainIntelSearch 不绑定任何特定 agent 平台（WorkBuddy / Codex / Claude Code 皆可）。
-# 深度研究以"模型无关任务包"(industry/<行业>/tasks/*.json) 形式产出，任何 agent/模型都能执行。
+# 深度研究任务包写入 <Industry>/one_time/research/tasks/，可由任何 agent/模型执行。
 # 若希望 Search 自带联网 LLM 直连能力，配置下方 provider 即可；留空则只产出任务包。
 llm:
   provider: "none"               # 默认使用任务包/Codex 套餐；API 需显式选择
-  api_key: ""
+  # Key 只从对应供应商环境变量或 INTDOG_LLM_API_KEY 读取
   api_base: "https://api.openai.com/v1"
   model: "gpt-5.6-terra"         # 质量/成本平衡，支持 Web search
   reasoning_effort: "medium"
@@ -100,6 +102,12 @@ llm:
 codex:
   model: ""                       # 留空=使用套餐当前默认模型
   timeout_seconds: 1800
+
+# ---------- 长周期历史证据 ----------
+history:
+  auto_backfill: true             # 周/月/季/半年/两年/五年成文前自动检查并回填
+  require_ready: true             # 总量、时间桶和发布者门槛不足时拒绝伪装成完整报告
+  context_item_cap: 500           # 全量入库；模型上下文按时间桶等距抽样
 
 # ---------- 输出设置（旧版 daily/weekly 命令的扁平归档，归入 _archive 子目录） ----------
 # 注意：新版按行业分目录存储用 init-industry / crawl-daily（见 main.py 顶部说明），
@@ -136,7 +144,7 @@ iios:
     min_sources: 2
     base_confidence: 0.6
 
-# ---------- 独立桌面程序设置（desktop/main.py 打包为 exe） ----------
+# ---------- 桌面启动设置 ----------
 desktop:
   crawl_interval_hours: 4        # 后台爬虫抓取间隔（小时）
   send_email: false              # 后台抓取完成后是否发邮件（需先配置 email 段）

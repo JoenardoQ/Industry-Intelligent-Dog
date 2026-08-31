@@ -8,6 +8,10 @@ venv/
 .intdog-runtime/
 dist/
 build/
+node_modules/
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
 
 # Local secrets and runtime state
 .env
@@ -18,6 +22,7 @@ DomainIntelData/**/.tmp
 # Generated intelligence and local databases. Keep only the public data contract.
 DomainIntelData/*
 !DomainIntelData/README.md
+!DomainIntelData/README.zh-CN.md
 !DomainIntelData/skill/
 !DomainIntelData/skill/**
 *.db

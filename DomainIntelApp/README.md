@@ -1,69 +1,99 @@
-# DomainIntelApp —— 图形界面
+# DomainIntelApp
 
-低饱和桌面工作台：浏览 `DomainIntelData`，管理定期更新，并可从 UI 启动
-“信息源 → 产业链 → 实体”的来源优先行业研究初始化。
+[中文文档](README.zh-CN.md)
 
-## 怎么打开
+`DomainIntelApp` owns source/development startup, isolated runtimes, persistent jobs, and Windows + WSL shortcuts. The product UI is the React/FastAPI workbench; the retired Tk workbench is not a second application implementation. Native Electron packaging lives in `DomainIntelDesktop`.
+
+## Start
+
+From the repository root:
+
 ```bash
-# 方式一：命令行（在本目录 DomainIntelApp 下）
-python -m desktop.main
-
-# 方式二：Windows 双击 run_app.bat（首次启动会显示加载页并创建隔离环境）
-```
-运行 `create_shortcut.ps1` 可在 Windows 桌面创建“IntDog 行业情报”快捷方式。
-
-## 界面构成
-- **顶部**：行业下拉（读取 DomainIntelData 下的行业文件夹，如 Chips / AI）
-  + **「定期更新」开关**（点开=开，再点=关）+ 刷新 + 打开数据目录。
-- **初始化行业研究**：默认调用已通过 ChatGPT 套餐登录的 Codex CLI 联网研究；也可生成
-  通用任务包，或显式选择已配置的 API。
-  后续阶段被质量门槛强制阻断，顺序不可绕过；所有 Agent 产物默认为 draft 并要求人工复核。
-  API 模式还会并发检查候选 URL 的真实可达性；可达率不足时不会继续生成产业链。
-
-## 配置联网研究 API
-
-双击 `configure_openai_api.bat`，在安全输入框中粘贴 OpenAI API Key。脚本会先验证
-`gpt-5.6-terra` 模型访问权限，再把密钥保存为当前 Windows 用户的
-`OPENAI_API_KEY` 环境变量；密钥不会写入仓库配置或日志。配置成功后完全重启 App。
-- **每日情报**：按类别筛选（新闻 / GitHub / 融资 / 招聘 / CEO发言 / 论文，按钮带当天条数），
-  每条以卡片显示 **标题 + abstract + 链接**，可「打开 ↗」或「删除」。
-  - **搜索框**：按标题+摘要关键词过滤（回车或点 🔍，✕ 清空）；
-  - **分页加载**：首屏 30 条 +「加载更多」（百级条目不卡）；
-  - **排序**：默认 / 可信度优先（高可信+多源印证排前面）；
-  - 卡片带**可信度徽标**（高/中/低 + 独立来源数，多源印证打 ✓），点徽标可查看
-    **互相印证的来源清单**（交叉验证溯源）。
-- **知识结构**：三层树 **行业 → 产业链 → 实体（企业 / 高校研究组）**，实体可删除。
-- **定期产物**：每周行业总结 / 每月产业分析 / 每季财报分析，可删除（移入回收站）。
-- **研究助手**：
-  - **竞争格局**——Leader / Challenger / Emerging / Declining 四类玩家及提及量，
-    附历史快照天数（跟踪份额/地位变化）；
-  - **事件影响分析**——已分析事件列表（点「查看」看受影响公司/供应链/论文/政策），
-    以及自动检测到的最新行业事件（带可信度）；
-  - **深度研究报告**——季度 / 产业链 / 竞争格局 / 市场分析四份任务包，
-    ✅ 已回写的可直接打开，⏳ 待执行的可去 DomainIntelSearch 跑 agent。
-- **信息源**：该行业监控的博客/平台/自媒体/新闻/学术期刊/财报/金融源。
-- **行业报告**：近五年趋势 / 近两年流行 / 近半年技术报告。
-
-## 定期更新开关
-- **开**：写入该行业 `control.json` 的 `periodic_enabled=true`，内置调度线程会按周期
-  自动调用 DomainIntelSearch 抓取——
-  **每天**（新闻/GitHub/融资/招聘/CEO/论文）、**每周**（行业总结）、
-  **每月**（产业分析）、**每季**（财报分析）。
-- **关**：停止该行业的定期抓取。
-- 注意：调度线程随本程序运行，**关闭窗口则停止**；若要无人值守长期跑，
-  可另用计划任务定时执行 `python -m src.main crawl-daily --folder <行业>`。
-
-## 删除是否安全？
-- 删除每日条目：仅从该日 JSON 移除该条（可重新抓取恢复）。
-- 删除定期产物 / 周月季报告：**移入 `DomainIntelData/_trash/` 回收站**，可手动恢复。
-- 本程序**没有编辑功能**（按需求只做读取 + 删除）。
-
-## 数据从哪来
-默认读取旁边的 `DomainIntelData/`。换数据目录：
-```bash
-set INTDOG_DATA_ROOT=D:\你的\DomainIntelData
-python -m desktop.main
+cd "/home/joenardo/My Projects/IntDog"
+./run_intdog.sh
 ```
 
-## 依赖
-仅 Python 3.10+ 标准库（tkinter 随 Python 自带）。
+First launch prepares `.intdog-runtime/`, installs the locked Web dependencies, creates a production build, starts the localhost API, and opens a dedicated app-mode window. Linux and Windows runtimes are kept separate. Override the data location with `DOMAIN_INTEL_DATA_ROOT` before launch.
+
+### Windows entry points
+
+For the current WSL-home deployment, use the generated Windows desktop shortcut. Recreate it from PowerShell when needed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\create_shortcut.ps1
+```
+
+Only a native Windows checkout should run `run_app.bat`. The WSL launcher resolves the `/home` repository, records logs under the user's local application data, and does not depend on the retired `/mnt/d` copy.
+
+## First use
+
+1. Create or select an industry.
+2. Open industry initialization and select Codex subscription, provider API, or task-package mode.
+3. Allow source, value-chain, and entity gates to complete in order.
+4. Collect daily intelligence and generate periodic, industry, or deep reports as required.
+
+Codex subscription mode uses the login visible in the same Windows/WSL environment and does not require an API key. Task-package mode creates a prompt package, not a completed report.
+
+## Workbench
+
+| Page | Responsibility |
+| --- | --- |
+| Overview | Linked counts, knowledge structure, directed value chain, key entities |
+| Daily Intelligence | Server search, sort, pagination, page selection, recoverable deletion |
+| Research Products | Weekly/monthly/quarterly, industry, deep, and impact reports |
+| Sources | Categories, governance role, health, timestamps, and manual sources |
+| Research Assistant | Agenda, evidence, scenarios, history coverage, Intelligence Lab |
+| Task Center | Durable states, progress, representative logs, retry and cancellation |
+| System Status | API/database state, automation, industry management, recovery, shutdown |
+
+The global industry selector is the only workbench context. Large lists are searchable, sortable, bounded, and paginated. Missing measurements render as unknown rather than fabricated zeroes. Source cards preserve canonical name, category, region, tier, access, reachability, monitoring, and publisher fields.
+
+Industry management supports create, rename, recoverable archive, and restore. Manual sources survive automated refreshes and may be reused across industries. Valuable paywalled or non-crawlable sources may be manual recommendations; they are not reported as successful collection.
+
+## Knowledge exploration
+
+The interface supports movement from industry to subfield, value-chain node, product, technology, company, research group, person, policy, event, claim, and evidence. It shows leaders, long-tail entities, candidates, coverage gaps, temporal roles, citations, and conflicting evidence. Beginner/intermediate/expert changes explanation depth, not the underlying knowledge universe.
+
+Directed value-chain views expose ordering, entity counts, evidence coverage, and uncovered nodes. Intelligence Lab scenarios are explainable heuristics and never become facts automatically.
+
+## Generation and scheduling
+
+- Daily collection writes news, papers, GitHub, funding, hiring, and leadership items.
+- Weekly/monthly/quarterly collection aggregates evidence and task metadata.
+- Explicit generation actions create Markdown and chart JSON.
+- The default Web scheduler is the only schedule owner and always sets `INTDOG_DISABLE_EMAIL=1`.
+- Restart catch-up uses leases and period keys to avoid duplicate enqueue.
+
+Every task has a `run_id` and durable `queued`, `running`, `completed`, `partial`, `failed`, `cancelled`, or `interrupted` state. Logs are bounded and credential-redacted. Cancellation applies to the process tree; non-success states do not advance schedule checkpoints.
+
+## Deletion and recovery
+
+Bulk deletion displays the selected count. Industries and supported daily batches move to `DomainIntelData/_trash/`; permanent deletion is outside the normal UI. Same-name restoration is rejected rather than overwritten. Do not delete or manually edit an industry while its collection or report task is running.
+
+## Desktop trust boundary
+
+The launcher generates an ephemeral session capability. The API listens only on `127.0.0.1`, validates Host and Origin, and requires the session capability for mutations. External navigation is restricted to HTTPS. Closing IntDog requests graceful API shutdown and then applies a bounded process fallback.
+
+The native distribution uses one Electron shell and one PyInstaller sidecar for both FastAPI and research CLI commands. Mutable data is stored under the operating system's user-data directory, never inside the installed application. Windows, macOS, and Linux packages contain only their native runtime.
+
+## Troubleshooting
+
+- Blurred text: use the system-recommended scale and confirm the shortcut targets the current `/home` launcher.
+- Stuck on Planning: inspect the current bootstrap stage and resume it; do not repeatedly erase the industry.
+- `401 Unauthorized`: renew Codex login in the same environment, or inject the provider key into the app process.
+- Missing report: task JSON and collection metadata are not reports; run the corresponding generation action.
+- Empty GitHub category: no project may have passed relevance, deduplication, and quality gates for that window.
+- Low domestic coverage: check reachability, add authoritative domestic sources, and run coverage diagnostics.
+
+See the [Search guide](../DomainIntelSearch/README.md), [Chinese Search guide](../DomainIntelSearch/README.zh-CN.md), and [Data contract](../DomainIntelData/README.md).
+
+## Verification
+
+```bash
+python -m pytest DomainIntelApp/tests DomainIntelWeb/tests -q
+npm test --prefix DomainIntelWeb
+npm run build --prefix DomainIntelWeb
+npm test --prefix DomainIntelDesktop
+```
+
+Tests use isolated temporary data. They must not mutate the production database or send email.

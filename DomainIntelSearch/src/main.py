@@ -48,56 +48,99 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.utils import load_config
+from src.utils import BASE_DIR, load_config
+
+
+COMMANDS = ["daily", "weekly", "timeline", "brief", "collect", "test-email",
+                 "archive", "query", "serve", "plan", "agent", "execute-tasks", "kg",
+                 "modules",
+                 "init-industry", "bootstrap-industry", "resume-bootstrap", "refresh-sources",
+                 "discover-sources", "enrich-sources", "report-tasks",
+                 "crawl-daily", "crawl-weekly", "crawl-monthly", "crawl-quarterly",
+                 "generate-period", "generate-report", "generate-deep-report",
+                 "generate-impact",
+                 "execute-coverage",
+                 "backfill-history",
+                 "knowledge", "industries", "migrate-data", "reconcile-data",
+                 "verify", "doctor", "landscape", "impact", "deep-reports", "mcp-serve",
+                 "compile-evidence", "observe-sources", "simulate-chain",
+                 "plan-boundaries", "run-lab", "agenda-status",
+                 "create-research-task", "audit-artifacts", "evaluate-quality"]
+
+COMMAND_HELP = {
+    "compile-evidence": "编译可追溯证据图",
+    "observe-sources": "审计来源覆盖、活跃度和集中度",
+    "simulate-chain": "执行产业链启发式情景传播",
+    "plan-boundaries": "生成知识边界研究议程",
+    "run-lab": "依次运行全部离线分析",
+    "agenda-status": "更新研究议程状态",
+    "create-research-task": "从议程创建受预算约束的研究任务包",
+    "audit-artifacts": "校验版本化分析产物及 latest 指针",
+    "evaluate-quality": "运行版本化 AI/Chips 质量评测门禁",
+}
+
+
+def build_parser() -> argparse.ArgumentParser:
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--config", default=None, help="配置文件路径")
+    common.add_argument("--folder", default="", help="数据文件夹名（默认取行业档案 data_folder）")
+    common.add_argument("--days", type=int, default=1, help="抓取天数窗口")
+    common.add_argument("--no-send", action="store_true", help="不发送邮件")
+    common.add_argument("--provider", default=None,
+                        help="执行 provider（codex/openai/deepseek/qwen/azure）")
+    common.add_argument("--kw", default="", help="查询关键词（query 命令）")
+    common.add_argument("--category", default="", help="查询类别（query 命令）")
+    common.add_argument("--port", type=int, default=8765, help="服务端口（serve 命令）")
+    common.add_argument("--host", default="127.0.0.1",
+                        help="serve 监听地址（默认仅本机；局域网需显式设为 0.0.0.0）")
+    # ---- IIOS 统一输入（IIOS_SPEC.md §2） ----
+    common.add_argument("--industry", default="", help="行业名（覆盖配置 domain.name）")
+    common.add_argument("--level", default="", choices=["", "beginner", "intermediate", "expert"],
+                        help="用户水平")
+    common.add_argument("--region", default="", choices=["", "global", "china", "us", "europe"],
+                        help="区域视角")
+    common.add_argument("--lang", default="", choices=["", "zh", "en", "both"], help="输出语言")
+    common.add_argument("--name", default="", help="Agent 名（agent 命令）")
+    common.add_argument("--build", action="store_true", help="构建图谱（kg 命令）")
+    common.add_argument("--entity", default="", help="查询实体（kg 命令）")
+    common.add_argument("--depth", type=int, default=1, help="子图深度（kg 命令）")
+    # ---- knowledge 命令参数 ----
+    common.add_argument("--etype", default="company", choices=["company", "research_group"],
+                        help="实体类型（knowledge 命令）")
+    common.add_argument("--chain", default="", help="所属产业链层级（knowledge 命令）")
+    common.add_argument("--country", default="", help="国家/地区（knowledge 命令）")
+    common.add_argument("--url", default="", help="链接（knowledge 命令）")
+    common.add_argument("--desc", default="", help="描述（knowledge 命令）")
+    # ---- 研究助手命令参数 ----
+    common.add_argument("--event", default="", help="事件描述（impact 命令，如 '美国限制GPU出口'）")
+    common.add_argument("--rtype", default="", help="深度报告类型（deep-reports 命令）")
+    common.add_argument("--kind", default="", help="生成类型（周期或行业报告 ID）")
+    common.add_argument("--task-file", default="", help="任务包 JSON（execute-tasks 命令）")
+    common.add_argument("--hops", type=int, default=3,
+                        help="产业链情景最大传播跳数（simulate-chain）")
+    common.add_argument("--stale-days", type=int, default=30,
+                        help="来源超过多少天未观察视为陈旧（observe-sources）")
+    common.add_argument("--agenda-id", default="", help="研究议程 ID（agenda-status）")
+    common.add_argument("--budget", type=int, default=20,
+                        help="研究任务最多读取文档数（create-research-task）")
+    common.add_argument("--target", type=int, default=0,
+                        help="历史回填目标数；0 使用周期默认值")
+    common.add_argument("--max-buckets", type=int, default=0,
+                        help="本次最多处理的历史时间桶；0 处理全部，可用于分批续跑")
+    common.add_argument("--repair-latest", action="store_true",
+                        help="校验产物时重建 latest 指针")
+    common.add_argument("--status", default="",
+                        choices=["", "open", "in_progress", "done", "dismissed",
+                                 "resolved_candidate"], help="研究议程状态")
+    parser = argparse.ArgumentParser(description="Domain Intelligence System")
+    subparsers = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
+    for command in COMMANDS:
+        subparsers.add_parser(command, parents=[common], help=COMMAND_HELP.get(command, ""))
+    return parser
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Domain Intelligence System")
-    parser.add_argument(
-        "command",
-        choices=["daily", "weekly", "timeline", "brief", "collect", "test-email",
-                 "archive", "query", "serve", "plan", "agent", "execute-tasks", "kg",
-                 "modules",
-                 # ---- 新版：按行业分目录 + 三层知识 + 定期监控 ----
-                 "init-industry", "bootstrap-industry", "resume-bootstrap", "refresh-sources",
-                 "discover-sources", "report-tasks",
-                 "crawl-daily", "crawl-weekly", "crawl-monthly", "crawl-quarterly",
-                 "knowledge", "industries",
-                 # ---- 行业研究助手：验证/格局/影响/深报/MCP ----
-                 "verify", "doctor", "landscape", "impact", "deep-reports", "mcp-serve"],
-        help="执行命令",
-    )
-    parser.add_argument("--config", default=None, help="配置文件路径")
-    parser.add_argument("--folder", default="", help="数据文件夹名（默认取行业档案 data_folder）")
-    parser.add_argument("--days", type=int, default=1, help="抓取天数窗口")
-    parser.add_argument("--no-send", action="store_true", help="不发送邮件")
-    parser.add_argument("--provider", default=None,
-                        help="执行 provider（codex/openai/deepseek/qwen/azure）")
-    parser.add_argument("--kw", default="", help="查询关键词（query 命令）")
-    parser.add_argument("--category", default="", help="查询类别（query 命令）")
-    parser.add_argument("--port", type=int, default=8765, help="服务端口（serve 命令）")
-    # ---- IIOS 统一输入（IIOS_SPEC.md §2） ----
-    parser.add_argument("--industry", default="", help="行业名（覆盖配置 domain.name）")
-    parser.add_argument("--level", default="", choices=["", "beginner", "intermediate", "expert"],
-                        help="用户水平")
-    parser.add_argument("--region", default="", choices=["", "global", "china", "us", "europe"],
-                        help="区域视角")
-    parser.add_argument("--lang", default="", choices=["", "zh", "en", "both"], help="输出语言")
-    parser.add_argument("--name", default="", help="Agent 名（agent 命令）")
-    parser.add_argument("--build", action="store_true", help="构建图谱（kg 命令）")
-    parser.add_argument("--entity", default="", help="查询实体（kg 命令）")
-    parser.add_argument("--depth", type=int, default=1, help="子图深度（kg 命令）")
-    # ---- knowledge 命令参数 ----
-    parser.add_argument("--etype", default="company", choices=["company", "research_group"],
-                        help="实体类型（knowledge 命令）")
-    parser.add_argument("--chain", default="", help="所属产业链层级（knowledge 命令）")
-    parser.add_argument("--country", default="", help="国家/地区（knowledge 命令）")
-    parser.add_argument("--url", default="", help="链接（knowledge 命令）")
-    parser.add_argument("--desc", default="", help="描述（knowledge 命令）")
-    # ---- 研究助手命令参数 ----
-    parser.add_argument("--event", default="", help="事件描述（impact 命令，如 '美国限制GPU出口'）")
-    parser.add_argument("--rtype", default="", help="深度报告类型（deep-reports 命令）")
-    parser.add_argument("--task-file", default="", help="任务包 JSON（execute-tasks 命令）")
+    parser = build_parser()
     args = parser.parse_args()
 
     cfg = load_config(args.config)
@@ -122,7 +165,7 @@ def main():
     # Orchestrator 初始化会向 stdout 打印 spec 摘要；协议型命令（mcp-serve）必须保持
     # stdout 纯净，故按需懒构造——只有旧版监控/查询/serve/kg 命令真正用到 orch。
     NEEDS_ORCH = {"daily", "weekly", "timeline", "brief", "collect", "test-email",
-                  "archive", "query", "serve"}
+                  "archive", "serve"}
     if args.command in NEEDS_ORCH:
         from src.orchestrator import Orchestrator
         orch = Orchestrator(config=cfg)
@@ -176,19 +219,58 @@ def main():
         print("[结果] 邮件发送" + ("成功" if ok else "失败，请检查 config/settings.yaml"))
 
     elif args.command == "archive":
-        project_dir = Path(__file__).resolve().parent.parent
+        project_dir = BASE_DIR
         moved = orch.archive.migrate_existing(project_dir)
         st = orch.archive.stats()
         print(f"[完成] 历史迁移：报告 {moved.get('reports', 0)} 份 | 原始数据 {moved.get('raw', 0)} 条")
         print(f"[数据层统计] 共 {st['total']} 条 | 分类 {st['by_category']} | 位置 {st['root']}")
 
     elif args.command == "query":
-        rows = orch.archive.query(keyword=args.kw, category=args.category,
-                                  limit=20)
+        from intdog_core import IntDogService
+        from src.profiles import find_profile, profile_folder
+        from src.utils import data_root as canonical_data_root
+        service = IntDogService(canonical_data_root(cfg))
+        profile = find_profile(args.industry) if args.industry else None
+        folders = ([args.folder] if args.folder else
+                   ([profile_folder(profile)] if profile else
+                    [row["folder"] for row in service.repo.list_industries()]))
+        rows = []
+        for folder in folders:
+            for item in service.repo.search_documents(folder, args.kw or "*", limit=20):
+                item["folder"] = folder; rows.append(item)
+        if args.category:
+            rows = [row for row in rows if row["category"] == args.category]
+        rows = sorted(rows, key=lambda row: (row["observed_date"], -row["rank"]),
+                      reverse=True)[:20]
         print(f"[查询] 关键词={args.kw!r} 类别={args.category!r} -> {len(rows)} 条")
-        for r in rows:
-            print(f"  [{r['date']}|{r['category']}] {r['title'][:60]}")
-            print(f"    {r['url']}")
+        for row in rows:
+            print(f"  [{row['folder']}|{row['observed_date']}|{row['category']}] "
+                  f"{row['title'][:60]}")
+            print(f"    {row['url']}")
+
+    elif args.command in {"migrate-data", "reconcile-data"}:
+        import json
+        from intdog_core import IntDogService
+        from src.utils import data_root as canonical_data_root
+        service = IntDogService(canonical_data_root(cfg))
+        folders = [args.folder] if args.folder else None
+        if args.command == "migrate-data":
+            stats = service.migrate_legacy(folders)
+            print("[完成] 兼容数据已幂等导入 IntDog 结构化内核")
+            print(json.dumps(stats, ensure_ascii=False, indent=2))
+        repaired = service.reconcile_compat(folders)
+        print("[对账] SQLite → 兼容 JSON")
+        print(json.dumps(repaired, ensure_ascii=False, indent=2))
+
+    elif args.command == "evaluate-quality":
+        import json
+        from src.evaluation import evaluate_file
+        fixtures = BASE_DIR / "evaluation" / "fixtures"
+        paths = [Path(args.task_file)] if args.task_file else sorted(fixtures.glob("*-v*.json"))
+        results = [evaluate_file(path) for path in paths]
+        print(json.dumps(results, ensure_ascii=False, indent=2))
+        if not all(result["passed"] for result in results):
+            raise SystemExit(3)
 
     elif args.command == "plan":
         from src.agents import PlannerAgent
@@ -252,17 +334,17 @@ def main():
             cfg, industry="" if cfg.get("_profile") else args.industry)
         kg_agent = KnowledgeGraphAgent(ctx)
         if args.entity:
-            g = kg_agent.store.graph_neighbors(args.entity, depth=args.depth)
+            g = kg_agent.repo.graph_neighbors(kg_agent.folder, args.entity, depth=args.depth)
             print(f"[图谱] {args.entity!r} 邻居: {len(g['nodes'])} 实体 / {len(g['edges'])} 边")
-            name_of = {n["id"]: n["name"] for n in g["nodes"]}
+            name_of = {n["id"]: n["canonical_name"] for n in g["nodes"]}
             for e in g["edges"][:20]:
-                print(f"  {name_of.get(e['src_id'], '?')} --{e['relation']}--> "
-                      f"{name_of.get(e['dst_id'], '?')}")
+                print(f"  {name_of.get(e['src_entity_id'], '?')} --{e['predicate']}--> "
+                      f"{name_of.get(e['dst_entity_id'], '?')}")
         else:
             records = kg_agent.run()
             print(f"[完成] {records[0].title}")
             print(f"  {records[0].summary}")
-            print(f"  图谱总量: {records[0].extra.get('kg_totals')}")
+            print(f"  图谱总量: {records[0].extra.get('knowledge_totals')}")
 
     elif args.command == "modules":
         from src.modules import list_modules
@@ -287,10 +369,16 @@ def main():
     # 新版：按行业分目录 + 三层知识 + 定期监控
     # ==================================================================
     elif args.command in ("init-industry", "bootstrap-industry", "resume-bootstrap", "refresh-sources",
-                          "discover-sources", "report-tasks",
+                          "discover-sources", "enrich-sources", "report-tasks",
                           "crawl-daily", "crawl-weekly", "crawl-monthly",
-                          "crawl-quarterly", "knowledge", "industries",
-                          "verify", "doctor", "landscape", "impact", "deep-reports"):
+                          "crawl-quarterly", "generate-period", "generate-report",
+                          "generate-deep-report", "generate-impact", "execute-coverage",
+                          "backfill-history",
+                          "knowledge", "industries",
+                          "verify", "doctor", "landscape", "impact", "deep-reports",
+                          "compile-evidence", "observe-sources", "simulate-chain",
+                          "plan-boundaries", "run-lab", "agenda-status",
+                          "create-research-task", "audit-artifacts"):
         from src.industry_store import IndustryStore, list_industries as list_data_industries
         from src.profiles import (find_profile, apply_profile, profile_folder,
                                   make_custom_profile)
@@ -320,6 +408,9 @@ def main():
         pcfg = apply_profile(cfg, profile) if profile else cfg
         store = IndustryStore(data_root, folder,
                               name=(profile or {}).get("name", folder))
+        if profile is None:
+            metadata = store._read_json(store.knowledge / "industry.json", {})
+            store.name = str(metadata.get("name") or folder)
 
         if args.command == "init-industry":
             from src.source_discovery import (seed_sources, build_discovery_task,
@@ -410,6 +501,19 @@ def main():
             task_path = store.save_task("source_discovery", task)
             print(f"\n[任务包] 可用 agent 扩充信息源：{task_path}")
 
+        elif args.command == "enrich-sources":
+            from src.research_bootstrap import discover_rss_endpoints
+            sources = store.get_sources()
+            before = sum(bool(item.get("rss_url") or item.get("feed_url"))
+                         for value in sources.values() if isinstance(value, list)
+                         for item in value if isinstance(item, dict))
+            sources = discover_rss_endpoints(sources)
+            store.save_sources(sources)
+            after = sum(bool(item.get("rss_url") or item.get("feed_url"))
+                        for value in sources.values() if isinstance(value, list)
+                        for item in value if isinstance(item, dict))
+            print(f"[完成] RSS/Atom 自动发现：原有 {before}，新增 {after-before}，合计 {after}")
+
         elif args.command == "report-tasks":
             from src.report_tasks import build_report_tasks
             tasks = build_report_tasks(store, store.name,
@@ -426,6 +530,10 @@ def main():
             for k, v in r.items():
                 print(f"  {k}: {v}")
             print(f"  → {store.periodic}/daily/")
+            if r["status"] == "partial":
+                sys.exit(4)
+            if r["status"] == "failed":
+                sys.exit(3)
 
         elif args.command in ("crawl-weekly", "crawl-monthly", "crawl-quarterly"):
             from src.scheduler import PeriodicScheduler
@@ -436,6 +544,73 @@ def main():
             r = fn()
             for k, v in r.items():
                 print(f"  {k}: {v}")
+
+        elif args.command == "generate-period":
+            from src.report_generation import generate_periodic
+            kind = args.kind or "weekly"
+            try:
+                result = generate_periodic(pcfg, store, kind, args.provider or "codex")
+            except Exception as exc:
+                print(f"[错误] 周期报告生成失败：{type(exc).__name__}: {exc}", file=sys.stderr)
+                sys.exit(2)
+            print(f"[完成] {kind} 文字报告：{result['path']}")
+            print(f"  可视化元数据：{result['metadata']}")
+
+        elif args.command == "generate-report":
+            from src.report_generation import generate_industry_report
+            kind = args.kind or "tech_6m"
+            try:
+                result = generate_industry_report(
+                    pcfg, store, kind, args.provider or "codex",
+                    (profile or {}).get("name_en", ""))
+            except Exception as exc:
+                print(f"[错误] 行业报告生成失败：{type(exc).__name__}: {exc}", file=sys.stderr)
+                sys.exit(2)
+            print(f"[完成] 行业报告：{result['path']}")
+
+        elif args.command == "generate-deep-report":
+            from src.report_generation import generate_deep_report
+            kind = args.rtype or args.kind or "quarterly"
+            try:
+                result = generate_deep_report(
+                    pcfg, store, kind, args.provider or "codex",
+                    (profile or {}).get("name_en", ""))
+            except Exception as exc:
+                print(f"[错误] 深度报告生成失败：{type(exc).__name__}: {exc}", file=sys.stderr)
+                sys.exit(2)
+            print(f"[完成] 深度研究报告：{result['path']}")
+
+        elif args.command == "generate-impact":
+            from src.report_generation import generate_impact_report
+            if not args.event:
+                parser.error("generate-impact 需要 --event")
+            try:
+                result = generate_impact_report(
+                    pcfg, store, pcfg, args.event, args.provider or "codex")
+            except Exception as exc:
+                print(f"[错误] 事件影响报告生成失败：{type(exc).__name__}: {exc}", file=sys.stderr)
+                sys.exit(2)
+            print(f"[完成] 事件影响报告：{result['path']}")
+
+        elif args.command == "execute-coverage":
+            from src.coverage_execution import execute_coverage
+            try:
+                result = execute_coverage(
+                    pcfg, store, provider=args.provider or "codex", budget=args.budget)
+            except Exception as exc:
+                print(f"[错误] 覆盖搜索执行失败：{type(exc).__name__}: {exc}", file=sys.stderr)
+                sys.exit(2)
+            print(f"[完成] 覆盖执行：{result}")
+
+        elif args.command == "backfill-history":
+            from src.history_backfill import POLICIES, backfill_history
+            horizon = args.kind or "monthly"
+            if horizon not in POLICIES:
+                parser.error("backfill-history --kind 必须是 " + ", ".join(POLICIES))
+            result = backfill_history(
+                pcfg, store, horizon, target=args.target or None,
+                max_buckets=args.max_buckets or None)
+            print(f"[完成] 历史回填：{result}")
 
         elif args.command == "knowledge":
             from src.knowledge_model import KnowledgeModel
@@ -487,7 +662,7 @@ def main():
             from src.landscape import build_landscape
             out = build_landscape(store, pcfg)
             print(f"[完成] {store.name} 竞争格局 → {out['path']}")
-            for tier in ("leader", "challenger", "emerging", "declining"):
+            for tier in ("leader", "challenger", "emerging", "declining", "watchlist"):
                 names = "、".join(e["name"] for e in out["tiers"][tier]) or "（无）"
                 print(f"  {out['labels'][tier]}: {names}")
 
@@ -515,6 +690,14 @@ def main():
             for t in tasks:
                 print(f"  - {t['title']}  → {t['output_file']}")
 
+        elif args.command in ("compile-evidence", "observe-sources", "simulate-chain",
+                              "plan-boundaries", "run-lab", "agenda-status",
+                              "create-research-task", "audit-artifacts"):
+            from src.commands.lab import run_lab_command
+            code = run_lab_command(args, parser, data_root, folder)
+            if code:
+                sys.exit(code)
+
     elif args.command == "mcp-serve":
         from src.mcp_server import serve_stdio
         from src.utils import data_root as canonical_data_root
@@ -522,46 +705,8 @@ def main():
         serve_stdio(data_root)
 
     elif args.command == "serve":
-        import http.server
-        import socket
-        import socketserver
-
-        root = orch.archive.root
-        # 只读分享 DomainIntelData（不再部署独立 APP；UI 由 DomainIntelApp 承担）
-
-        class Handler(http.server.SimpleHTTPRequestHandler):
-            def __init__(self, *a, **kw):
-                super().__init__(*a, directory=str(root), **kw)
-
-            def end_headers(self):
-                self.send_header("Cache-Control", "no-store")
-                self.send_header("Access-Control-Allow-Origin", "*")
-                super().end_headers()
-
-        # 获取局域网 IP
-        ip = "127.0.0.1"
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            ip = s.getsockname()[0]
-            s.close()
-        except OSError:
-            pass
-
-        print("=" * 56)
-        print("  DomainIntelData 只读服务已启动（Ctrl+C 停止）")
-        print(f"  本机访问:   http://127.0.0.1:{args.port}/")
-        print(f"  手机访问:   http://{ip}:{args.port}/")
-        print("  说明: 仅用于把数据层分享给同局域网设备浏览；")
-        print("        图形界面请使用 DomainIntelApp。")
-        print("  提示: 手机与电脑需在同一 WiFi；Windows 防火墙需放行该端口")
-        print("=" * 56)
-        with socketserver.ThreadingTCPServer(("0.0.0.0", args.port), Handler) as httpd:
-            httpd.allow_reuse_address = True
-            try:
-                httpd.serve_forever()
-            except KeyboardInterrupt:
-                print("\n[停止] 服务已关闭")
+        from src.commands.serve import serve_archive
+        serve_archive(orch.archive.root, args.host, args.port)
 
 
 if __name__ == "__main__":

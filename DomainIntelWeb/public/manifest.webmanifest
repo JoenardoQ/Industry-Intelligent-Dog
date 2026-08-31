@@ -1,0 +1,9 @@
+{
+  "name": "IntDog Industry Intelligence",
+  "short_name": "IntDog",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f5f2",
+  "theme_color": "#f4f5f2",
+  "lang": "zh-CN"
+}

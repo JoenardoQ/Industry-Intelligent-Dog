@@ -1,0 +1,49 @@
+appId: com.joenardoq.intdog
+productName: IntDog
+asar: true
+directories:
+  output: dist
+files:
+  - src/**/*
+  - package.json
+extraResources:
+  - from: build/backend
+    to: backend
+    filter:
+      - intdog-runtime*
+  - from: build/resources/intdog
+    to: intdog
+win:
+  artifactName: IntDog-${version}-windows-${arch}.${ext}
+  icon: ../DomainIntelApp/app/intdog.ico
+  target:
+    - target: nsis
+      arch: [x64]
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+mac:
+  artifactName: IntDog-${version}-macos-${arch}.${ext}
+  category: public.app-category.business
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  target:
+    - target: dmg
+      arch: [universal]
+linux:
+  artifactName: IntDog-${version}-linux-${arch}.${ext}
+  icon: ../DomainIntelApp/app/icon-512.png
+  category: Office
+  executableName: intdog
+  synopsis: Local-first industry intelligence research workbench
+  description: Local-first industry intelligence research workbench
+  maintainer: JoenardoQ
+  syncDesktopName: true
+  desktop:
+    entry:
+      StartupWMClass: IntDog
+  target:
+    - target: AppImage
+      arch: [x64]

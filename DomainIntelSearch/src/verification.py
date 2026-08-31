@@ -31,23 +31,12 @@ from __future__ import annotations
 
 import difflib
 import re
-import urllib.parse
+from datetime import datetime
 from pathlib import Path
 
-OFFICIAL_DOMAINS = {
-    "gov.cn", "sec.gov", "fda.gov", "europa.eu", "cninfo.com.cn",
-    "hkexnews.hk", "who.int", "clinicaltrials.gov", "nih.gov", "nist.gov",
-    "uspto.gov", "samr.gov.cn",
-}
-PRIMARY_DOMAINS = {
-    "arxiv.org", "doi.org", "github.com", "nature.com", "science.org",
-    "ieee.org", "acm.org", "semanticscholar.org",
-}
-MAJOR_PUBLISHERS = {
-    "reuters.com", "reutersagency.com", "bloomberg.com", "apnews.com", "ft.com", "wsj.com",
-    "caixin.com", "xinhuanet.com", "people.com.cn",
-}
-LOW_SIGNAL_DOMAINS = {"producthunt.com", "reddit.com", "medium.com"}
+from intdog_core import stable_id, tracked_function
+from intdog_core.models import canonical_url
+from intdog_core.source_trust import publisher_key, source_assessment
 
 # 归一化标题时丢弃的停用词（中英文）
 _STOP = {
@@ -61,6 +50,7 @@ _STOP = {
 SIM_THRESHOLD = 0.42   # token overlap 系数阈值（|交|/min(|A|,|B|)）
 MIN_INTER = 3          # 至少共享 3 个 token，防短标题误并
 DUP_RATIO = 0.75       # 字符级近似重复直接归并（同稿转载/格式差异）
+CLUSTERING_VERSION = "title-entity-event-time-v3"
 
 
 def _norm_title(title: str) -> str:
@@ -87,45 +77,75 @@ def _tokens(title: str) -> set[str]:
     return out
 
 
-def _domain(url: str) -> str:
-    try:
-        net = urllib.parse.urlparse(url or "").netloc.lower()
-        return net.replace("www.", "")
-    except ValueError:
-        return ""
-
-
 def _source_key(item: dict) -> str:
     """Independent publisher key; a domain is one publisher, not one URL."""
-    src = (item.get("source") or "").strip().lower()
-    dom = _domain(item.get("url", ""))
-    return dom or src or "unknown"
-
-
-def _domain_matches(domain: str, candidates: set[str]) -> bool:
-    return any(domain == candidate or domain.endswith("." + candidate)
-               for candidate in candidates)
+    return publisher_key(item)
 
 
 def source_quality(item: dict) -> tuple[float, str]:
     """Return an explicit source-quality prior and evidence type."""
-    domain = _domain(item.get("url", ""))
-    source = (item.get("source") or "").lower()
-    if _domain_matches(domain, OFFICIAL_DOMAINS) or "官方" in source:
-        return 0.90, "official_primary"
-    if _domain_matches(domain, PRIMARY_DOMAINS):
-        return 0.85, "primary_record"
-    if _domain_matches(domain, MAJOR_PUBLISHERS):
-        return 0.72, "established_media"
-    if _domain_matches(domain, LOW_SIGNAL_DOMAINS):
-        return 0.35, "community_signal"
-    return 0.50, "secondary_source"
+    return source_assessment(item)
 
 
 def _story_family(item: dict) -> str:
     category = item.get("category", "")
     return "event" if category in {"news", "funding", "hiring", "ceo", "policy"} \
         else category
+
+
+def _entity_keys(item: dict) -> set[str]:
+    """Return canonical entity identifiers supplied by extraction/resolution."""
+    values = item.get("entity_ids") or item.get("entities") or []
+    if isinstance(values, (str, dict)):
+        values = [values]
+    keys = set()
+    for value in values:
+        if isinstance(value, dict):
+            value = value.get("id") or value.get("canonical_id")
+        normalized = str(value or "").strip().casefold()
+        if normalized:
+            keys.add(normalized)
+    return keys
+
+
+def _event_keys(item: dict) -> set[str]:
+    """Return reviewed/extracted event identifiers, never title guesses."""
+    values = item.get("event_keys") or item.get("event_key") or []
+    if isinstance(values, (str, dict)):
+        values = [values]
+    keys = set()
+    for value in values:
+        if isinstance(value, dict):
+            value = value.get("id") or value.get("canonical_id")
+        normalized = str(value or "").strip().casefold()
+        if normalized:
+            keys.add(normalized)
+    return keys
+
+
+def _event_time(item: dict) -> datetime | None:
+    value = item.get("published_at") or item.get("date") or item.get("published")
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _same_entity_window(a: dict, b: dict, max_days: int = 2) -> bool:
+    if not (_entity_keys(a) & _entity_keys(b)):
+        return False
+    # Entity + time alone is not an event identity: one company can launch a
+    # product, file results and face a policy action on the same day.
+    if not (_event_keys(a) & _event_keys(b)):
+        return False
+    a_time, b_time = _event_time(a), _event_time(b)
+    if a_time is None or b_time is None:
+        return False
+    if a_time.tzinfo is None:
+        a_time = a_time.replace(tzinfo=b_time.tzinfo)
+    if b_time.tzinfo is None:
+        b_time = b_time.replace(tzinfo=a_time.tzinfo)
+    return abs((a_time - b_time).total_seconds()) <= max_days * 86400
 
 
 def _same_story(a_str: str, b_str: str, a_tok: set[str], b_tok: set[str]) -> bool:
@@ -169,12 +189,28 @@ def group_stories(items: list[dict]) -> list[list[int]]:
                 union(i, seen_url[u])
             else:
                 seen_url[u] = i
+    inverted: dict[str, set[int]] = {}
+    entity_inverted: dict[str, set[int]] = {}
+    prefixes: dict[str, set[int]] = {}
+    for index, token_set in enumerate(toks):
+        for token in token_set:
+            inverted.setdefault(token, set()).add(index)
+        for entity in _entity_keys(items[index]):
+            entity_inverted.setdefault(entity, set()).add(index)
+        prefixes.setdefault(norms[index][:12], set()).add(index)
     for i in range(n):
-        for j in range(i + 1, n):
+        candidates = set()
+        for token in toks[i]:
+            candidates.update(inverted[token])
+        for entity in _entity_keys(items[i]):
+            candidates.update(entity_inverted[entity])
+        candidates.update(prefixes.get(norms[i][:12], set()))
+        for j in sorted(index for index in candidates if index > i):
             if find(i) == find(j):
                 continue
-            if (_story_family(items[i]) == _story_family(items[j]) and
-                    _same_story(norms[i], norms[j], toks[i], toks[j])):
+            if (_story_family(items[i]) == _story_family(items[j]) and (
+                    _same_story(norms[i], norms[j], toks[i], toks[j]) or
+                    _same_entity_window(items[i], items[j]))):
                 union(i, j)
 
     groups: dict[int, list[int]] = {}
@@ -227,10 +263,19 @@ def verify_items(items: list[dict]) -> list[dict]:
                     "date": m.get("date", ""),
                 })
             it.update(sc)
+            it["credibility_score"] = sc["credibility"]
+            it["evidence_status"] = "corroborated" if sc["corroborated"] else (
+                "verified" if sc["evidence_type"] in {"official_primary", "primary_record"}
+                else "collected")
+            type_evidence = 1.0 if it.get("classification_reason") else 0.6
+            it["ranking_score"] = round(
+                sc["credibility"] * 0.7 + min(sc["source_count"], 4) / 4 * 0.2
+                + type_evidence * 0.1, 3)
             it["references"] = refs
     return items
 
 
+@tracked_function("verify")
 def verify_store_daily(store, date: str = None, days: int = 1) -> dict:
     """对某行业每日情报做交叉验证并回写.
 
@@ -251,6 +296,59 @@ def verify_store_daily(store, date: str = None, days: int = 1) -> dict:
                 "low": 0, "days": days}
     verify_items(items)
 
+    # Persist claim-level provenance.  The legacy numeric ``credibility`` field
+    # remains for UI compatibility; evidence_status is the lifecycle state.
+    claim_bundles = []
+    story_bundles = []
+    groups = group_stories(items)
+    for indexes in groups:
+        members = [items[index] for index in indexes]
+        representative = max(members, key=lambda item: item.get("ranking_score", 0))
+        score = score_group(members)
+        status = "corroborated" if score["corroborated"] else (
+            "verified" if score["evidence_type"] in {"official_primary", "primary_record"}
+            else "collected")
+        evidence = []
+        for member in members:
+            url = canonical_url(member.get("url", ""))
+            if not url:
+                continue
+            evidence.append({
+                "relation": "supports", "document_id": stable_id("doc", url),
+                "excerpt": member.get("abstract") or member.get("summary", ""),
+                "publisher_cluster": _source_key(member),
+                "extraction_method": "story_cluster",
+                "confidence": member.get("credibility_score")})
+        claim_bundles.append({
+            "predicate": "reports_event",
+            "object": {"title": representative.get("title", ""),
+                       "category": representative.get("category", "news")},
+            "qualifiers": {"independent_publishers": score["source_count"],
+                           "source_quality": score["source_quality"],
+                           "evidence_type": score["evidence_type"]},
+            "valid_from": representative.get("date", ""), "status": status,
+            "evidence": evidence})
+        story_bundles.append({
+            "title": representative.get("title", ""),
+            "story_family": _story_family(representative),
+            "status": status,
+            "metadata": {
+                "independent_publishers": score["source_count"],
+                "source_quality": score["source_quality"],
+            },
+            "documents": [{
+                "document_id": stable_id("doc", canonical_url(member.get("url", ""))),
+                "publisher_cluster": _source_key(member),
+                "observed_at": member.get("date") or member.get("published_at"),
+            } for member in members if canonical_url(member.get("url", ""))],
+        })
+    # A rolling verification window is an observation window, not the lifetime
+    # of a historical event.  Upsert matching claims without superseding every
+    # older event that simply fell outside the current window.
+    store.service.repo.save_claim_bundles(store.folder, claim_bundles)
+    store.service.repo.save_story_groups(
+        store.folder, story_bundles, CLUSTERING_VERSION)
+
     # 按来源文件回写（保留全部原有 + 新增字段）
     by_file: dict[str, list[dict]] = {}
     for it in items:
@@ -259,8 +357,9 @@ def verify_store_daily(store, date: str = None, days: int = 1) -> dict:
             by_file.setdefault(f, []).append(it)
     for f, arr in by_file.items():
         store._write_json(Path(f), arr)
+        path = Path(f)
+        store.service.import_daily(store.folder, path.stem, path.parent.name, arr)
 
-    groups = group_stories(items)
     stats = {"stories": len(groups), "verified_items": 0,
              "high": 0, "medium": 0, "low": 0, "days": days}
     for it in items:

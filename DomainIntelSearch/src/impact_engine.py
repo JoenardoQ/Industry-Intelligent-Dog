@@ -24,6 +24,8 @@ import re
 from datetime import datetime
 from pathlib import Path
 
+from intdog_core import tracked_function
+
 from . import verification as V
 
 # 政策/监管信号（用于"相关政策"关联 与 事件检测）
@@ -109,6 +111,7 @@ def detect_events(store, date: str = None, limit: int = 20) -> list[dict]:
 # ----------------------------------------------------------------------
 # 事件影响分析：事件 → 公司/供应链/论文/政策 四层关联
 # ----------------------------------------------------------------------
+@tracked_function("impact")
 def analyze_event(store, pcfg: dict, event: str, date: str = None) -> dict:
     """对一个事件做四层关联分析并落盘，返回结构化结果.
 

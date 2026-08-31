@@ -26,18 +26,18 @@ python -m src.main agent --name company --industry 半导体
 可用 `python -m src.main modules` 查看。
 
 ## 任务包怎么执行（agent 中立）
-1. 打开 `DomainIntelData/industry/<行业>/tasks/<agent>.json`。
+1. 打开 `DomainIntelData/<Industry>/one_time/research/tasks/<agent>.json`。
 2. 里面是若干任务，每个任务有 `summary`（要做什么）和 `extra.prompt`（完整提示词）。
 3. 把 prompt 交给你的 LLM/agent 执行，把结果写成 Markdown 或 JSON。
-4. 按任务里的 `extra.output_file` 路径回写到 DomainIntelData（如 `industry/<行业>/...`）。
+4. 按 `extra.output_file` 回写到 `DomainIntelData/<Industry>/one_time/research/`。
 
 > 引用规范（任务包已内置）：结论用 `[n]` 标注，文末附 `references[]`；
 > JSON 输出必须带 `source_url`/`sources` 字段。保证每条结论可溯源。
 
 ## 输出位置
-- 任务包：`DomainIntelData/industry/<行业>/tasks/*.json`
-- 回写知识库：`DomainIntelData/industry/<行业>/`（md / json / mmd）
-- 计划 DAG：`DomainIntelData/industry/<行业>/plan.mmd`
+- 任务包：`DomainIntelData/<Industry>/one_time/research/tasks/*.json`
+- 回写知识库：`DomainIntelData/<Industry>/one_time/research/`（md / json / mmd）
+- 计划 DAG：`DomainIntelData/<Industry>/one_time/research/plan.mmd`
 
 ## 后续
 研究产物可进一步结构化为知识图谱，见 `knowledge-graph.md`。

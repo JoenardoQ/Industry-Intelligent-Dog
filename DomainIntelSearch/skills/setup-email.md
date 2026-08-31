@@ -13,7 +13,6 @@ email:
   smtp_port: 465                 # SSL 端口：QQ/163/Gmail=465, Outlook=587
   use_ssl: true
   sender: "你的邮箱@qq.com"
-  password: "邮箱授权码"          # 不是登录密码，是 SMTP 授权码
   recipients:
     - "收件人@example.com"
   daily_time: "08:00"
@@ -22,7 +21,7 @@ email:
 
 ## 验证
 ```bash
-python -m src.main test-email     # 收到测试邮件即配置成功
+INTDOG_SMTP_PASSWORD="邮箱授权码" python -m src.main test-email
 ```
 
 ## 触发方式
@@ -31,4 +30,4 @@ python -m src.main test-email     # 收到测试邮件即配置成功
 
 ## 注意
 - 密码填的是**邮箱授权码**，不是登录密码（QQ/163 需在邮箱设置里单独开启 SMTP 并生成授权码）。
-- 授权码属敏感信息，`settings.yaml` 不要提交到公开仓库。
+- 授权码只从 `INTDOG_SMTP_PASSWORD` 读取，不写入 `settings.yaml`。

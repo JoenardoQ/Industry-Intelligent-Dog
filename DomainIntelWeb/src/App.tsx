@@ -1,0 +1,90 @@
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import { Activity, Building2, Check, ChevronDown, CircleDot, FileText, FlaskConical, FolderKanban, Globe2, LayoutDashboard, Menu, Newspaper, ServerCog, X } from 'lucide-react'
+import { api, type Industry, type PageKey } from './api'
+import { Empty, Loading, type Toast } from './features/shared'
+
+const OverviewPage = lazy(() => import('./features/OverviewPage'))
+const DailyPage = lazy(() => import('./features/DailyPage'))
+const ProductsPage = lazy(() => import('./features/ProductsPage'))
+const SourcesPage = lazy(() => import('./features/SourcesPage'))
+const ResearchPage = lazy(() => import('./features/ResearchPage'))
+const JobsPage = lazy(() => import('./features/JobsPage'))
+const SystemPage = lazy(() => import('./features/SystemPage'))
+
+const navigation: { key: PageKey; label: string; note: string; icon: typeof Activity }[] = [
+  { key: 'overview', label: '行业概览', note: '知识与产业链', icon: LayoutDashboard },
+  { key: 'daily', label: '每日情报', note: '持续监测', icon: Newspaper },
+  { key: 'products', label: '研究产物', note: '周月季与报告', icon: FileText },
+  { key: 'sources', label: '信息源', note: '来源与可信度', icon: Globe2 },
+  { key: 'research', label: '研究助手', note: '问题、证据与实验', icon: FlaskConical },
+  { key: 'jobs', label: '任务中心', note: '进度与日志', icon: FolderKanban },
+  { key: 'system', label: '系统状态', note: '运行环境', icon: ServerCog },
+]
+
+function useHashPage(): [PageKey, (page: PageKey) => void] {
+  const read = () => {
+    const key = location.hash.replace('#/', '') as PageKey
+    return navigation.some(item => item.key === key) ? key : 'overview'
+  }
+  const [page, setPage] = useState<PageKey>(read)
+  useEffect(() => {
+    const listener = () => setPage(read())
+    addEventListener('hashchange', listener)
+    return () => removeEventListener('hashchange', listener)
+  }, [])
+  return [page, key => { location.hash = `/${key}`; setPage(key) }]
+}
+
+function App() {
+  const [industries, setIndustries] = useState<Industry[]>([])
+  const [industry, setIndustry] = useState(localStorage.getItem('intdog.industry') || '')
+  const [page, navigate] = useHashPage()
+  const [mobileNav, setMobileNav] = useState(false)
+  const [toast, setToast] = useState<Toast>(null)
+  const [loading, setLoading] = useState(true)
+  const notify = useCallback((value: Toast) => {
+    setToast(value)
+    if (value) window.setTimeout(() => setToast(null), 4500)
+  }, [])
+  const refreshIndustries = useCallback(async () => {
+    try {
+      const rows = await api<Industry[]>('/industries')
+      setIndustries(rows)
+      setIndustry(current => {
+        const next = rows.some(row => row.folder === current) ? current : rows[0]?.folder || ''
+        if (next) localStorage.setItem('intdog.industry', next)
+        return next
+      })
+    } catch (error) { notify({ kind: 'error', text: String(error) }) }
+    finally { setLoading(false) }
+  }, [notify])
+  useEffect(() => { void refreshIndustries() }, [refreshIndustries])
+  const current = industries.find(row => row.folder === industry)
+  const chooseIndustry = (folder: string) => { setIndustry(folder); localStorage.setItem('intdog.industry', folder) }
+
+  return <div className="app-shell">
+    <aside className={`sidebar ${mobileNav ? 'sidebar-open' : ''}`}>
+      <div className="brand"><div className="brand-mark">I</div><div><strong>IntDog</strong><span>INDUSTRY INTELLIGENCE</span></div></div>
+      <nav aria-label="主要导航">{navigation.map(item => <button key={item.key} className={page === item.key ? 'nav-item active' : 'nav-item'} onClick={() => { navigate(item.key); setMobileNav(false) }}><item.icon size={20}/><span><strong>{item.label}</strong><small>{item.note}</small></span></button>)}</nav>
+      <div className="sidebar-foot"><CircleDot size={15}/><span>Local-first · Evidence-aware</span></div>
+    </aside>
+    {mobileNav && <button className="scrim" aria-label="关闭导航" onClick={() => setMobileNav(false)}/>}
+    <main>
+      <header className="topbar"><button className="icon-button mobile-menu" onClick={() => setMobileNav(true)}><Menu/></button><div className="industry-select"><Building2 size={18}/><label><span>当前行业</span><select value={industry} onChange={event => chooseIndustry(event.target.value)} disabled={loading}>{industries.map(row => <option key={row.folder} value={row.folder}>{row.name}</option>)}</select></label><ChevronDown size={16}/></div><div className="top-status"><span className="status-dot"/><span>{loading ? '正在连接本地数据' : current ? `${current.name} 已加载` : '暂无行业'}</span></div></header>
+      <div className="workspace">{loading ? <Loading label="正在加载行业数据库…"/> : !industry && page !== 'system' ? <Empty title="还没有行业" body="从左侧进入系统状态，新建第一个行业。"/> : <Suspense fallback={<Loading label="正在载入工作台模块…"/>}><PageRouter page={page} industry={industry} navigate={navigate} notify={notify}/></Suspense>}</div>
+    </main>
+    {toast && <div className={`toast ${toast.kind}`} role="status">{toast.kind === 'ok' ? <Check/> : <X/>}{toast.text}</div>}
+  </div>
+}
+
+function PageRouter({ page, industry, navigate, notify }: { page: PageKey; industry: string; navigate: (p: PageKey) => void; notify: (t: Toast) => void }) {
+  if (page === 'overview') return <OverviewPage industry={industry} navigate={navigate}/>
+  if (page === 'daily') return <DailyPage industry={industry} notify={notify}/>
+  if (page === 'products') return <ProductsPage industry={industry} notify={notify}/>
+  if (page === 'sources') return <SourcesPage industry={industry} notify={notify}/>
+  if (page === 'research') return <ResearchPage industry={industry} notify={notify}/>
+  if (page === 'jobs') return <JobsPage/>
+  return <SystemPage industry={industry} notify={notify}/>
+}
+
+export default App

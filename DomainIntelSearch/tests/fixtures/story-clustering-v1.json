@@ -1,0 +1,19 @@
+{
+  "version": "story-clustering-v1",
+  "scope": "Small synthetic bilingual regression corpus; not a production benchmark.",
+  "acceptance": {"min_precision": 0.95, "min_recall": 0.8},
+  "items": [
+    {"id":"a-zh","story":"accelerator-launch","title":"英伟达发布新一代加速器","category":"news","entity_ids":["company:nvidia"],"event_key":"launch:accelerator-x","date":"2026-08-30","url":"https://cn.example/a"},
+    {"id":"a-en","story":"accelerator-launch","title":"NVIDIA unveils its next accelerator","category":"news","entity_ids":["company:nvidia"],"event_key":"launch:accelerator-x","date":"2026-08-31","url":"https://en.example/a"},
+    {"id":"a-copy","story":"accelerator-launch","title":"NVIDIA unveils its next accelerator","category":"news","entity_ids":["company:nvidia"],"event_key":"launch:accelerator-x","date":"2026-08-31","url":"https://wire.example/a"},
+    {"id":"b-zh","story":"license-change","title":"英伟达调整企业软件授权条款","category":"news","entity_ids":["company:nvidia"],"event_key":"policy:software-license","date":"2026-08-30","url":"https://cn.example/b"},
+    {"id":"b-en","story":"license-change","title":"NVIDIA changes enterprise software licensing terms","category":"news","entity_ids":["company:nvidia"],"event_key":"policy:software-license","date":"2026-08-31","url":"https://en.example/b"},
+    {"id":"c-zh","story":"funding-round","title":"月之暗面完成新一轮融资","category":"funding","entity_ids":["company:moonshot"],"event_key":"funding:series-c","date":"2026-08-30","url":"https://cn.example/c"},
+    {"id":"c-en","story":"funding-round","title":"Moonshot AI closes a new funding round","category":"funding","entity_ids":["company:moonshot"],"event_key":"funding:series-c","date":"2026-08-31","url":"https://en.example/c"},
+    {"id":"d-one","story":"model-release","title":"OpenAI releases model Orion for developers","category":"news","entity_ids":["company:openai"],"event_key":"launch:model-orion","date":"2026-08-30","url":"https://one.example/d"},
+    {"id":"d-two","story":"model-release","title":"OpenAI releases Orion model for developers","category":"news","entity_ids":["company:openai"],"event_key":"launch:model-orion","date":"2026-08-30","url":"https://two.example/d"},
+    {"id":"e","story":"policy-hearing","title":"OpenAI appears at a policy hearing","category":"news","entity_ids":["company:openai"],"event_key":"policy:hearing","date":"2026-08-30","url":"https://one.example/e"},
+    {"id":"f","story":"old-event","title":"NVIDIA accelerator roadmap update","category":"news","entity_ids":["company:nvidia"],"event_key":"launch:accelerator-x","date":"2026-08-20","url":"https://one.example/f"},
+    {"id":"g","story":"paper","title":"Efficient sparse attention for long contexts","category":"papers","entity_ids":["lab:example"],"event_key":"paper:sparse-attention","date":"2026-08-30","url":"https://paper.example/g"}
+  ]
+}
