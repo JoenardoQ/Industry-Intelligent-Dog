@@ -50,35 +50,56 @@ SQLite 保存规范实体、文档、持久 Story、关系、主张、证据、�
 
 | 模式 | 适合 | 密钥/费用 | 结果 |
 |---|---|---|---|
-| Codex 套餐 | 已登录 ChatGPT/Codex 的本机用户 | 无需 API Key | 直接生成草稿 |
-| API | 自动化或指定供应商 | 需要 Key，按 API 计费 | 直接生成草稿 |
+| 本机 Agent | 已登录 Codex CLI 或 Claude Code；其他 Agent 走 MCP/任务包 | 由 Agent 自己管理 | 直接生成或交接 |
+| API | OpenAI、DeepSeek、Qwen 或 Azure OpenAI | 需要 Key，按 API 计费 | 直接生成草稿 |
 | 任务包 | 暂不调用模型 | 无模型费用 | JSON prompt，尚非报告 |
 
 系统不会把“任务包已创建”或“模型已生成”标成已审核结论。
 真实 API/SMTP 密钥应通过环境变量注入，不写入受版本控制的配置。非本机模型端点必须
 使用 HTTPS；本地数据分享默认只监听 localhost，局域网暴露必须显式开启。
 
-## 五分钟开始
+## 用户安装与首次使用
 
-当前本机生产环境位于 `/home/joenardo/My Projects/IntDog`。代码、隔离运行环境与
-`DomainIntelData` 均从当前仓库动态解析；仓库本身可移动，不依赖 `/mnt/d` 或固定盘符。
+> 已知问题：`4.0.0-test.1` 的首次使用与智能体连接没有达到本节合同，暂不建议普通用户安装。
+> 修复版通过新的安装—引导—Provider—首次任务门槛后才会替换该版本。
+
+IntDog 安装包包含应用与本地后端，但**不包含模型账号或额度**。如果只查看已有数据、管理行业
+或创建任务包，不需要模型；如果要生成研究内容，必须另外完成一种 Provider 配置。
+
+### Windows 10/11 x64
+
+1. 从 GitHub Release 下载 `IntDog-<版本>-windows-x64.exe`，不要下载 Source code 压缩包。
+2. 双击安装器并选择安装目录；安装完成后使用桌面或开始菜单中的 IntDog 快捷方式。
+3. 测试版未签名。如 SmartScreen 警告，先核对发布页文件名与 SHA-256，再决定是否运行。
+4. 第一次打开后等待“本地运行组件”和“数据目录”显示正常。
+5. 在首次启动向导选择：
+   - **本机 Agent**：Codex CLI 和 Claude Code 可直接执行；DeepSeek Harness、Work Buddy、
+     Qwen Code、CodeBuddy、Kimi、Gemini CLI、OpenCode 等通过 MCP/任务包交接；
+   - **API**：选择 OpenAI、DeepSeek、Qwen 或 Azure OpenAI，输入 API Key 与模型；Key 由操作系统加密存储；
+   - **任务包**：无需 Key，但只生成 prompt，不直接生成研究报告。
+6. 创建行业，点击“初始化行业研究”，随后在“任务中心”查看阶段、日志与结果。
+7. 其他 Agent 可在“连接设置”复制 MCP 配置，或在“研究助手”导出任务；导回结果固定进入待复核区。
+
+如果双击后没有窗口，在 `%APPDATA%/intdog-desktop/logs/backend.log` 查看后端日志。不要公开
+上传含 API Key、令牌或个人路径的完整日志。
+
+### macOS 与 Linux
+
+- macOS 测试包只支持 Apple Silicon arm64。打开 DMG 后把 IntDog 拖入 Applications；
+  未签名测试包可能触发 Gatekeeper。
+- Linux x64 下载 AppImage 后赋予执行权限：`chmod +x IntDog-*.AppImage`。
+- 两个平台的本机 Agent 模式也必须先安装相应 CLI 并完成其公开登录流程；也可选择 API 或任务包。
+
+完整状态含义和故障恢复见[安装与智能体连接指南](docs/onboarding-and-installation.zh-CN.md)。
+
+### 从源码启动（开发者）
 
 ```bash
 cd "/home/joenardo/My Projects/IntDog"
 ./run_intdog.sh
 ```
 
-### Windows 图形界面
-
-1. WSL home 生产环境使用桌面快捷方式；原生 Windows checkout 才双击 `DomainIntelApp/run_app.bat`。
-2. 在 App 中选择或创建行业。
-3. 点击“初始化行业研究”，默认可使用本机 Codex 套餐登录。
-4. 在“每日情报”运行采集，在“定期产物/研究助手/行业报告”按需直接生成。
-
-研究助手中的“长周期证据覆盖”显示周、月、季、半年、两年、五年的有效唯一条目、
-时间桶和发布者数。完整报告只在三项门槛同时达标后生成；系统不会用重复内容补足目标。
-
-可运行 `DomainIntelApp/create_shortcut.ps1` 创建桌面快捷方式。
+仓库本身可移动，不依赖 `/mnt/d` 或固定盘符。源码模式会创建隔离的 Python/Web 运行环境。
 
 ### 命令行
 
@@ -109,7 +130,7 @@ cd ..
 `--industry` 可使用“芯片/半导体/ai/人工智能”等档案别名；`--folder` 可直接指定
 `Chips`、`AI` 等数据目录。
 
-## 原生测试版
+## 原生发行边界
 
 原生包采用 Electron 桌面壳与单一 PyInstaller API/CLI sidecar。Windows x64 生成 NSIS
 `.exe`，macOS Apple Silicon arm64 生成 `.dmg`，Linux x64 生成 `.AppImage`；每个安装包只携带
@@ -174,14 +195,14 @@ Gatekeeper 可能要求用户手动允许。稳定版 Windows/macOS 需要签名
 
 新增报告和数据源应建立在上述内核之上，避免用更多模型文本掩盖底层证据、覆盖和一致性缺口。
 
-更完整的实现边界见 [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)。
+更完整的实现边界见 [当前实现状态](IMPLEMENTATION_STATUS.zh-CN.md)。
 
 ## 文档导航
 
 - [Search：安装、命令、执行模式和故障排查](DomainIntelSearch/README.md)
 - [Data：目录、字段、状态和备份契约](DomainIntelData/README.md)
 - [App：图形界面任务手册](DomainIntelApp/README.md)
-- [DESIGN.md：长期设计背景](DESIGN.md)
+- [DESIGN.zh-CN.md：当前架构](DESIGN.zh-CN.md)
 
 ## 开发验证
 
@@ -195,4 +216,4 @@ cd DomainIntelWeb && npm run build
 重复文档会跳过并留下审计记录。永久删除仍不在默认工作流中。结构化内核已修复连接泄漏和
 “读取缺失行业时隐式注册”，并通过
 dirty view 记录与 `reconcile-data` 重建 SQLite 之外的核心 JSON 视图。详见
-[IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)。
+[IMPLEMENTATION_STATUS.zh-CN.md](IMPLEMENTATION_STATUS.zh-CN.md)。

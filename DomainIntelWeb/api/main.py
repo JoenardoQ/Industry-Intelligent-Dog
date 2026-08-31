@@ -26,6 +26,7 @@ from .routers.system import build_system_router
 from .routers.automation import build_automation_router
 from .routers.intelligence import build_intelligence_router
 from .routers.recovery import build_recovery_router
+from .routers.agent_bridge import build_agent_bridge_router
 from .automation import AutomationScheduler
 from .security import install_security
 
@@ -133,6 +134,9 @@ intelligence_router = build_intelligence_router(
     data_root=DATA_ROOT, service=service, resolve_folder=_folder, dataio=dataio)
 app.include_router(intelligence_router)
 app.include_router(build_recovery_router(data_root=DATA_ROOT, dataio=dataio))
+agent_bridge_router = build_agent_bridge_router(
+    data_root=DATA_ROOT, dataio=dataio, resolve_folder=_folder, service=service)
+app.include_router(agent_bridge_router)
 # Preserve direct-call compatibility for the existing Python contract tests.
 daily = next(route.endpoint for route in daily_router.routes
              if route.path.endswith("/daily") and "GET" in route.methods)
@@ -146,6 +150,8 @@ health = next(route.endpoint for route in system_router.routes
               if route.path == "/api/health")
 artifact = next(route.endpoint for route in system_router.routes
                 if route.path == "/api/artifact")
+setup = next(route.endpoint for route in system_router.routes
+             if route.path == "/api/setup")
 history = next(route.endpoint for route in intelligence_router.routes
                if route.path.endswith("/history"))
 

@@ -38,6 +38,7 @@ function validateResponse(path: string, method: string, value: unknown) {
     return
   }
   if (route === '/health') return requireKeys(route, value, ['status', 'data_root', 'database', 'active_jobs'])
+  if (route === '/setup') return requireKeys(route, value, ['runtime_ready', 'data_root', 'taskpack_ready', 'agents', 'api_providers'])
   if (route.endsWith('/overview')) return requireKeys(route, value, ['industry', 'stats', 'chain', 'entities', 'source_categories'])
   if (route.endsWith('/daily')) return requireKeys(route, value, ['items', 'total', 'next_cursor', 'selection_scope'])
   if (route.endsWith('/products')) return requireKeys(route, value, ['periodic', 'reports', 'deep_reports', 'impacts'])
@@ -120,9 +121,15 @@ export type AgendaItem = {
   id: string; question?: string; title?: string; rationale?: string;
   note?: string; status?: string
 }
+export type AgentTask = { id:string; title?:string; rationale?:string; status:string;
+  queries?:string[]; budget?:number; result_artifact_id?:string }
+export type AgentResult = { task_id:string; agent_id:string; summary:string;
+  assertions:{text:string;citations:string[]}[]; status:string; duplicate?:boolean; path?:string;
+  result_id:string; created_at:string; review?:{decision:string;note:string;reviewed_at:string} }
+export type AgentResultsPage = {items:AgentResult[];total:number;offset:number;limit:number;next_offset:number|null}
 export type ResearchPayload = {
   lab?: { evidence?: { nodes?: unknown[] }; scenarios?: unknown[] }
-  agenda: AgendaItem[]; tasks: unknown[]; impacts: unknown[]
+  agenda: AgendaItem[]; tasks: AgentTask[]; impacts: unknown[]
 }
 export type Job = {
   run_id: string; title: string; status: string; updated_at: string;
@@ -130,6 +137,19 @@ export type Job = {
   artifact_path?: string; parent_run_id?: string; operation?: string; error?: string
 }
 export type HealthPayload = HealthState
+export type AgentState = {
+  id:string; name:string; region:string; commands:string[]; connection:string;
+  execution:string; docs_url:string; note:string; installed:boolean;
+  authenticated:boolean|null; ready:boolean; executable:string; detail:string; schedulable:boolean
+}
+export type ApiProviderState = { id:string; name:string; region:string;
+  configured:boolean; ready:boolean; model:string; api_base:string; key_env:string;
+  default_model:string; docs_url:string; web_search:boolean; schedulable:boolean }
+export type McpConfig = { id:string; name:string; format:string; value:string|Record<string,unknown> }
+export type SetupPayload = { runtime_ready:boolean; data_root:string;
+  taskpack_ready:boolean; agents:AgentState[]; api_providers:ApiProviderState[];
+  mcp_command:string[]; mcp_configs:McpConfig[]; agent_profiles:AgentProfile[]; privacy_note:string }
+export type AgentProfile = { id:string;name:string;command:string;args:string[] }
 export type GenerateResult = { run_id: string; status: string; title: string }
 
 export type StorySummary = {
@@ -170,7 +190,7 @@ export type Schedule = {
   local_time: string; weekday: number; monthday: number; timezone: string;
   catch_up: boolean; last_period_key?: string; last_attempt_at?: string;
   last_success_at?: string; last_error?: string; next_run_at?: string;
-  pipeline_mode: 'aggregate'|'generate'; provider: 'codex'|'openai';
+  pipeline_mode: 'aggregate'|'generate'; provider: string;
   attempted_period_key?: string; retry_count: number; retry_after?: string;
   last_job_run_id?: string; last_artifact_path?: string
 }

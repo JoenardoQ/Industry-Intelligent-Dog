@@ -42,21 +42,39 @@ class CodexCLIService:
         self.timeout = int(cfg.get("timeout_seconds", 1800))
         self.model = str(cfg.get("model") or "").strip()
         self._windows = os.name == "nt"
-        self.executable = "wsl.exe" if self._windows else (shutil.which("codex") or "")
+        self.mode = "native"
+        self.executable = shutil.which("codex") or ""
         self.codex_command = "codex"
         self.codex_home = ""
-        if self._windows:
+        if self._windows and not self.executable:
             windows_codex_home = Path.home() / ".codex"
-            self.codex_home = windows_to_wsl(windows_codex_home)
             candidates = list((windows_codex_home / "bin" / "wsl").glob("*/codex"))
-            if candidates:
+            wsl = shutil.which("wsl.exe") or shutil.which("wsl") or ""
+            if wsl and candidates:
                 newest = max(candidates, key=lambda path: path.stat().st_mtime)
+                self.mode = "wsl-shared-home"
+                self.executable = wsl
                 self.codex_command = windows_to_wsl(newest)
+                self.codex_home = windows_to_wsl(windows_codex_home)
+            elif wsl:
+                probe = subprocess.run(
+                    [wsl, "sh", "-lc", "command -v codex"],
+                    capture_output=True, text=True, timeout=8, check=False,
+                    creationflags=subprocess.CREATE_NO_WINDOW,
+                )
+                discovered = (probe.stdout or "").strip().splitlines()
+                if probe.returncode == 0 and discovered:
+                    self.mode = "wsl"
+                    self.executable = wsl
+                    self.codex_command = discovered[-1].strip()
         if not self.executable:
-            raise CodexCLIError("未找到 Codex CLI；请先安装并用 ChatGPT 套餐登录")
+            raise CodexCLIError(
+                "未找到 Codex CLI。安装 IntDog 不会自动安装模型工具；"
+                "请先安装 Codex CLI 并用 ChatGPT 登录，然后重新检测"
+            )
 
     def _paths(self, output: Path) -> tuple[str, str]:
-        if self._windows:
+        if getattr(self, "mode", "wsl-shared-home" if self._windows else "native").startswith("wsl"):
             return windows_to_wsl(self.workspace), windows_to_wsl(output)
         return str(self.workspace), str(output)
 
@@ -71,19 +89,45 @@ class CodexCLIService:
         if self.model:
             codex_args.extend(["--model", self.model])
         codex_args.append("-")
-        if self._windows:
+        mode = getattr(self, "mode", "wsl-shared-home" if self._windows else "native")
+        if mode == "wsl-shared-home":
             return [self.executable, "--cd", workspace, "env",
                     f"CODEX_HOME={self.codex_home}", *codex_args]
+        if mode == "wsl":
+            return [self.executable, "--cd", workspace, *codex_args]
         return [self.executable, *codex_args[1:]]
 
-    def login_status(self) -> str:
-        prefix = [self.executable] if not self._windows else [self.executable]
-        command = ([*prefix, "env", f"CODEX_HOME={self.codex_home}",
-                    self.codex_command, "login", "status"] if self._windows
-                   else [*prefix, "login", "status"])
+    def login_status_result(self) -> subprocess.CompletedProcess[str]:
+        if self.mode == "wsl-shared-home":
+            command = [self.executable, "env", f"CODEX_HOME={self.codex_home}",
+                       self.codex_command, "login", "status"]
+        elif self.mode == "wsl":
+            command = [self.executable, self.codex_command, "login", "status"]
+        else:
+            command = [self.executable, "login", "status"]
         result = subprocess.run(command, capture_output=True, text=True,
-                                timeout=30, check=False)
+                                timeout=8, check=False,
+                                creationflags=(subprocess.CREATE_NO_WINDOW
+                                               if self._windows else 0))
+        return result
+
+    def login_status(self) -> str:
+        result = self.login_status_result()
         return ((result.stdout or "") + "\n" + (result.stderr or "")).strip()
+
+    def diagnostics(self) -> dict:
+        try:
+            result = self.login_status_result()
+        except (OSError, subprocess.SubprocessError) as exc:
+            return {"installed": True, "authenticated": False, "ready": False,
+                    "mode": self.mode, "executable": self.executable,
+                    "detail": f"Codex 登录状态检测失败：{type(exc).__name__}"}
+        detail = ((result.stdout or "") + "\n" + (result.stderr or "")).strip()
+        authenticated = result.returncode == 0
+        return {"installed": True, "authenticated": authenticated,
+                "ready": authenticated, "mode": self.mode,
+                "executable": self.executable,
+                "detail": detail[-800:] or ("已登录" if authenticated else "未登录")}
 
     def complete(self, prompt: str) -> CodexResult:
         run_dir = self.workspace / "one_time" / "research" / "bootstrap" / "codex_runs"

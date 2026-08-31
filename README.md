@@ -40,29 +40,60 @@ SQLite is the canonical store for entities, documents, Stories, relations, claim
 
 | Mode | Authentication and cost | Result |
 | --- | --- | --- |
-| Codex subscription | Local ChatGPT/Codex login; no API key | Draft output |
-| Provider API | Provider key; API charges may apply | Draft output |
+| Local agent | Signed-in Codex CLI or Claude Code; other agents use MCP/task packages | Direct output or handoff |
+| Provider API | OpenAI, DeepSeek, Qwen, or Azure OpenAI key; API charges may apply | Draft output |
 | Task package | No model call | JSON prompt/task, not a report |
 
 Secrets must be supplied through environment variables or system credential storage. They must not be committed to YAML or the data directory. Remote model endpoints must use HTTPS.
 
-## Five-minute start
+## User installation and first run
+
+> Known issue: `4.0.0-test.1` does not satisfy this onboarding and provider-connectivity
+> contract and is not recommended for non-developer installation. A replacement ships
+> only after the install → onboarding → provider → first-job gates pass.
+
+The IntDog installer contains the app and local backend, but **no model account or
+quota**. Existing-data browsing, industry management, and task packages need no
+model. Research generation requires one separately configured provider.
+
+### Windows 10/11 x64
+
+1. Download `IntDog-<version>-windows-x64.exe` from GitHub Releases, not a Source code archive.
+2. Run the installer, select the destination, and use the desktop or Start-menu shortcut.
+3. The test build is unsigned. If SmartScreen warns, verify the release filename and SHA-256 before deciding whether to run it.
+4. On first launch, wait for Local runtime and Data directory to become ready.
+5. Choose one provider:
+   - **Local agent:** Codex CLI and Claude Code can execute directly. DeepSeek Harness,
+     Work Buddy, Qwen Code, CodeBuddy, Kimi, Gemini CLI, and OpenCode use MCP/task-package handoff;
+   - **API:** choose OpenAI, DeepSeek, Qwen, or Azure OpenAI and enter a key and model; the key uses operating-system encrypted storage;
+   - **Task package:** no key, but produces a prompt rather than a completed report.
+6. Create an industry, run Initialize industry research, and inspect stage, logs, and result in Task center.
+7. For any other agent, copy its MCP configuration in Connection settings or export a task from Research Studio; imported results remain review-required.
+
+If no window appears, inspect `%APPDATA%/intdog-desktop/logs/backend.log`. Do not
+publicly upload logs containing API keys, tokens, or personal paths.
+
+### macOS and Linux
+
+- The macOS test build supports Apple Silicon arm64 only. Drag IntDog from the DMG
+  into Applications; an unsigned test build may trigger Gatekeeper.
+- On Linux x64, make the AppImage executable: `chmod +x IntDog-*.AppImage`.
+- Local-agent mode still requires the corresponding CLI and its public sign-in flow.
+  API and task-package modes are alternatives.
+
+See the complete [installation and agent-connection guide](docs/onboarding-and-installation.md).
+
+### Start from source (developers)
 
 ```bash
 cd "/home/joenardo/My Projects/IntDog"
 ./run_intdog.sh
 ```
 
-The source/development launcher prepares an isolated Python and Web runtime and opens the React workbench. The local API binds only to `127.0.0.1`; closing through System Status stops the backend. Windows + WSL uses the generated desktop shortcut. A native Windows checkout may run `DomainIntelApp/run_app.bat`.
+The source launcher prepares an isolated Python/Web runtime. The repository can move
+and does not depend on a fixed drive path.
 
-Typical first use:
-
-1. Create or select an industry.
-2. Run industry initialization in Codex, API, or task-package mode.
-3. Let source, value-chain, and entity gates complete in order.
-4. Collect daily intelligence and generate periodic or deep research when needed.
-
-Command-line equivalent:
+### Command line
 
 ```bash
 cd DomainIntelSearch
@@ -75,7 +106,7 @@ python -m src.main run-lab --industry semiconductor
 
 Use `--industry` for a name or alias and `--folder` for an exact data folder.
 
-## Native test distributions
+## Native distribution boundary
 
 The approved package is an Electron shell plus one PyInstaller API/CLI sidecar. Each installer contains only its native runtime:
 
@@ -121,7 +152,7 @@ The Web scheduler is the only schedule owner. It persists daily/weekly/monthly/q
 - [Data contract](DomainIntelData/README.md) · [中文](DomainIntelData/README.zh-CN.md)
 - [Application guide](DomainIntelApp/README.md) · [中文](DomainIntelApp/README.zh-CN.md)
 - [Implementation status](IMPLEMENTATION_STATUS.md)
-- [Long-term design](DESIGN.md)
+- [Current architecture](DESIGN.md)
 
 ## Verification
 

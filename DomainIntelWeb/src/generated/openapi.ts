@@ -1,6 +1,55 @@
 /* Generated from openapi.json. Do not edit by hand. */
-export type ApiPath = "/api/artifact" | "/api/health" | "/api/industries" | "/api/industries/{folder}" | "/api/industries/{folder}/automation" | "/api/industries/{folder}/automation/{action}" | "/api/industries/{folder}/automation/{action}/run" | "/api/industries/{folder}/coverage" | "/api/industries/{folder}/coverage/cells" | "/api/industries/{folder}/coverage/cells/{cell_id}/attempts" | "/api/industries/{folder}/coverage/initialize" | "/api/industries/{folder}/coverage/plan" | "/api/industries/{folder}/daily" | "/api/industries/{folder}/generate" | "/api/industries/{folder}/history" | "/api/industries/{folder}/knowledge/entities" | "/api/industries/{folder}/knowledge/entities/{entity_id}" | "/api/industries/{folder}/overview" | "/api/industries/{folder}/products" | "/api/industries/{folder}/research" | "/api/industries/{folder}/sources" | "/api/industries/{folder}/stories" | "/api/industries/{folder}/stories/{story_id}" | "/api/industries/{folder}/stories/{story_id}/merge" | "/api/industries/{folder}/stories/{story_id}/split" | "/api/industries/{folder}/stories/{story_id}/unlock" | "/api/jobs" | "/api/jobs/{run_id}/cancel" | "/api/jobs/{run_id}/output" | "/api/jobs/{run_id}/retry" | "/api/shutdown" | "/api/trash" | "/api/trash/audits/recent" | "/api/trash/{item_id}/preview" | "/api/trash/{item_id}/restore"
-export type ApiOperation = "GET /api/artifact" | "GET /api/health" | "GET /api/industries" | "POST /api/industries" | "DELETE /api/industries/{folder}" | "PATCH /api/industries/{folder}" | "GET /api/industries/{folder}/automation" | "PUT /api/industries/{folder}/automation/{action}" | "POST /api/industries/{folder}/automation/{action}/run" | "GET /api/industries/{folder}/coverage" | "POST /api/industries/{folder}/coverage/cells" | "POST /api/industries/{folder}/coverage/cells/{cell_id}/attempts" | "POST /api/industries/{folder}/coverage/initialize" | "POST /api/industries/{folder}/coverage/plan" | "DELETE /api/industries/{folder}/daily" | "GET /api/industries/{folder}/daily" | "POST /api/industries/{folder}/generate" | "GET /api/industries/{folder}/history" | "GET /api/industries/{folder}/knowledge/entities" | "GET /api/industries/{folder}/knowledge/entities/{entity_id}" | "GET /api/industries/{folder}/overview" | "GET /api/industries/{folder}/products" | "GET /api/industries/{folder}/research" | "DELETE /api/industries/{folder}/sources" | "GET /api/industries/{folder}/sources" | "POST /api/industries/{folder}/sources" | "GET /api/industries/{folder}/stories" | "GET /api/industries/{folder}/stories/{story_id}" | "POST /api/industries/{folder}/stories/{story_id}/merge" | "POST /api/industries/{folder}/stories/{story_id}/split" | "POST /api/industries/{folder}/stories/{story_id}/unlock" | "GET /api/jobs" | "POST /api/jobs/{run_id}/cancel" | "GET /api/jobs/{run_id}/output" | "POST /api/jobs/{run_id}/retry" | "POST /api/shutdown" | "GET /api/trash" | "GET /api/trash/audits/recent" | "GET /api/trash/{item_id}/preview" | "POST /api/trash/{item_id}/restore"
+export type ApiPath = "/api/agent-bridge/profiles" | "/api/agent-bridge/profiles/{profile_id}" | "/api/artifact" | "/api/health" | "/api/industries" | "/api/industries/{folder}" | "/api/industries/{folder}/agent-bridge/results" | "/api/industries/{folder}/agent-bridge/results/{result_id}" | "/api/industries/{folder}/agent-bridge/results/{result_id}/review" | "/api/industries/{folder}/agent-bridge/tasks" | "/api/industries/{folder}/agent-bridge/tasks/{task_id}" | "/api/industries/{folder}/automation" | "/api/industries/{folder}/automation/{action}" | "/api/industries/{folder}/automation/{action}/run" | "/api/industries/{folder}/coverage" | "/api/industries/{folder}/coverage/cells" | "/api/industries/{folder}/coverage/cells/{cell_id}/attempts" | "/api/industries/{folder}/coverage/initialize" | "/api/industries/{folder}/coverage/plan" | "/api/industries/{folder}/daily" | "/api/industries/{folder}/generate" | "/api/industries/{folder}/history" | "/api/industries/{folder}/knowledge/entities" | "/api/industries/{folder}/knowledge/entities/{entity_id}" | "/api/industries/{folder}/overview" | "/api/industries/{folder}/products" | "/api/industries/{folder}/research" | "/api/industries/{folder}/sources" | "/api/industries/{folder}/stories" | "/api/industries/{folder}/stories/{story_id}" | "/api/industries/{folder}/stories/{story_id}/merge" | "/api/industries/{folder}/stories/{story_id}/split" | "/api/industries/{folder}/stories/{story_id}/unlock" | "/api/jobs" | "/api/jobs/{run_id}/cancel" | "/api/jobs/{run_id}/output" | "/api/jobs/{run_id}/retry" | "/api/setup" | "/api/shutdown" | "/api/trash" | "/api/trash/audits/recent" | "/api/trash/{item_id}/preview" | "/api/trash/{item_id}/restore"
+export type ApiOperation = "GET /api/agent-bridge/profiles" | "POST /api/agent-bridge/profiles" | "DELETE /api/agent-bridge/profiles/{profile_id}" | "GET /api/artifact" | "GET /api/health" | "GET /api/industries" | "POST /api/industries" | "DELETE /api/industries/{folder}" | "PATCH /api/industries/{folder}" | "GET /api/industries/{folder}/agent-bridge/results" | "POST /api/industries/{folder}/agent-bridge/results" | "GET /api/industries/{folder}/agent-bridge/results/{result_id}" | "POST /api/industries/{folder}/agent-bridge/results/{result_id}/review" | "GET /api/industries/{folder}/agent-bridge/tasks" | "GET /api/industries/{folder}/agent-bridge/tasks/{task_id}" | "GET /api/industries/{folder}/automation" | "PUT /api/industries/{folder}/automation/{action}" | "POST /api/industries/{folder}/automation/{action}/run" | "GET /api/industries/{folder}/coverage" | "POST /api/industries/{folder}/coverage/cells" | "POST /api/industries/{folder}/coverage/cells/{cell_id}/attempts" | "POST /api/industries/{folder}/coverage/initialize" | "POST /api/industries/{folder}/coverage/plan" | "DELETE /api/industries/{folder}/daily" | "GET /api/industries/{folder}/daily" | "POST /api/industries/{folder}/generate" | "GET /api/industries/{folder}/history" | "GET /api/industries/{folder}/knowledge/entities" | "GET /api/industries/{folder}/knowledge/entities/{entity_id}" | "GET /api/industries/{folder}/overview" | "GET /api/industries/{folder}/products" | "GET /api/industries/{folder}/research" | "DELETE /api/industries/{folder}/sources" | "GET /api/industries/{folder}/sources" | "POST /api/industries/{folder}/sources" | "GET /api/industries/{folder}/stories" | "GET /api/industries/{folder}/stories/{story_id}" | "POST /api/industries/{folder}/stories/{story_id}/merge" | "POST /api/industries/{folder}/stories/{story_id}/split" | "POST /api/industries/{folder}/stories/{story_id}/unlock" | "GET /api/jobs" | "POST /api/jobs/{run_id}/cancel" | "GET /api/jobs/{run_id}/output" | "POST /api/jobs/{run_id}/retry" | "GET /api/setup" | "POST /api/shutdown" | "GET /api/trash" | "GET /api/trash/audits/recent" | "GET /api/trash/{item_id}/preview" | "POST /api/trash/{item_id}/restore"
+
+export interface AgentAssertion {
+  "citations": Array<string>
+  "text": string
+}
+
+export interface AgentResultImport {
+  "agent_id": string
+  "assertions": Array<AgentAssertion>
+  "summary": string
+  "task_id": string
+}
+
+export interface AgentResultReview {
+  "decision": string
+  "note"?: string
+}
+
+export interface AgentState {
+  "authenticated"?: boolean | null
+  "commands": Array<string>
+  "connection": string
+  "detail"?: string
+  "docs_url": string
+  "executable"?: string
+  "execution": string
+  "id": string
+  "installed": boolean
+  "name": string
+  "note": string
+  "ready": boolean
+  "region": string
+  "schedulable"?: boolean
+}
+
+export interface ApiProviderState {
+  "api_base"?: string
+  "configured": boolean
+  "default_model"?: string
+  "docs_url"?: string
+  "id": string
+  "key_env": string
+  "model"?: string
+  "name": string
+  "ready": boolean
+  "region": string
+  "schedulable"?: boolean
+  "web_search"?: boolean
+}
 
 export interface ArchiveState {
   "archived_to": string
@@ -108,6 +157,13 @@ export interface CoverageSummaryState {
   "gaps": number
   "source_yield": number
   "total": number
+}
+
+export interface CustomAgentProfile {
+  "args"?: Array<string>
+  "command": string
+  "id": string
+  "name": string
 }
 
 export interface DailyIdentity {
@@ -259,6 +315,13 @@ export interface KnowledgeEntitySummary {
   "status": string
 }
 
+export interface McpConfigState {
+  "format": string
+  "id": string
+  "name": string
+  "value": string | Record<string, unknown>
+}
+
 export interface OverviewState {
   "chain": Array<Record<string, unknown>>
   "entities": Array<Record<string, unknown>>
@@ -336,6 +399,18 @@ export interface ScheduleUpdate {
   "provider"?: string
   "timezone"?: string
   "weekday"?: number
+}
+
+export interface SetupState {
+  "agent_profiles"?: Array<CustomAgentProfile>
+  "agents": Array<AgentState>
+  "api_providers": Array<ApiProviderState>
+  "data_root": string
+  "mcp_command": Array<string>
+  "mcp_configs": Array<McpConfigState>
+  "privacy_note": string
+  "runtime_ready": boolean
+  "taskpack_ready": boolean
 }
 
 export interface ShutdownState {

@@ -60,8 +60,8 @@ class WorkbenchRepositoryMixin:
             raise ValueError("星期必须为 0-6，月日期必须为 1-28")
         if pipeline_mode not in {"aggregate", "generate"}:
             raise ValueError("周期模式必须是 aggregate 或 generate")
-        if provider not in {"codex", "openai", ""}:
-            raise ValueError("不支持的模型提供方式")
+        if not isinstance(provider, str) or len(provider) > 80:
+            raise ValueError("模型提供方式无效")
         iid, now = self.industry_id(folder), utc_now()
         with self.transaction() as con:
             con.execute("""INSERT INTO automation_schedules

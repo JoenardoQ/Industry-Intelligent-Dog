@@ -72,6 +72,21 @@ def test_all_period_schedule_keys(action, now, expected, tmp_path):
     assert following > now
 
 
+def test_unready_model_schedule_does_not_enter_job_queue(tmp_path):
+    service = IntDogService(tmp_path)
+    service.create_industry("AI", "人工智能")
+    service.repo.update_schedule("AI", "weekly", enabled=False,
+                                 local_time="08:00", pipeline_mode="generate",
+                                 provider="claude")
+    jobs = FakeJobs()
+    scheduler = AutomationScheduler(
+        tmp_path, jobs, search_root=tmp_path, project_root=tmp_path,
+        readiness=lambda *_: {"ready": False, "detail": "未登录"})
+    with pytest.raises(ValueError, match="未就绪"):
+        scheduler.run_now("AI", "weekly")
+    assert jobs.calls == []
+
+
 def test_coverage_frontier_deduplicates_queries_and_tracks_yield(tmp_path):
     service = IntDogService(tmp_path)
     service.create_industry("CHIPS", "芯片")

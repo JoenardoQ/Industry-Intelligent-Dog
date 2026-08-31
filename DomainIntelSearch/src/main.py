@@ -87,7 +87,7 @@ def build_parser() -> argparse.ArgumentParser:
     common.add_argument("--days", type=int, default=1, help="抓取天数窗口")
     common.add_argument("--no-send", action="store_true", help="不发送邮件")
     common.add_argument("--provider", default=None,
-                        help="执行 provider（codex/openai/deepseek/qwen/azure）")
+                        help="执行 provider（由 capability manifest 定义）")
     common.add_argument("--kw", default="", help="查询关键词（query 命令）")
     common.add_argument("--category", default="", help="查询类别（query 命令）")
     common.add_argument("--port", type=int, default=8765, help="服务端口（serve 命令）")

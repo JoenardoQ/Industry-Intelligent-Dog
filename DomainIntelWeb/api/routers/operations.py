@@ -37,6 +37,15 @@ def build_operations_router(*, jobs, job_rows: Callable[[], list[dict]],
         return {"cancelled": bool(job.cancel())}
 
     def submit(folder: str, request: GenerateRequest, *, parent_run_id: str = ""):
+        model_free = (request.action == "daily" or
+                      (request.action in {"weekly", "monthly", "quarterly"}
+                       and request.pipeline_mode == "aggregate") or
+                      (request.action == "bootstrap" and not request.provider))
+        if request.provider and not model_free:
+            from src.services.provider_readiness import provider_readiness
+            readiness = provider_readiness(request.provider, data_root / folder)
+            if not readiness.get("ready"):
+                raise HTTPException(409, f"Provider {request.provider} 未就绪：{readiness.get('detail', '请检查连接设置')}")
         period_commands = {
             action: ((f"聚合{label}情报", [f"crawl-{action}", "--folder", folder])
                      if request.pipeline_mode == "aggregate"
@@ -76,11 +85,7 @@ def build_operations_router(*, jobs, job_rows: Callable[[], list[dict]],
                 raise HTTPException(400, "影响分析需要事件描述")
             title, args = "生成事件影响分析", ["generate-impact", "--folder", folder,
                                                "--event", request.event.strip()]
-        if request.provider and not (
-            request.action == "daily"
-            or (request.action in {"weekly", "monthly", "quarterly"}
-                and request.pipeline_mode == "aggregate")
-        ):
+        if request.provider and not model_free:
             args.extend(["--provider", request.provider])
         timeout = 14400 if request.action in {"history", "report", "deep_report"} else 3600
         return jobs.start(

@@ -1,5 +1,12 @@
 # IntDog 4.0 Production Release Readiness Contract
 
+> Current working-tree conclusion (2026-09-01): `NOT_READY_PENDING_NATIVE_GATES`.
+> The `READY_FOR_PUBLIC_TESTING` evidence below is historical and applies only to
+> commit `7709e88` / release `4.0.0-test.1`. Agent Bridge, onboarding, capability
+> manifest, and renderer-operated smoke changes invalidate that evidence until all
+> three native jobs pass the same new revision. See
+> [current status](../IMPLEMENTATION_STATUS.md).
+
 ## Release Objective
 
 The final release target now spans Windows, macOS, and Linux. The current Windows 11 + WSL `Ubuntu-D` path remains useful for regression evidence, but distributable artifacts must be built natively for all three platforms; WSL or source-based startup is not a cross-platform application package.

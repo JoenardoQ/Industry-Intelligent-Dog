@@ -1,195 +1,38 @@
-# IntDog / IIOS 实现状态
+# IntDog Implementation Status
 
-更新日期：2026-08-31　版本：4.0 Preview
+[中文](IMPLEMENTATION_STATUS.zh-CN.md) · [Architecture](DESIGN.md) · [Installation](README.md)
 
-本文件用于区分“已经由代码执行的能力”“需要 Agent 执行的任务包”和“路线图”。
-README 面向使用，DESIGN.md 保留完整设计背景；发生冲突时以代码和本文件为准。
+- Updated: 2026-09-01
+- Source version: 4.0 working tree after the Agent/onboarding Round 1 implementation
+- Release conclusion: `NOT_READY_PENDING_NATIVE_GATES`
+- Publication state: no commit, push, CI dispatch, or release was authorized in this round
 
-## 已由确定性代码实现
+## Implemented product path
 
-- `intdog_core` 统一 SQLite 事实库：WAL、外键、顺序 Schema 迁移、FTS5 全文检索和原子兼容写入。
-- Schema v13 增加持久 Story/文档关联/人工审计锁、来源健康、可重试自动化计划、开放世界覆盖
-  单元与查询尝试；同一发布者不增加独立印证数。
-- 每日情报使用有界服务端分页、搜索和全局排序；10,000 条临时基准 p95 为 19.123 ms。
-- FastAPI 按内容、情报、自动化、恢复、操作和系统等边界拆分，React 为七个懒加载页面；
-  OpenAPI/TypeScript 契约可重复生成，新工作台与研究产物接口有具体响应模型和运行时形状校验。
-- 默认启动器以 Chrome/Edge app-mode 打开唯一 React 工作台；旧 Tk 工作台与 `--legacy`
-  已删除，通用数据、任务、DPI 和单实例能力迁入 `DomainIntelApp/runtime`。
-- 全局规范实体＋行业角色＋多个产业链位置；AI/Chips 可共享同一企业或来源。
-- 文档、事件、关系、主张、证据、运行和审计使用稳定 ID；旧 JSON 可幂等迁移且不会被删除。
-- 行业级任务锁、可重入嵌套任务、checkpoint 字段及成功/失败运行记录。
-- 新闻、论文、GitHub，以及基于行业+事件双重匹配的融资/招聘/高管候选采集。
-- URL 规范化、去重、抓取时间、原文时间、内容哈希和分类命中原因。
-- 来源质量与独立印证分离的可信度字段。
-- CLI 兼容日/周确定性邮件摘要；邮件默认关闭，密码优先读取环境变量。默认 Web 工作台对所有
-  计划和直接任务显式禁用邮件。
-- 默认 Web 调度持久化每日/周/月/季计划，以原子周期 claim 和租约防止重复入队，支持重启补跑、
-  立即运行，并展示下次执行、最近成功和错误；旧 Tk 不再接管 Web 行业计划。
-- 行业专属 Agent 工作区：`one_time/research/`；知识图谱使用共享事实库的实体与关系表。
-- 只读 MCP 查询、路径越界保护、2MB 单文件读取限制。
-- `doctor` 只读审计数据新鲜度、字段完整性、来源多样性、旧分类和知识实体引用。
-- OpenAI Responses API 可选执行模式；其他供应商使用兼容 Chat API。API 调用不是默认行为。
-- Codex/API 通过统一 Provider 工厂创建，并显式声明搜索与认证能力。
-- `execute-tasks` 可执行保存的任务包；输出路径受行业目录边界保护，运行结果保留 manifest。
-- App 可创建、重命名和可恢复归档行业；每日情报支持筛选后全选、多选和回收站式批量删除。
-- 产业链知识图谱、竞争格局图、周期报告类别图和行业报告证据图均由标准库直接绘制。
-- 周/月/季、三类行业报告、四类深度报告和事件影响可用 Codex 套餐或显式 API 直接生成 Markdown。
-- 周、月、季、半年、两年、五年报告使用可续跑的时间分层历史回填；默认目标为
-  28/120/360/720/2,800/7,200。总量、至少 80% 时间桶和 5 个发布者同时达标才生成完整报告。
-  全量证据入库，模型上下文按时间层最多抽样 500 条。研究助手显示六周期覆盖并可直接发起采集。
-- 信息源可跨行业复用，也可手工增删；来源审计会验证可达性并仅保存实际存在的 RSS/Atom。
-- `doctor` 同时观察来源池与每日结果的中外分布、类别集中度和报告覆盖；比例不阻断运行。
-- 国内 RSS 使用扩展回看窗口；优质但不可自动抓取的来源进入人工关注推荐，且不混入自动抓取队列。
-- 竞争格局将零/低证据企业放入 Watchlist；正式行业报告列表排除 Bootstrap 与 Codex 运行日志。
-- 交叉验证会生成 claim–evidence 记录，保留 evidence_status 与兼容的数值可信度字段。
-- App 的行业、来源、批量删除和归档写入经过共享 application service，顶部显示内核覆盖统计。
-- Repository 的读写连接在提交/回滚后显式关闭；查询不存在行业会报错，不再隐式注册空行业。
-- 来源、每日条目、实体和产业链兼容 JSON 使用 dirty view 标记；App/IndustryStore 启动及
-  `reconcile-data` 可从 SQLite 自动重建写入失败或中断后的视图。
-- 初始化、直接生成和 App 内调度统一使用持久化 Job Manager；运行状态原子写入 `_jobs/`，
-  支持日志流、超时、整个进程组取消，以及异常退出后的 `interrupted` 状态收敛。
-- Web 界面只读取持久任务状态，不直接管理业务子进程；任务中心支持阶段、进度、取消、
-  受验证的安全重试、父任务与产物链接。
-- Schema v9 保存发布者/所有权簇、受审计域名、产业链节点与证据化有向边、实体时态角色、
-  别名与外部标识；产业链 JSON 也纳入 dirty-view 对账。
-- 来源可信先验只来自代码审计的域名注册表；名称含“官方”或模型自报 `tier`
-  不能提权，Reuters 等同源转载按原始发布者簇去重。
-- 每日采集区分 `completed/partial/failed`，只有全部完成才推进调度 checkpoint；
-  App 关闭可等待并强制回收同步或异步任务树。
-- App 任务中心可查看持久化终态、错误和日志尾部，并重试失败/部分完成任务；
-  产业链可按知识空白筛选，主操作按钮支持键盘聚焦。
-- App 使用七个懒加载 React 页面和单一全局行业上下文。Overview 分开呈现来源可达性、
-  已采集文档的中国/国外/未知分布、独立印证、覆盖和失败/空白指标。信息源八列为名称、类别、
-  来源地区、层级、访问、可达性、监测状态和发布者；URL 可搜索/打开但不显示。行业管理仅执行
-  可恢复归档。
-- 页面标题和顶栏关键操作使用共享响应式操作容器；最低窗口契约为 `1000x640`。该项已有
-  自动化布局契约，但快捷方式下截图与 WSLg 人工视觉验证仍待 Task 9。
-- Intelligence Lab 可离线编译 Evidence Graph、观察来源本地健康度与变化、执行带路径和衰减
-  分数的产业链情景传播，并把证据/来源/产业链缺口编译为稳定研究议程。相同输入复用不可变
-  快照，每类保留 365 个差异快照；App 使用独立 Lab 工作台管理情景和议程状态。
-- Intelligence Lab v1.2 使用边专属证据表区分正式边与候选边；传播按关系方向语义执行，
-  输出启发式暴露度、敏感性区间、效应和滞后，同权重并行路径不会触发堆对象比较。
-- 分析产物使用带 SHA-256 Manifest 的不可覆盖 Bundle，校验后才更新 latest；CLI 可审计并
-  修复 latest。议程保留状态历史并可生成有文档预算和验收条件的任务包。
-- MCP 只读提供证据图、来源观测、情景列表、研究议程和逐边路径解释；App Lab 支持搜索、
-  状态筛选、表头排序、双向滚动、200 条分页、情景画布和任务包创建。
-- Daily 可在文档和持久 Story 间切换，查看时间线、文档 ID、独立发布者及人工审计，并显式
-  合并/拆分。Research Studio 直接提交初始化、周期、行业/深度报告、影响分析和 Lab 任务；
-  影响分析也进入可打开的统一产物库。
-- 开放世界覆盖工作台按地域、产业链、实体/来源/事件类型等记录 gap/thin 单元、查询、验证前
-  状态、真实边际产出和停止原因；不以固定 Top 10 或国内外比例冒充完整性。
-- 本地 Web 对 Host、Origin 和所有写操作实施启动会话能力校验；能力只经 URL fragment 传给
-  SPA 并从地址移除。系统状态页可无覆盖地恢复归档行业和每日批次，永久删除未开放。
+- Electron desktop shell, frozen Python sidecar, session-protected localhost FastAPI, and React workbench.
+- First-run runtime/data diagnostics, connection selection, first-industry creation, first bootstrap job, task center, and persistent reopen.
+- Model-free task-package mode; direct Codex CLI and Claude Code adapters; secure API configuration for OpenAI, DeepSeek, Qwen, and Azure OpenAI.
+- One capability manifest for domestic and international agent/provider identity, region, connection, execution, authentication, defaults, Web capability, and scheduling eligibility.
+- Copyable Codex, Claude, Work Buddy, and generic MCP configurations. MCP remains read-only.
+- Agent Bridge task export and validated, atomic result import. Imported output is `draft_review_required`, audited, idempotent, bounded to a known industry/task, citation-required, and isolated from the fact store.
+- Evidence-aware daily intelligence, source governance, canonical entities/relations, Story corroboration, open-world coverage planning, long-history gates, periodic/research products, durable jobs, scheduling, recovery, and audit views.
+- Email delivery remains disabled.
 
-## 已生成任务包，但不会自动成为正式结论
+## Current verification
 
-- 子领域与产业链研究。
-- 各产业链层级的中国/全球公司榜单及公司深度画像。
-- 技术地图、SOTA 导览、学习路径和历史时间轴。
-- 未运行 `generate-*` 命令时的月度、季度、竞争格局、市场和事件影响任务。
+Local verification is closed under the risk model in `docs/iterations/2026-08-31-agent-onboarding-round-1-contract.md`: 168 Python tests, seven Web DOM workflows, two Desktop tests, TypeScript/Vite production build, idempotent generated OpenAPI, compileall, a 108-file repository check, and `git diff --check` pass. A newly rebuilt frozen Linux sidecar completed an isolated first-industry/bootstrap/overview/shutdown workflow.
 
-这些产物默认状态为 `draft`。执行任务包的 Agent 必须回写引用、数值口径和 claims；
-在完成人工复核前，不应作为投资结论或正式数据库事实发布。
+The reusable native workflow now requires the full Python suite, Web DOM/build, generated OpenAPI drift check, repository check, Desktop tests, frozen-sidecar smoke, renderer-operated first run, restart persistence, and secure-storage lifecycle where available.
 
-## 尚未实现
+## Release blockers
 
-- 商业数据库级融资、招聘、海关进出口和全球实时行情覆盖。
-- 社交平台官方 API 的完整领导层帖子采集。
-- 基于外部标识和语义的高级实体消歧、公司控制层级、转载链识别和事实冲突仲裁。
-- 审核工作台、多人权限、正式发布流、向量检索和服务端高可用部署。
-- 文档中曾规划的 PostgreSQL/Qdrant/Neo4j/S3 和 Next.js 产品形态。
+- The current working tree has not passed matching native Windows, macOS, and Linux runners.
+- No newly built current installer has completed a packaged GUI lifecycle on all three hosts.
+- Stable Windows and macOS publication also requires signing; macOS requires notarization.
+- Real paid API accounts, third-party agent accounts, and production-scale live collection are integration evidence, not implied by offline tests.
 
-## 当前已知实现缺陷
+The previously published `4.0.0-test.1` artifacts were built from commit `7709e88`. They do not contain or prove the current onboarding/Agent Bridge changes and must not be presented as the current build.
 
-- SQLite 与兼容 JSON 仍不是单个跨介质 ACID 事务，但来源、每日条目、实体和产业链已可通过
-  dirty view 重建；大型附件和其他非核心产物尚未纳入该机制。
-- `_trash/` 已有 Web 清单、恢复冲突预览、跳过计数和审计记录；仍没有永久删除 UI。
-- Job Manager 能恢复任务终态，但不会自动续跑被中断的业务步骤；跨重启继续仍依赖 Search
-  命令自身的 checkpoint 和幂等设计。
-- 任务中心每个运行保存最多 1 MiB 的脱敏 sidecar 输出并显示截断状态；列表有显式窗口，
-  详情按需读取，历史不会静默清理。它仍不是无限日志或集中式可观测平台。
-- Story 与检索已有版本化 AI/Chips 合成质量夹具，但仍缺少行业专家标注的真实语料；覆盖查询
-  只有经过 URL/发布者验证并写入规范实体后才能计入产出。
-- 调度尚未做长期休眠、DST、电源恢复和两个真实 OS 进程的耐久测试；Windows 快捷方式已创建，
-  本轮完成本机 Chrome 无头视觉与 API 生命周期检查，但仍未覆盖多日休眠/唤醒耐久性。
+## Historical record
 
-## 已完成的两轮迭代
-
-第一轮修复了连接生命周期和读操作隐式写入，并为来源、每日条目和实体兼容 JSON 建立
-事务内 dirty 标记与 SQLite → JSON 自动对账。验收以无连接警告、未知行业读取无副作用、
-故障注入后可恢复以及迁移幂等为准；这些验收项均已有自动测试覆盖。
-
-第二轮统一了 App 长任务执行器，覆盖初始化与生成任务的进程树取消、持久化状态和恢复，
-并把任务执行/弹窗控制从 `desktop/app.py` 中拆出；不改变现有数据格式。
-
-第二轮验收已通过：成功、失败、超时、取消和中断均有稳定终态；取消后不遗留运行中的
-子进程组；三类任务入口不再各自实现 Popen；纯 Job Runner 测试不依赖 Tk 或联网。
-
-## 已完成的新两轮（2026-08-29）
-
-第一轮已修复同步调度任务关闭时的进程树回收，建立 `completed/partial/failed`
-采集契约，防止失败任务推进 checkpoint；历史事件主张改为追加与定向版本化，
-并收紧密钥、API TLS 和本地数据分享边界。全部改动保持现有 CLI 参数和数据可读。
-
-第二轮已建立可审计发布者/转载簇与来源认证，将产业链、时态角色、覆盖状态和别名外部标识
-纳入结构化内核；App 增加任务中心和证据/空白可视化，同时拆分主界面、CLI 和 Repository
-的高风险责任。这些改动使用加法迁移并保留现有 CLI/JSON 兼容性。
-
-## 可信度语义
-
-`credibility` 表示“该记录作为证据的可靠程度”，不是结论正确概率：
-
-- `source_quality`：官方一手、原始记录、主流媒体、普通二手、社区信号的来源先验。
-- `source_count`：独立发布者数量，同一域名只计一次。
-- `corroborated/verified`：是否至少有两个独立发布者报道同一事件。
-- `evidence_type`：证据类型。官方单一来源可以很可靠，但仍不会被标记为多源印证。
-
-## 开发验证
-
-上一轮 2026-08-29 的离线基线：Search 44 项、App 9 项，共 53 项测试通过；73 个 Python
-文件通过语法与重复定义检查；`compileall`、`git diff --check`、Schema v1→v7、
-SQLite `integrity_check` 和桌面端启动冒烟均通过。桌面冒烟仅验证窗口可启动并保持运行，
-不等同于联网源、邮件、付费模型或人工视觉验收。
-
-Intelligence Lab v1 基线：Search 48 项、App 10 项，共 58 项测试通过；76 个 Python
-文件通过语法与重复定义检查，`compileall` 与 `git diff --check` 通过。生产数据已完成
-Schema v8 加法迁移且 `integrity_check=ok`；AI 空库实际运行产生证据图、来源观测和
-9 个开放议程，无法映射的情景按契约返回 `unresolved`，未伪造影响节点。
-
-Intelligence Lab 第一轮（v1.1）已完成：Lab 运行统一进入行业锁和 Run，展示文件原子替换，
-相同输入快照去重并实施每类 365 个差异快照的保留策略；Evidence 按 ID 去重并拆分来源
-权威性、独立发布者、支持/反证及权重。Schema v9 增加证据化产业链有向边，情景优先沿正式
-边传播，没有边时明确标为顺序回退；Mermaid 标签经过转义。研究议程支持生命周期及候选解决，
-来源观测提供 HHI、精确标题重复代理和快照变化。App 已使用独立 Lab 工作台。
-
-第一轮验收：Search 56 项、App 11 项，共 67 项测试通过；85 个 Python 文件通过语法和重复定义
-检查，`compileall` 与 `git diff --check` 通过。覆盖相同快照去重、产业链边、传播单调性、
-Mermaid 转义、`unresolved` 状态、行业锁、原子替换、议程状态、CLI 端到端和 10,000 主张规模。
-生产 Schema v1→v9 与 SQLite 完整性通过；新 App 窗口保持运行 6 秒后由测试主动终止。
-
-Intelligence Lab 第二轮（v1.2）已完成：Schema v10 增加边证据、议程历史和研究任务；
-初始化只有在每条边附带明确引用时才建立正式边，节点级上下游描述只形成 candidate。
-来源统计将链接数、唯一来源、唯一文档及两种 HHI 分开，人工推荐源单列 `manual_watch`。
-情景传播修复同权重崩溃并按关系语义定向；不同事件或参数写入独立、可校验 Bundle。
-CLI 已切换为 argparse 子命令，现有 `command --option` 调用保持兼容。
-
-第二轮验收：Search 64 项、App 12 项，共 76 项测试在 `ResourceWarning` 视为错误时通过；
-86 个 Python 文件通过语法和重复定义检查，`compileall` 与 `git diff --check` 通过。
-覆盖同权重路径、关系方向、候选边隔离、边证据追溯、唯一文档口径、人工关注状态、Bundle
-哈希/指针恢复、议程历史/任务预算、MCP 路径解释、CLI 端到端及 Schema v10 中断恢复。
-生产 AI 数据已运行 v1.2 Lab，Schema v1→v10、`integrity_check=ok`、3 个 Bundle 均通过审计；
-桌面主进程启动后保持运行超过 10 秒，再由冒烟命令主动终止。`ruff` 未安装，因此未把其结果
-伪装成已验证项；本轮使用标准库 AST 检查代替语法与重复定义检查。
-
-```bash
-cd DomainIntelSearch
-python -m unittest discover -s tests -v
-python -m src.main modules
-python -m src.main plan --industry ai --level intermediate
-python -m src.main reconcile-data
-
-cd ../DomainIntelApp
-python -m unittest discover -s tests -v
-```
-
-联网采集、邮件和付费 LLM API 必须另外做集成测试；单元测试不会触发这些外部调用。
+The prior detailed status is preserved at `docs/archive/IMPLEMENTATION_STATUS-2026-08-31-legacy.zh-CN.md`. It is evidence history, not the current release conclusion.

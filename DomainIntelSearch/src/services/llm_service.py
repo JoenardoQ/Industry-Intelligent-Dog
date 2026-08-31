@@ -13,6 +13,8 @@ from urllib.parse import urlsplit
 
 import requests
 
+from .capability_manifest import API_SPECS
+
 
 class LLMConfigurationError(ValueError):
     pass
@@ -30,29 +32,24 @@ class LLMResult:
 class LLMService:
     """Small provider adapter; OpenAI uses Responses, others are compatible chat APIs."""
 
-    DEFAULT_BASES = {
-        "openai": "https://api.openai.com/v1",
-        "deepseek": "https://api.deepseek.com",
-        "qwen": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    }
-    KEY_ENV = {
-        "openai": "OPENAI_API_KEY",
-        "deepseek": "DEEPSEEK_API_KEY",
-        "qwen": "DASHSCOPE_API_KEY",
-        "azure": "AZURE_OPENAI_API_KEY",
-    }
+    DEFAULT_BASES = {item.id: item.default_api_base for item in API_SPECS
+                     if item.default_api_base}
+    KEY_ENV = {item.id: item.key_env for item in API_SPECS if item.key_env}
 
     def __init__(self, config: dict, provider: str = None):
         cfg = config.get("llm", {}) or {}
         self.provider = (provider or cfg.get("provider") or "none").lower()
-        self.model = str(cfg.get("model") or "").strip()
         configured_provider = str(cfg.get("provider") or "none").lower()
+        selected_env = os.environ.get("INTDOG_LLM_PROVIDER", "").strip().lower()
+        env_matches = not selected_env or selected_env == self.provider
+        env_model = os.environ.get("INTDOG_LLM_MODEL", "") if env_matches else ""
+        self.model = str(env_model or (cfg.get("model") if configured_provider == self.provider else "") or "").strip()
         configured_base = str(cfg.get("api_base") or "").strip()
-        env_base = os.environ.get("INTDOG_LLM_API_BASE", "").strip()
+        env_base = os.environ.get("INTDOG_LLM_API_BASE", "").strip() if env_matches else ""
         self.base = (env_base or
                      (configured_base if configured_provider == self.provider else "") or
                      self.DEFAULT_BASES.get(self.provider, "")).rstrip("/")
-        generic_key = os.environ.get("INTDOG_LLM_API_KEY")
+        generic_key = os.environ.get("INTDOG_LLM_API_KEY") if env_matches else ""
         provider_key = os.environ.get(self.KEY_ENV.get(self.provider, ""), "")
         self.api_key = generic_key or provider_key
         self.timeout = int(cfg.get("timeout_seconds", 180))
@@ -61,7 +58,7 @@ class LLMService:
         self._validate()
 
     def _validate(self):
-        if self.provider not in {"openai", "deepseek", "qwen", "azure"}:
+        if self.provider not in self.KEY_ENV:
             raise LLMConfigurationError(f"不支持的 LLM provider: {self.provider!r}")
         if not self.model:
             raise LLMConfigurationError("API 模式必须在 llm.model 中显式指定模型")

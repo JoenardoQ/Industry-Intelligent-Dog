@@ -20,6 +20,16 @@ test('runtime environment keeps mutable data outside application resources', () 
   assert.equal(env.INTDOG_DISABLE_EMAIL, '1')
 })
 
+test('runtime injects a configured provider only into the child process', () => {
+  const env = runtimeEnvironment({ resourcesPath: '/app/resources', userData: '/user/intdog',
+    token: 'secret', executable: '/app/backend', providerConfig: {
+      provider: 'deepseek', model: 'deepseek-chat', apiKey: 'runtime-only',
+      apiBase: 'https://api.deepseek.com' } })
+  assert.equal(env.INTDOG_LLM_PROVIDER, 'deepseek')
+  assert.equal(env.INTDOG_LLM_MODEL, 'deepseek-chat')
+  assert.equal(env.INTDOG_LLM_API_KEY, 'runtime-only')
+})
+
 test('only HTTPS external links can leave the workbench', () => {
   assert.equal(isAllowedExternalUrl('https://example.com/report'), true)
   assert.equal(isAllowedExternalUrl('http://example.com'), false)

@@ -1,9 +1,81 @@
 # IntDog Iteration State
 
-- Lifecycle phase: BASELINE
-- Execution status: COMPLETE — audited refactor pushed and three unsigned public test releases published
-- Current round: 3 of 3
-- Current baseline: IntDog 4.0 user-facing release readiness; no new optimization round authorized
+- Lifecycle phase: DOC_UPDATE
+- Execution status: ACTIVE — full delivery was approved; five review findings are being reconciled before the requested baseline commit/push and implementation
+- Current cycle: 2026-09-01 complete local-first product baseline
+- Current round: no new optimization-round count authorized; this is a baseline reconciliation and delivery contract
+- Current baseline: complete Agent evidence, source/entity credibility, background recovery, user workflow, and three-platform productization
+- Skill runtime revision: unknown; source is `/home/joenardo/.agents/skills/self-iteration`
+- Breaking changes/new dependencies: permitted only when required by the approved five-subproject contract and verified by migration/lockfile tests
+- Deletion authority: only evidence-backed obsolete-code cleanup defined in Subproject 5; never user data or blanket test deletion
+- External actions: full-delivery scope approved for ordinary commits, push to `origin/main`, existing three-platform CI, idempotent Issue reuse/update or missing-only creation, and gate-dependent public Beta Pre-releases; force push, history rewrite, signing/notarization, metered API calls, and user-data deletion remain excluded
+- Requested sequence: first create a clean baseline checkpoint and push it to `origin/codex/complete-product-2026-09-01`; then implement all five subprojects; only the verified final delivery may advance to `origin/main`
+- Active baseline contract: `docs/superpowers/2026-09-01-complete-product-approval-packet.zh-CN.md` / `docs/superpowers/2026-09-01-complete-product-approval-packet.md`
+- Detailed contracts: five bilingual specifications and five bilingual implementation plans under `docs/superpowers/specs/` and `docs/superpowers/plans/`
+- Current inventory evidence: repository schema 13, stale Agent OpenAPI types, incomplete Agent review, prompt-led source activation, insufficient entity/value-chain coverage, API-bound scheduling, no independent background service, incomplete workflow UI, and missing current native package evidence
+- Coverage ledger: `docs/superpowers/2026-09-01-requirement-test-traceability.zh-CN.md` records requirement IDs, priorities, partitions/boundaries, state interactions, failure modes, test IDs, oracles, platforms, status, and gaps; entries remain planned or external-gated until implementation evidence exists
+- Review reconciliation: automatic fact promotion now requires semantic support, reproducible evidence locators, numerical consistency, and claim-type corroboration; background credentials use a one-shot anonymous pipe contract; `NOM-01` defines the live credential-free public-source oracle; release Issue writes are idempotent
+- Added approved scope before checkpoint: immutable cross-day Story momentum, seven/thirty-day system-quality drift, offline self-contained HTML briefings, a deterministic artifact-quality gate separate from Fact verification, and benchmarked Parquet/DuckDB prototype triggers while SQLite remains the sole write authority
+- Checkpoint clean audit: 29 assignment-pattern findings were manually classified as GitHub secret/input references, generated random smoke tokens, environment/safeStorage plumbing, type/function signatures, or explicit test placeholders; known credential-prefix scan found zero matches and the only long literal assignments are synthetic Desktop test fixtures. No literal production credential is included. The current `runtime.cjs` environment transport is documented P0 architecture debt and blocks release until Subproject 3 replaces it with the anonymous-pipe contract.
+- Necessity boundary: canonical typed API, SQLite authority, evidence/source/task repositories, background Worker, generated Web contract, and native packaging are necessary; legacy Worker/launchers/plaintext configuration and debris remain `candidate remove` pending the four-evidence retirement audit
+- Defect evidence: the published Windows smoke test closed the app after 750 ms and
+  did not verify provider readiness or a first job; Windows Codex selection always
+  routed through `wsl.exe`, making a native-only installation unable to connect.
+- Added scope: discover and connect domestic and international agents. Direct,
+  verified execution is limited to Codex CLI and Claude Code; DeepSeek Harness,
+  Work Buddy, Qwen Code, CodeBuddy Code, Kimi CLI, Gemini CLI, OpenCode, and custom
+  CLIs use capability-labelled MCP/task-package handoff unless a stable execution
+  contract exists. OpenAI, DeepSeek, and Qwen API modes use desktop secure storage.
+- Baseline acceptance evidence so far: 161 Python tests, 6 DOM workflow tests,
+  Electron credential/runtime tests, production Web build, 107-file repository
+  check, compileall, generated OpenAPI, and a fresh localhost workflow passed.
+  The fresh workflow created an industry, detected nine agent interfaces, completed
+  a model-free bootstrap, and exposed 12 seed sources. Native package rebuild and
+  three-platform runner evidence remain pending.
+
+### 2026-08-31 agent/onboarding Round 1 proposal gate
+
+- Review: `docs/iterations/2026-08-31-agent-onboarding-round-1-review.zh-CN.md` /
+  `docs/iterations/2026-08-31-agent-onboarding-round-1-review.md`.
+- Decision: user selected proposals 1–4. Implementation contract:
+  `docs/iterations/2026-08-31-agent-onboarding-round-1-contract.zh-CN.md` /
+  `docs/iterations/2026-08-31-agent-onboarding-round-1-contract.md`.
+- Protocol state: documentation-first update active. Superpowers remains unopened
+  until this round is implemented, reconciled, verified, and formally closed.
+- Proposal set: (1) native product gates, (2) complete Agent Bridge user loop,
+  (3) one capability manifest, and (4) current bilingual architecture/status plus
+  revision-scoped release evidence.
+- Post-review regression: Web 6/6 and production build passed; Desktop 2/2 and
+  all four Electron entry-file syntax checks passed. The earlier 161-test Python
+  and fresh localhost evidence remains current because the review changed only
+  documentation after baseline close.
+- Remaining evidence limits: no native Windows/macOS/Linux run for the current
+  diff, no current packaged GUI pass, no real paid API/agent-account run, and no
+  commit/push/release authorization.
+- Closeout: `docs/iterations/2026-09-01-agent-onboarding-round-1-closeout.zh-CN.md` /
+  `docs/iterations/2026-09-01-agent-onboarding-round-1-closeout.md`. Local gates:
+  168 Python, 7 Web DOM, 2 Desktop, production build, idempotent OpenAPI, 108-file
+  check, compileall/diff, and a newly frozen sidecar first workflow passed.
+
+### 2026-08-31 downloadable-product baseline close
+
+- Documentation-first contract: aligned Chinese/English installation, first-run,
+  agent interface, credential, failure, and P0 coverage documents.
+- Delivered: first-run diagnostics and industry creation, direct Codex/Claude
+  adapters, nine-agent discovery registry, MCP/task-package handoff, OpenAI/
+  DeepSeek/Qwen API modes, OS-backed encrypted desktop credential storage,
+  provider gating before manual and scheduled job queues, persistent connection
+  status, and a first-task installer smoke contract.
+- Verification: 161 Python tests, 6 DOM workflow tests, Electron credential/runtime
+  tests, TypeScript and Vite production build, generated OpenAPI, 107-file syntax/
+  duplicate-definition check, compileall, `git diff --check`, frozen Linux sidecar
+  smoke, and a fresh localhost first-industry workflow passed.
+- Packaging limitation: two local WSL electron-builder attempts stalled before
+  creating a new AppImage. The existing AppImage is old and is not counted. Windows,
+  macOS, and Linux native installer evidence therefore remains a CI/native-runner
+  release gate. Browser visual automation was also unavailable because no debuggable
+  Chrome could be launched in this WSL session. Neither limitation invalidates the
+  passing headless contracts, but neither is represented as a native GUI pass.
 - Release contract: `docs/release-readiness.zh-CN.md` / `docs/release-readiness.md`
 - Scope change: final artifacts must support Windows, macOS, and Linux natively.
 - Decision: approved Electron + one PyInstaller API/CLI sidecar + electron-builder;
@@ -19,11 +91,11 @@
 - Release HEAD: 7709e8821cda4a865f215f8f4cef52aec6645049
 - Baseline working-tree diff SHA-256: 9b476402c2d80b2f340c4a2c664b29f0584eb82f1855983a63c1deb65b4dca68
 - Data root: /home/joenardo/My Projects/IntDog/DomainIntelData
-- Deletion authority: AI/, intdog.sqlite3, intdog.sqlite3-wal, intdog.sqlite3-shm, _trash/, _jobs/
+- Historical deletion authority (previous closed cycle only): AI/, intdog.sqlite3, intdog.sqlite3-wal, intdog.sqlite3-shm, _trash/, _jobs/
 - Preserve: README.md, skill/, source, docs, config, runtime, unrelated changes
-- Commit/push/release authority: explicitly granted and exercised for this release task
+- Historical commit/push/release authority: explicitly granted and exercised for the closed `4.0.0-test.1` release; not carried into the current cycle
 - Active baseline contract: `docs/2026-08-30-iios-workbench-baseline.md`
-- Requested optimization rounds after baseline: 3
+- Historical requested optimization rounds after the 2026-08-30 baseline: 3, all closed below
 - Production data mutation authority for this request: executed within the user-confirmed Round 3 reset and fresh-workflow scope
 - Network/model execution authority for this request: executed for one fresh complete workflow and long-history extension; email remained disabled
 

@@ -7,8 +7,14 @@ function backendExecutable(resourcesPath, platform = process.platform) {
   return path.join(resourcesPath, 'backend', name)
 }
 
-function runtimeEnvironment({ resourcesPath, userData, token, executable }) {
+function runtimeEnvironment({ resourcesPath, userData, token, executable, providerConfig }) {
   const projectRoot = path.join(resourcesPath, 'intdog')
+  const providerEnv = providerConfig ? {
+    INTDOG_LLM_PROVIDER: providerConfig.provider,
+    INTDOG_LLM_MODEL: providerConfig.model,
+    INTDOG_LLM_API_KEY: providerConfig.apiKey,
+    ...(providerConfig.apiBase ? { INTDOG_LLM_API_BASE: providerConfig.apiBase } : {}),
+  } : {}
   return {
     ...process.env,
     INTDOG_PROJECT_ROOT: projectRoot,
@@ -18,6 +24,7 @@ function runtimeEnvironment({ resourcesPath, userData, token, executable }) {
     INTDOG_SESSION_TOKEN: token,
     INTDOG_DISABLE_EMAIL: '1',
     PYTHONUTF8: '1',
+    ...providerEnv,
   }
 }
 

@@ -74,18 +74,33 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: test -n "$CSC_LINK" && test -n "$CSC_KEY_PASSWORD" && test -n "$APPLE_ID" && test -n "$APPLE_APP_SPECIFIC_PASSWORD" && test -n "$APPLE_TEAM_ID"
-      - name: Install Python build dependencies
+      - name: Install Python product and test dependencies
         shell: bash
-        run: python -m pip install --disable-pip-version-check -e ./DomainIntelSearch pyinstaller==6.22.2
+        run: python -m pip install --disable-pip-version-check -e './DomainIntelSearch[dev]' pyinstaller==6.22.2
       - name: Set release version
         shell: bash
         run: npm version "${{ inputs.version }}" --no-git-tag-version --allow-same-version --prefix DomainIntelDesktop
-      - name: Build Web workbench
+      - name: Install JavaScript dependencies
         shell: bash
-        run: npm ci --prefix DomainIntelWeb && npm run build --prefix DomainIntelWeb
-      - name: Install and test desktop shell
+        run: npm ci --prefix DomainIntelWeb && npm ci --prefix DomainIntelDesktop
+      - name: Verify generated OpenAPI contract has no drift
         shell: bash
-        run: npm ci --prefix DomainIntelDesktop && npm test --prefix DomainIntelDesktop
+        run: |
+          python DomainIntelWeb/scripts/export_openapi.py
+          python DomainIntelWeb/scripts/generate_contract.py
+          git diff --exit-code -- DomainIntelWeb/openapi.json DomainIntelWeb/src/generated/openapi.ts
+      - name: Run complete Python product suite
+        shell: bash
+        run: python -m pytest -q DomainIntelSearch/tests DomainIntelApp/tests DomainIntelWeb/tests
+      - name: Check Python repository structure
+        shell: bash
+        run: python DomainIntelSearch/scripts/check_repo.py
+      - name: Test and build Web workbench
+        shell: bash
+        run: npm test --prefix DomainIntelWeb && npm run build --prefix DomainIntelWeb
+      - name: Test desktop shell
+        shell: bash
+        run: npm test --prefix DomainIntelDesktop
       - name: Stage platform-neutral resources
         shell: bash
         run: python DomainIntelDesktop/scripts/prepare_resources.py

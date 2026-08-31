@@ -21,6 +21,7 @@ def verify_launches(application: Path, kind: str, root: Path) -> None:
             "LOCALAPPDATA": str(root / "localappdata"),
             "INTDOG_E2E_MARKER": str(marker),
             "INTDOG_E2E_AUTO_CLOSE_MS": "750",
+            "INTDOG_E2E_FULL_WORKFLOW": "1",
         }
         command = [str(application)]
         if kind == "appimage":
@@ -35,6 +36,16 @@ def verify_launches(application: Path, kind: str, root: Path) -> None:
         state = json.loads(marker.read_text(encoding="utf-8")) if marker.exists() else {}
         if state.get("state") != "stopped":
             raise SystemExit(f"desktop attempt {attempt} did not stop cleanly: {state!r}")
+        expected_task = "persisted" if attempt == 2 else "completed"
+        if (state.get("workflow") != "completed" or
+                state.get("firstTask") != expected_task or
+                state.get("rendererReady") is not True):
+            raise SystemExit(f"desktop attempt {attempt} did not complete first-run workflow: {state!r}")
+        if state.get("credentialLifecycle") not in {"passed", "unavailable"}:
+            raise SystemExit(f"desktop attempt {attempt} did not check credential lifecycle: {state!r}")
+        expected_existing = attempt == 2
+        if bool(state.get("industryPreexisting")) != expected_existing:
+            raise SystemExit(f"desktop attempt {attempt} persistence check failed: {state!r}")
 
 
 def main() -> None:

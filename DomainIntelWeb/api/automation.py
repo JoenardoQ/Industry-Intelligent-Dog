@@ -65,7 +65,7 @@ class AutomationScheduler:
 
     def __init__(self, data_root: Path, jobs, *, search_root: Path,
                  project_root: Path, poll_seconds: float = 15.0,
-                 now=lambda: datetime.now().astimezone()):
+                 now=lambda: datetime.now().astimezone(), readiness=None):
         self.data_root = Path(data_root)
         from intdog_core import IntDogService
         self.service = IntDogService(self.data_root)
@@ -75,6 +75,10 @@ class AutomationScheduler:
         self.project_root = Path(project_root)
         self.poll_seconds = max(0.1, float(poll_seconds))
         self.now = now
+        if readiness is None:
+            from src.services.provider_readiness import provider_readiness
+            readiness = provider_readiness
+        self.readiness = readiness
         self.owner = f"web:{os.getpid()}:{uuid.uuid4().hex}"
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -193,8 +197,12 @@ class AutomationScheduler:
             title, args = f"自动聚合{action}情报", [f"crawl-{action}", "--folder", folder]
         else:
             title = f"自动生成{action}报告"
+            provider = str(schedule.get("provider") or "codex")
+            ready = self.readiness(provider, self.data_root / folder)
+            if not ready.get("ready"):
+                raise ValueError(f"Provider {provider} 未就绪：{ready.get('detail', '请检查连接设置')}")
             args = ["generate-period", "--folder", folder, "--kind", action,
-                    "--provider", str(schedule.get("provider") or "codex")]
+                    "--provider", provider]
 
         def finished(result) -> None:
             if scheduled:

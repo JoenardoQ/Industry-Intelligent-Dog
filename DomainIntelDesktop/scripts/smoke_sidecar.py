@@ -20,6 +20,17 @@ def available_port() -> int:
         return int(server.getsockname()[1])
 
 
+def request_json(url: str, *, token: str, method: str = "GET",
+                 payload: dict | None = None) -> object:
+    data = json.dumps(payload).encode("utf-8") if payload is not None else None
+    headers = {"X-IntDog-Session": token}
+    if data is not None:
+        headers["Content-Type"] = "application/json"
+    request = Request(url, data=data, method=method, headers=headers)
+    with urlopen(request, timeout=5) as response:
+        return json.load(response)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--executable", type=Path, required=True)
@@ -63,6 +74,31 @@ def main() -> None:
                     time.sleep(0.25)
             if not health or health.get("status") != "ready" or not health.get("session_required"):
                 raise SystemExit(f"invalid sidecar health: {health!r}")
+            origin = f"http://127.0.0.1:{port}/api"
+            setup = request_json(f"{origin}/setup", token=token)
+            if not setup.get("runtime_ready") or not setup.get("taskpack_ready"):
+                raise SystemExit(f"invalid setup contract: {setup!r}")
+            request_json(f"{origin}/industries", token=token, method="POST",
+                         payload={"folder": "E2E", "name": "发行验收行业"})
+            accepted = request_json(
+                f"{origin}/industries/E2E/generate", token=token, method="POST",
+                payload={"action": "bootstrap", "kind": "", "event": "",
+                         "provider": "", "pipeline_mode": "generate"})
+            deadline = time.monotonic() + 60
+            final = None
+            while time.monotonic() < deadline:
+                rows = request_json(f"{origin}/jobs", token=token)
+                final = next((row for row in rows
+                              if row.get("run_id") == accepted.get("run_id")), None)
+                if final and final.get("status") not in {
+                        "queued", "running", "cancelling"}:
+                    break
+                time.sleep(0.25)
+            if not final or final.get("status") != "completed":
+                raise SystemExit(f"frozen first workflow failed: {final!r}")
+            overview = request_json(f"{origin}/industries/E2E/overview", token=token)
+            if not overview.get("industry") or not isinstance(overview.get("chain"), list):
+                raise SystemExit(f"invalid frozen overview: {overview!r}")
             request = Request(f"http://127.0.0.1:{port}/api/shutdown", method="POST",
                               headers={"X-IntDog-Session": token})
             with urlopen(request, timeout=2) as response:

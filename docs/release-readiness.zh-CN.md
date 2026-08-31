@@ -1,5 +1,10 @@
 # IntDog 4.0 正式发行就绪合同
 
+> 当前工作树结论（2026-09-01）：`NOT_READY_PENDING_NATIVE_GATES`。
+> 下文 `READY_FOR_PUBLIC_TESTING` 仅是提交 `7709e88` / `4.0.0-test.1` 的历史证据。
+> 当前 Agent Bridge、首次引导、能力 Manifest 和 renderer 操作烟雾已经使旧证据失效；
+> 必须由同一新 revision 的三平台原生任务重新通过。见[当前状态](../IMPLEMENTATION_STATUS.zh-CN.md)。
+
 ## 发行目标
 
 本次基线的最终发行目标扩展为 Windows、macOS 与 Linux 三个平台。当前机器上的 Windows 11 + WSL `Ubuntu-D` 路径用于已有行为回归，但正式产物必须分别在三个原生宿主构建，不能把 WSL 或源码启动视为跨平台安装包。

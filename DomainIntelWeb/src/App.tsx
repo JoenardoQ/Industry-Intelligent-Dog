@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { Activity, Building2, Check, ChevronDown, CircleDot, FileText, FlaskConical, FolderKanban, Globe2, LayoutDashboard, Menu, Newspaper, ServerCog, X } from 'lucide-react'
-import { api, type Industry, type PageKey } from './api'
+import { api, type Industry, type PageKey, type SetupPayload } from './api'
 import { Empty, Loading, type Toast } from './features/shared'
 
 const OverviewPage = lazy(() => import('./features/OverviewPage'))
@@ -10,6 +10,7 @@ const SourcesPage = lazy(() => import('./features/SourcesPage'))
 const ResearchPage = lazy(() => import('./features/ResearchPage'))
 const JobsPage = lazy(() => import('./features/JobsPage'))
 const SystemPage = lazy(() => import('./features/SystemPage'))
+const SetupWizard = lazy(() => import('./features/SetupWizard'))
 
 const navigation: { key: PageKey; label: string; note: string; icon: typeof Activity }[] = [
   { key: 'overview', label: '行业概览', note: '知识与产业链', icon: LayoutDashboard },
@@ -42,6 +43,8 @@ function App() {
   const [mobileNav, setMobileNav] = useState(false)
   const [toast, setToast] = useState<Toast>(null)
   const [loading, setLoading] = useState(true)
+  const [setup, setSetup] = useState<SetupPayload|null>(null)
+  const [showSetup, setShowSetup] = useState(localStorage.getItem('intdog.onboarding.v1') !== 'complete')
   const notify = useCallback((value: Toast) => {
     setToast(value)
     if (value) window.setTimeout(() => setToast(null), 4500)
@@ -59,8 +62,16 @@ function App() {
     finally { setLoading(false) }
   }, [notify])
   useEffect(() => { void refreshIndustries() }, [refreshIndustries])
+  const refreshSetup = useCallback(async()=>{ try { setSetup(await api<SetupPayload>('/setup')) } catch(error) { notify({kind:'error',text:String(error)}) } },[notify])
+  useEffect(()=>{ void refreshSetup() },[refreshSetup])
   const current = industries.find(row => row.folder === industry)
   const chooseIndustry = (folder: string) => { setIndustry(folder); localStorage.setItem('intdog.industry', folder) }
+  const selectedProvider=localStorage.getItem('intdog.provider')||'taskpack'
+  const selectedAgent=localStorage.getItem('intdog.agent')||selectedProvider
+  const agentState=setup?.agents.find(item=>item.id===selectedAgent)
+  const apiState=setup?.api_providers.find(item=>item.id===selectedProvider)
+  const connectionReady=selectedProvider==='taskpack'||Boolean(agentState?.ready)||Boolean(apiState?.ready)
+  const connectionLabel=selectedProvider==='taskpack'?(agentState&&agentState.id!=='taskpack'?`${agentState.name} · 任务包交接`:'任务包模式可用'):(agentState?.ready?`${agentState.name} 已连接`:apiState?.ready?`${apiState.name} 已配置`:'智能体尚未就绪')
 
   return <div className="app-shell">
     <aside className={`sidebar ${mobileNav ? 'sidebar-open' : ''}`}>
@@ -70,21 +81,22 @@ function App() {
     </aside>
     {mobileNav && <button className="scrim" aria-label="关闭导航" onClick={() => setMobileNav(false)}/>}
     <main>
-      <header className="topbar"><button className="icon-button mobile-menu" onClick={() => setMobileNav(true)}><Menu/></button><div className="industry-select"><Building2 size={18}/><label><span>当前行业</span><select value={industry} onChange={event => chooseIndustry(event.target.value)} disabled={loading}>{industries.map(row => <option key={row.folder} value={row.folder}>{row.name}</option>)}</select></label><ChevronDown size={16}/></div><div className="top-status"><span className="status-dot"/><span>{loading ? '正在连接本地数据' : current ? `${current.name} 已加载` : '暂无行业'}</span></div></header>
-      <div className="workspace">{loading ? <Loading label="正在加载行业数据库…"/> : !industry && page !== 'system' ? <Empty title="还没有行业" body="从左侧进入系统状态，新建第一个行业。"/> : <Suspense fallback={<Loading label="正在载入工作台模块…"/>}><PageRouter page={page} industry={industry} navigate={navigate} notify={notify}/></Suspense>}</div>
+      <header className="topbar"><button className="icon-button mobile-menu" onClick={() => setMobileNav(true)}><Menu/></button><div className="industry-select"><Building2 size={18}/><label><span>当前行业</span><select value={industry} onChange={event => chooseIndustry(event.target.value)} disabled={loading}>{industries.map(row => <option key={row.folder} value={row.folder}>{row.name}</option>)}</select></label><ChevronDown size={16}/></div><div className="top-status"><span className={`status-dot ${connectionReady?'':'warn'}`}/><span>{loading?'正在连接本地数据':`${current?`${current.name} 已加载 · `:''}${connectionLabel}`}</span><button onClick={()=>setShowSetup(true)}>连接设置</button></div></header>
+      <div className="workspace">{loading ? <Loading label="正在加载行业数据库…"/> : !industry && page !== 'system' ? <Empty title="还没有行业" body="从左侧进入系统状态，新建第一个行业。"/> : <Suspense fallback={<Loading label="正在载入工作台模块…"/>}><PageRouter page={page} industry={industry} navigate={navigate} notify={notify} setup={setup}/></Suspense>}</div>
     </main>
     {toast && <div className={`toast ${toast.kind}`} role="status">{toast.kind === 'ok' ? <Check/> : <X/>}{toast.text}</div>}
+    {showSetup&&setup&&<Suspense fallback={null}><SetupWizard setup={setup} hasIndustry={Boolean(industries.length)} onRefresh={refreshSetup} onComplete={async(_provider,folder)=>{if(folder){localStorage.setItem('intdog.industry',folder);await refreshIndustries();navigate('jobs')}setShowSetup(false)}}/></Suspense>}
   </div>
 }
 
-function PageRouter({ page, industry, navigate, notify }: { page: PageKey; industry: string; navigate: (p: PageKey) => void; notify: (t: Toast) => void }) {
+function PageRouter({ page, industry, navigate, notify, setup }: { page: PageKey; industry: string; navigate: (p: PageKey) => void; notify: (t: Toast) => void; setup: SetupPayload|null }) {
   if (page === 'overview') return <OverviewPage industry={industry} navigate={navigate}/>
   if (page === 'daily') return <DailyPage industry={industry} notify={notify}/>
   if (page === 'products') return <ProductsPage industry={industry} notify={notify}/>
   if (page === 'sources') return <SourcesPage industry={industry} notify={notify}/>
-  if (page === 'research') return <ResearchPage industry={industry} notify={notify}/>
+  if (page === 'research') return <ResearchPage industry={industry} notify={notify} setup={setup}/>
   if (page === 'jobs') return <JobsPage/>
-  return <SystemPage industry={industry} notify={notify}/>
+  return <SystemPage industry={industry} notify={notify} setup={setup}/>
 }
 
 export default App

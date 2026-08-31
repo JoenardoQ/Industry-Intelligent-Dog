@@ -1,6 +1,249 @@
 {
   "components": {
     "schemas": {
+      "AgentAssertion": {
+        "properties": {
+          "citations": {
+            "items": {
+              "format": "uri",
+              "maxLength": 2083,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Citations",
+            "type": "array"
+          },
+          "text": {
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "citations"
+        ],
+        "title": "AgentAssertion",
+        "type": "object"
+      },
+      "AgentResultImport": {
+        "properties": {
+          "agent_id": {
+            "pattern": "^[A-Za-z0-9._-]{1,80}$",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "assertions": {
+            "items": {
+              "$ref": "#/components/schemas/AgentAssertion"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Assertions",
+            "type": "array"
+          },
+          "summary": {
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "task_id": {
+            "pattern": "^[A-Za-z0-9_-]{1,160}$",
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "agent_id",
+          "summary",
+          "assertions"
+        ],
+        "title": "AgentResultImport",
+        "type": "object"
+      },
+      "AgentResultReview": {
+        "properties": {
+          "decision": {
+            "enum": [
+              "reviewed",
+              "rejected"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "note": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "AgentResultReview",
+        "type": "object"
+      },
+      "AgentState": {
+        "properties": {
+          "authenticated": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authenticated"
+          },
+          "commands": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Commands",
+            "type": "array"
+          },
+          "connection": {
+            "title": "Connection",
+            "type": "string"
+          },
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "docs_url": {
+            "title": "Docs Url",
+            "type": "string"
+          },
+          "executable": {
+            "default": "",
+            "title": "Executable",
+            "type": "string"
+          },
+          "execution": {
+            "title": "Execution",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "installed": {
+            "title": "Installed",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "region": {
+            "title": "Region",
+            "type": "string"
+          },
+          "schedulable": {
+            "default": false,
+            "title": "Schedulable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "region",
+          "commands",
+          "connection",
+          "execution",
+          "docs_url",
+          "note",
+          "installed",
+          "ready"
+        ],
+        "title": "AgentState",
+        "type": "object"
+      },
+      "ApiProviderState": {
+        "properties": {
+          "api_base": {
+            "default": "",
+            "title": "Api Base",
+            "type": "string"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "default_model": {
+            "default": "",
+            "title": "Default Model",
+            "type": "string"
+          },
+          "docs_url": {
+            "default": "",
+            "title": "Docs Url",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "key_env": {
+            "title": "Key Env",
+            "type": "string"
+          },
+          "model": {
+            "default": "",
+            "title": "Model",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "region": {
+            "title": "Region",
+            "type": "string"
+          },
+          "schedulable": {
+            "default": false,
+            "title": "Schedulable",
+            "type": "boolean"
+          },
+          "web_search": {
+            "default": false,
+            "title": "Web Search",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "region",
+          "configured",
+          "ready",
+          "key_env"
+        ],
+        "title": "ApiProviderState",
+        "type": "object"
+      },
       "ArchiveState": {
         "properties": {
           "archived_to": {
@@ -608,6 +851,42 @@
           "entity_yield"
         ],
         "title": "CoverageSummaryState",
+        "type": "object"
+      },
+      "CustomAgentProfile": {
+        "properties": {
+          "args": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 40,
+            "title": "Args",
+            "type": "array"
+          },
+          "command": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Command",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z0-9._-]{1,80}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "command"
+        ],
+        "title": "CustomAgentProfile",
         "type": "object"
       },
       "DailyIdentity": {
@@ -1417,6 +1696,42 @@
         "title": "KnowledgeEntitySummary",
         "type": "object"
       },
+      "McpConfigState": {
+        "properties": {
+          "format": {
+            "title": "Format",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "additionalProperties": true,
+                "type": "object"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "format",
+          "value"
+        ],
+        "title": "McpConfigState",
+        "type": "object"
+      },
       "OverviewState": {
         "properties": {
           "chain": {
@@ -1867,10 +2182,8 @@
           },
           "provider": {
             "default": "codex",
-            "enum": [
-              "codex",
-              "openai"
-            ],
+            "maxLength": 80,
+            "minLength": 1,
             "title": "Provider",
             "type": "string"
           },
@@ -1890,6 +2203,73 @@
           }
         },
         "title": "ScheduleUpdate",
+        "type": "object"
+      },
+      "SetupState": {
+        "properties": {
+          "agent_profiles": {
+            "items": {
+              "$ref": "#/components/schemas/CustomAgentProfile"
+            },
+            "title": "Agent Profiles",
+            "type": "array"
+          },
+          "agents": {
+            "items": {
+              "$ref": "#/components/schemas/AgentState"
+            },
+            "title": "Agents",
+            "type": "array"
+          },
+          "api_providers": {
+            "items": {
+              "$ref": "#/components/schemas/ApiProviderState"
+            },
+            "title": "Api Providers",
+            "type": "array"
+          },
+          "data_root": {
+            "title": "Data Root",
+            "type": "string"
+          },
+          "mcp_command": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Mcp Command",
+            "type": "array"
+          },
+          "mcp_configs": {
+            "items": {
+              "$ref": "#/components/schemas/McpConfigState"
+            },
+            "title": "Mcp Configs",
+            "type": "array"
+          },
+          "privacy_note": {
+            "title": "Privacy Note",
+            "type": "string"
+          },
+          "runtime_ready": {
+            "title": "Runtime Ready",
+            "type": "boolean"
+          },
+          "taskpack_ready": {
+            "title": "Taskpack Ready",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "runtime_ready",
+          "data_root",
+          "taskpack_ready",
+          "agents",
+          "api_providers",
+          "mcp_command",
+          "mcp_configs",
+          "privacy_note"
+        ],
+        "title": "SetupState",
         "type": "object"
       },
       "ShutdownState": {
@@ -2452,6 +2832,114 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/agent-bridge/profiles": {
+      "get": {
+        "operationId": "profiles_api_agent_bridge_profiles_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Profiles Api Agent Bridge Profiles Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Profiles",
+        "tags": [
+          "agent-bridge"
+        ]
+      },
+      "post": {
+        "operationId": "save_profile_api_agent_bridge_profiles_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomAgentProfile"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Save Profile Api Agent Bridge Profiles Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Profile",
+        "tags": [
+          "agent-bridge"
+        ]
+      }
+    },
+    "/api/agent-bridge/profiles/{profile_id}": {
+      "delete": {
+        "operationId": "delete_profile_api_agent_bridge_profiles__profile_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "profile_id",
+            "required": true,
+            "schema": {
+              "title": "Profile Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Profile Api Agent Bridge Profiles  Profile Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Profile",
+        "tags": [
+          "agent-bridge"
+        ]
+      }
+    },
     "/api/artifact": {
       "get": {
         "operationId": "artifact_api_artifact_get",
@@ -2667,6 +3155,338 @@
         "summary": "Rename Industry",
         "tags": [
           "industries"
+        ]
+      }
+    },
+    "/api/industries/{folder}/agent-bridge/results": {
+      "get": {
+        "operationId": "results_api_industries__folder__agent_bridge_results_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Results Api Industries  Folder  Agent Bridge Results Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Results",
+        "tags": [
+          "agent-bridge"
+        ]
+      },
+      "post": {
+        "operationId": "import_result_api_industries__folder__agent_bridge_results_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentResultImport"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Import Result Api Industries  Folder  Agent Bridge Results Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Result",
+        "tags": [
+          "agent-bridge"
+        ]
+      }
+    },
+    "/api/industries/{folder}/agent-bridge/results/{result_id}": {
+      "get": {
+        "operationId": "result_detail_api_industries__folder__agent_bridge_results__result_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "result_id",
+            "required": true,
+            "schema": {
+              "title": "Result Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Result Detail Api Industries  Folder  Agent Bridge Results  Result Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Result Detail",
+        "tags": [
+          "agent-bridge"
+        ]
+      }
+    },
+    "/api/industries/{folder}/agent-bridge/results/{result_id}/review": {
+      "post": {
+        "operationId": "review_result_api_industries__folder__agent_bridge_results__result_id__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "result_id",
+            "required": true,
+            "schema": {
+              "title": "Result Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentResultReview"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Review Result Api Industries  Folder  Agent Bridge Results  Result Id  Review Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Result",
+        "tags": [
+          "agent-bridge"
+        ]
+      }
+    },
+    "/api/industries/{folder}/agent-bridge/tasks": {
+      "get": {
+        "operationId": "tasks_api_industries__folder__agent_bridge_tasks_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Tasks Api Industries  Folder  Agent Bridge Tasks Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Tasks",
+        "tags": [
+          "agent-bridge"
+        ]
+      }
+    },
+    "/api/industries/{folder}/agent-bridge/tasks/{task_id}": {
+      "get": {
+        "operationId": "export_task_api_industries__folder__agent_bridge_tasks__task_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Export Task Api Industries  Folder  Agent Bridge Tasks  Task Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Task",
+        "tags": [
+          "agent-bridge"
         ]
       }
     },
@@ -4242,6 +5062,27 @@
         "summary": "Retry Job",
         "tags": [
           "operations"
+        ]
+      }
+    },
+    "/api/setup": {
+      "get": {
+        "operationId": "setup_api_setup_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Setup",
+        "tags": [
+          "system"
         ]
       }
     },

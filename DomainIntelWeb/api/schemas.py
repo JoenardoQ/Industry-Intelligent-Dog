@@ -3,6 +3,7 @@
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+from pydantic import HttpUrl
 
 
 class DailyIdentity(BaseModel):
@@ -46,6 +47,30 @@ class GenerateRequest(BaseModel):
     pipeline_mode: Literal["aggregate", "generate"] = "generate"
 
 
+class AgentAssertion(BaseModel):
+    text: str = Field(min_length=1, max_length=20_000)
+    citations: list[HttpUrl] = Field(min_length=1, max_length=50)
+
+
+class AgentResultImport(BaseModel):
+    task_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,160}$")
+    agent_id: str = Field(pattern=r"^[A-Za-z0-9._-]{1,80}$")
+    summary: str = Field(min_length=1, max_length=100_000)
+    assertions: list[AgentAssertion] = Field(min_length=1, max_length=500)
+
+
+class AgentResultReview(BaseModel):
+    decision: Literal["reviewed", "rejected"]
+    note: str = Field(default="", max_length=2000)
+
+
+class CustomAgentProfile(BaseModel):
+    id: str = Field(pattern=r"^[A-Za-z0-9._-]{1,80}$")
+    name: str = Field(min_length=1, max_length=120)
+    command: str = Field(min_length=1, max_length=80)
+    args: list[str] = Field(default_factory=list, max_length=40)
+
+
 class ScheduleUpdate(BaseModel):
     enabled: bool = False
     local_time: str = Field(default="08:00", pattern=r"^\d{2}:\d{2}$")
@@ -54,7 +79,7 @@ class ScheduleUpdate(BaseModel):
     timezone: str = Field(default="Asia/Shanghai", min_length=1, max_length=100)
     catch_up: bool = True
     pipeline_mode: Literal["aggregate", "generate"] = "generate"
-    provider: Literal["codex", "openai"] = "codex"
+    provider: str = Field(default="codex", min_length=1, max_length=80)
 
 
 class StoryMergeRequest(BaseModel):
@@ -323,6 +348,57 @@ class HealthState(BaseModel):
     active_jobs: int
     automation_running: bool
     session_required: bool
+
+
+class AgentState(BaseModel):
+    id: str
+    name: str
+    region: str
+    commands: list[str]
+    connection: str
+    execution: str
+    docs_url: str
+    note: str
+    installed: bool
+    authenticated: bool | None = None
+    ready: bool
+    executable: str = ""
+    detail: str = ""
+    schedulable: bool = False
+
+
+class ApiProviderState(BaseModel):
+    id: str
+    name: str
+    region: str
+    configured: bool
+    ready: bool
+    model: str = ""
+    api_base: str = ""
+    key_env: str
+    default_model: str = ""
+    docs_url: str = ""
+    web_search: bool = False
+    schedulable: bool = False
+
+
+class McpConfigState(BaseModel):
+    id: str
+    name: str
+    format: str
+    value: str | dict[str, Any]
+
+
+class SetupState(BaseModel):
+    runtime_ready: bool
+    data_root: str
+    taskpack_ready: bool
+    agents: list[AgentState]
+    api_providers: list[ApiProviderState]
+    mcp_command: list[str]
+    mcp_configs: list[McpConfigState]
+    agent_profiles: list[CustomAgentProfile] = Field(default_factory=list)
+    privacy_note: str
 
 
 class KnowledgeEntitySummary(BaseModel):

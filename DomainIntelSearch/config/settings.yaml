@@ -103,6 +103,11 @@ codex:
   model: ""                       # 留空=使用套餐当前默认模型
   timeout_seconds: 1800
 
+# ---------- Claude Code 套餐执行（使用本机公开登录状态） ----------
+claude:
+  model: ""                       # 留空=使用 Claude Code 当前默认模型
+  timeout_seconds: 1800
+
 # ---------- 长周期历史证据 ----------
 history:
   auto_backfill: true             # 周/月/季/半年/两年/五年成文前自动检查并回填

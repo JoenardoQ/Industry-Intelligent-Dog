@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from .capability_manifest import BY_ID
+
 
 class CompletionResult(Protocol):
     text: str
@@ -27,13 +29,10 @@ class ProviderCapabilities:
     structured_output: bool = False
 
 
-CAPABILITIES = {
-    "codex": ProviderCapabilities("codex", web_search=True, subscription_auth=True),
-    "openai": ProviderCapabilities("openai", web_search=True, subscription_auth=False),
-    "deepseek": ProviderCapabilities("deepseek", web_search=False, subscription_auth=False),
-    "qwen": ProviderCapabilities("qwen", web_search=False, subscription_auth=False),
-    "azure": ProviderCapabilities("azure", web_search=False, subscription_auth=False),
-}
+CAPABILITIES = {item.id: ProviderCapabilities(
+    item.id, web_search=item.web_search, subscription_auth=item.auth == "subscription",
+    structured_output=item.structured_output)
+    for item in BY_ID.values() if item.execution == "native"}
 
 
 def create_provider(config: dict, provider: str, workspace: str | Path) -> Provider:
@@ -43,5 +42,8 @@ def create_provider(config: dict, provider: str, workspace: str | Path) -> Provi
     if name == "codex":
         from .codex_cli_service import CodexCLIService
         return CodexCLIService(config, workspace)
+    if name == "claude":
+        from .claude_cli_service import ClaudeCLIService
+        return ClaudeCLIService(config, workspace)
     from .llm_service import LLMService
     return LLMService(config, provider=name)

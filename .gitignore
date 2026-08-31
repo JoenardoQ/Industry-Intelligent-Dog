@@ -33,4 +33,5 @@ DomainIntelData/*
 *.log
 .codex/
 .agents/
+.superpowers/
 .workbuddy/

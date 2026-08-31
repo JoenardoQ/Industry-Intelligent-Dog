@@ -24,6 +24,9 @@ def build_automation_router(*, automation,
     def configure(folder: str, action: Action, request: ScheduleUpdate) -> dict:
         folder = resolve_folder(folder)
         try:
+            from src.services.capability_manifest import SCHEDULABLE_PROVIDER_IDS
+            if request.provider not in SCHEDULABLE_PROVIDER_IDS:
+                raise ValueError("不支持的模型提供方式")
             automation.configure(
                 folder, action, enabled=request.enabled,
                 local_time=request.local_time, weekday=request.weekday,
@@ -38,7 +41,10 @@ def build_automation_router(*, automation,
     @router.post("/{action}/run", status_code=202, response_model=JobAccepted)
     def run_now(folder: str, action: Action) -> dict:
         folder = resolve_folder(folder)
-        job = automation.run_now(folder, action)
+        try:
+            job = automation.run_now(folder, action)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
         return {"run_id": job.run_id, "status": "queued", "action": action,
                 "email_delivery": False}
 
