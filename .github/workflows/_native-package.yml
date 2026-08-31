@@ -31,11 +31,6 @@ on:
       APPLE_APP_SPECIFIC_PASSWORD: { required: false }
       APPLE_TEAM_ID: { required: false }
 
-permissions:
-  actions: read
-  contents: write
-  issues: write
-
 jobs:
   package:
     name: ${{ inputs.platform }} native package
