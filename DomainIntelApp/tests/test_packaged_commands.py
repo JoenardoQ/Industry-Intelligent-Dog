@@ -15,7 +15,7 @@ def test_source_command_uses_current_python(monkeypatch):
 def test_packaged_command_reuses_sidecar(monkeypatch):
     monkeypatch.setenv("INTDOG_SEARCH_EXECUTABLE", "/app/backend/intdog-runtime")
     assert search_command(["run-lab", "--folder", "AI"]) == [
-        "/app/backend/intdog-runtime", "cli", "run-lab", "--folder", "AI"]
+        str(Path("/app/backend/intdog-runtime")), "cli", "run-lab", "--folder", "AI"]
 
 
 def test_packaged_search_root_controls_working_directory(monkeypatch):

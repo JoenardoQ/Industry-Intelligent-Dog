@@ -30,7 +30,7 @@ class WebLauncherTests(unittest.TestCase):
         with patch.object(launcher.subprocess, "run", return_value=completed) as run:
             self.assertTrue(launcher._python_runtime_ready(Path("/runtime/python")))
         args, kwargs = run.call_args
-        self.assertEqual(args[0][:2], ["/runtime/python", "-c"])
+        self.assertEqual(args[0][:2], [str(Path("/runtime/python")), "-c"])
         self.assertIn("distribution('intdog-domain-intelligence')", args[0][2])
         self.assertEqual(Path(kwargs["cwd"]), launcher.RUNTIME_DIR)
 

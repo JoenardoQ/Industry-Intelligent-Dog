@@ -14,6 +14,8 @@ from src.services.claude_cli_service import ClaudeCLIError, ClaudeCLIService
 
 
 def _executable(directory: Path, name: str, body: str) -> Path:
+    if os.name == "nt":
+        pytest.skip("synthetic shebang executables are POSIX-only")
     directory.mkdir(parents=True, exist_ok=True)
     target = directory / name
     target.write_text("#!/usr/bin/env python3\n" + body, encoding="utf-8")

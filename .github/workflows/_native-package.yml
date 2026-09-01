@@ -38,6 +38,9 @@ jobs:
   package:
     name: ${{ inputs.platform }} native package
     runs-on: ${{ inputs.platform == 'windows' && 'windows-2025' || inputs.platform == 'macos' && 'macos-14' || 'ubuntu-24.04' }}
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:

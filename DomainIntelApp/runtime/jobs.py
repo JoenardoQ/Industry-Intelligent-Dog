@@ -971,10 +971,9 @@ class ManagedJob:
                          getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
             else:
                 kwargs["start_new_session"] = True
-            child_env = self.env
+            child_env = dict(self.env or os.environ)
             credential_payload: dict = {}
             if self.manager.credential_supplier:
-                child_env = dict(self.env or os.environ)
                 child_env["INTDOG_CREDENTIAL_PIPE"] = "1"
                 operation_payload = self.metadata.get("operation_payload")
                 payload_provider = (operation_payload.get("provider")
@@ -985,6 +984,8 @@ class ManagedJob:
                     str(self.metadata.get("operation") or "job")) or {}
                 if not isinstance(credential_payload, dict):
                     raise TypeError("credential supplier must return an object")
+            child_env.setdefault("PYTHONUTF8", "1")
+            child_env.setdefault("PYTHONIOENCODING", "utf-8")
             proc = subprocess.Popen(
                 self.command, cwd=self.cwd, env=child_env,
                 stdin=(subprocess.PIPE if self.manager.credential_supplier

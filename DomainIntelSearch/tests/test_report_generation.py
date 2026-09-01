@@ -159,7 +159,7 @@ class ReportGenerationContractTests(unittest.TestCase):
                                                  "[1] https://example.com/source")):
                 result = reports.generate_industry_report({}, store, "trend_5y")
 
-            metadata = json.loads(Path(result["visualization_file"]).read_text())
+            metadata = json.loads(Path(result["visualization_file"]).read_text(encoding="utf-8"))
             self.assertEqual(metadata.get("provider"), "codex_subscription")
             self.assertEqual(metadata.get("model"), "subscription_default")
             self.assertEqual(metadata.get("status"), "partial")
@@ -176,9 +176,10 @@ class ReportGenerationContractTests(unittest.TestCase):
             deep = store.reports / "deep"
             self.assertTrue((deep / "chain.references.json").exists())
             self.assertTrue((deep / "chain.claims.json").exists())
-            references = json.loads((deep / "chain.references.json").read_text())
-            claims = json.loads((deep / "chain.claims.json").read_text())
-            visualization = json.loads(Path(result["visualization_file"]).read_text())
+            references = json.loads((deep / "chain.references.json").read_text(encoding="utf-8"))
+            claims = json.loads((deep / "chain.claims.json").read_text(encoding="utf-8"))
+            visualization = json.loads(
+                Path(result["visualization_file"]).read_text(encoding="utf-8"))
             self.assertEqual(references["references"][0]["urls"],
                              ["https://example.com/source"])
             self.assertEqual(claims["claims"][0], {
@@ -198,7 +199,7 @@ class ReportGenerationContractTests(unittest.TestCase):
                 result = reports.generate_impact_report({}, store, {}, "算力供应受限")
 
             metadata = json.loads((store.one_time / "impact" / "算力供应受限" /
-                                   "impact.json").read_text())
+                                   "impact.json").read_text(encoding="utf-8"))
             required = {"summary", "companies", "supply_chain", "papers", "policies",
                         "impact_rating", "takeaways", "references"}
             self.assertTrue(required <= metadata.keys())
@@ -222,15 +223,15 @@ class ReportGenerationContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             store = IndustryStore(temp, "AI", "人工智能")
             for report_id in ("trend_5y", "popular_2y", "tech_6m"):
-                (store.reports / f"{report_id}.md").write_text(DEEP_MARKDOWN)
+                (store.reports / f"{report_id}.md").write_text(DEEP_MARKDOWN, encoding="utf-8")
                 store._write_json(store.reports / f"{report_id}.viz.json", {"type": "bar"})
             deep = store.reports / "deep"
             deep.mkdir(parents=True, exist_ok=True)
-            (deep / "chain.md").write_text(DEEP_MARKDOWN)
+            (deep / "chain.md").write_text(DEEP_MARKDOWN, encoding="utf-8")
             store._write_json(deep / "chain.viz.json", {"type": "bar"})
             impact = store.one_time / "impact" / "算力供应受限"
             impact.mkdir(parents=True, exist_ok=True)
-            (impact / "analysis.md").write_text(IMPACT_MARKDOWN)
+            (impact / "analysis.md").write_text(IMPACT_MARKDOWN, encoding="utf-8")
             store._write_json(impact / "impact.json", {"event": "算力供应受限"})
 
             self.assertTrue(hasattr(reports, "reconcile_existing_step8_artifacts"))
@@ -241,7 +242,8 @@ class ReportGenerationContractTests(unittest.TestCase):
                                       "impact_reports": 1})
             self.assertTrue((deep / "chain.references.json").exists())
             self.assertTrue((deep / "chain.claims.json").exists())
-            self.assertEqual(json.loads((impact / "impact.json").read_text())["provider"],
+            self.assertEqual(json.loads(
+                (impact / "impact.json").read_text(encoding="utf-8"))["provider"],
                              "codex_subscription")
 
 

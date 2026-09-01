@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import closing
 import hashlib
 import json
 import sqlite3
@@ -30,7 +31,7 @@ class DataIOTests(unittest.TestCase):
             dataio.list_industries(root)
             dataio._cached_service.cache_clear()
             db_path = root / "intdog.sqlite3"
-            with sqlite3.connect(db_path) as connection:
+            with closing(sqlite3.connect(db_path)) as connection:
                 connection.execute(
                     "UPDATE industries SET updated_at=? WHERE folder=?",
                     ("2001-02-03T04:05:06+00:00", "AI"),
@@ -41,9 +42,9 @@ class DataIOTests(unittest.TestCase):
 
             self.assertEqual(dataio.list_industries(root)[0]["folder"], "AI")
 
-            with sqlite3.connect(
+            with closing(sqlite3.connect(
                 f"file:{db_path}?mode=ro", uri=True
-            ) as connection:
+            )) as connection:
                 updated_at = connection.execute(
                     "SELECT updated_at FROM industries WHERE folder=?", ("AI",)
                 ).fetchone()[0]
