@@ -121,8 +121,8 @@ class CoreContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             cfg = apply_profile({"data_layer": {"root": temp}, "output": {}}, profile)
             ctx = AgentContext.from_config(cfg)
-            self.assertEqual(ctx.industry_root, Path(temp) / "AI")
-            self.assertEqual(ctx.industry_dir, Path(temp) / "AI" / "one_time" / "research")
+            self.assertEqual(ctx.industry_root, (Path(temp) / "AI").resolve())
+            self.assertEqual(ctx.industry_dir, (Path(temp) / "AI" / "one_time" / "research").resolve())
 
     def test_profile_exposes_value_chain_template(self):
         profile = find_profile("semiconductor")
@@ -249,19 +249,19 @@ class CoreContractTests(unittest.TestCase):
     def test_api_credentials_are_environment_only_and_remote_base_requires_tls(self):
         config = {"llm": {"provider": "openai", "model": "test",
                           "api_base": "https://api.openai.com/v1",
-                          "api_key": "stored-secret"}}
+                          "api_key": "test-only-value"}}
         with patch.dict("os.environ", {}, clear=True):
             with self.assertRaises(LLMConfigurationError):
                 LLMService(config)
-        with patch.dict("os.environ", {"OPENAI_API_KEY": "runtime-secret",
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test-only-value",
                                         "INTDOG_LLM_API_BASE": "http://remote.example/v1"},
                         clear=True):
             with self.assertRaisesRegex(LLMConfigurationError, "HTTPS"):
                 LLMService(config)
-        with patch.dict("os.environ", {"OPENAI_API_KEY": "runtime-secret",
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test-only-value",
                                         "INTDOG_LLM_API_BASE": "http://127.0.0.1:8080/v1"},
                         clear=True):
-            self.assertEqual(LLMService(config).api_key, "runtime-secret")
+            self.assertEqual(LLMService(config).api_key, "test-only-value")
 
     def test_short_ascii_keyword_is_a_word(self):
         self.assertEqual(_matches("said the company", ["AI"]), [])

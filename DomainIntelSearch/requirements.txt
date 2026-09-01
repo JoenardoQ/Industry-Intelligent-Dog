@@ -12,6 +12,7 @@ PyYAML>=6.0.1
 
 # 日期处理
 python-dateutil>=2.8.2
+tzdata>=2025.2,<2028
 
 # PDF page locator replay
 pypdf>=5,<7
