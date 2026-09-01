@@ -6,11 +6,24 @@ on:
       - DomainIntelDesktop/**
       - DomainIntelApp/packaging/**
       - DomainIntelApp/runtime/**
+      - DomainIntelApp/tests/**
+      - DomainIntelSearch/pyproject.toml
+      - DomainIntelSearch/requirements.txt
+      - DomainIntelSearch/scripts/**
       - DomainIntelSearch/src/**
       - DomainIntelSearch/intdog_core/**
       - DomainIntelSearch/config/**
+      - DomainIntelSearch/evaluation/**
+      - DomainIntelSearch/skills/**
+      - DomainIntelSearch/tests/**
       - DomainIntelWeb/api/**
       - DomainIntelWeb/src/**
+      - DomainIntelWeb/scripts/**
+      - DomainIntelWeb/vite.config.*
+      - DomainIntelWeb/tsconfig*.json
+      - DomainIntelWeb/index.html
+      - DomainIntelWeb/tests/**
+      - DomainIntelWeb/package.json
       - DomainIntelWeb/package-lock.json
       - .github/workflows/**
   push:
@@ -19,11 +32,24 @@ on:
       - DomainIntelDesktop/**
       - DomainIntelApp/packaging/**
       - DomainIntelApp/runtime/**
+      - DomainIntelApp/tests/**
+      - DomainIntelSearch/pyproject.toml
+      - DomainIntelSearch/requirements.txt
+      - DomainIntelSearch/scripts/**
       - DomainIntelSearch/src/**
       - DomainIntelSearch/intdog_core/**
       - DomainIntelSearch/config/**
+      - DomainIntelSearch/evaluation/**
+      - DomainIntelSearch/skills/**
+      - DomainIntelSearch/tests/**
       - DomainIntelWeb/api/**
       - DomainIntelWeb/src/**
+      - DomainIntelWeb/scripts/**
+      - DomainIntelWeb/vite.config.*
+      - DomainIntelWeb/tsconfig*.json
+      - DomainIntelWeb/index.html
+      - DomainIntelWeb/tests/**
+      - DomainIntelWeb/package.json
       - DomainIntelWeb/package-lock.json
       - .github/workflows/**
 
@@ -33,10 +59,10 @@ permissions:
 jobs:
   windows:
     uses: ./.github/workflows/_native-package.yml
-    with: { platform: windows }
+    with: { platform: windows, revision: "${{ github.sha }}" }
   macos:
     uses: ./.github/workflows/_native-package.yml
-    with: { platform: macos }
+    with: { platform: macos, revision: "${{ github.sha }}" }
   linux:
     uses: ./.github/workflows/_native-package.yml
-    with: { platform: linux }
+    with: { platform: linux, revision: "${{ github.sha }}" }

@@ -32,6 +32,7 @@ JOB_OUTPUT_READ_CHUNK_BYTES = 8_192
 JOB_OUTPUT_QUEUE_MAX_CHUNKS = 8
 JOB_OUTPUT_QUEUE_MAX_BYTES = JOB_OUTPUT_READ_CHUNK_BYTES * JOB_OUTPUT_QUEUE_MAX_CHUNKS
 JOB_OUTPUT_APPEND_CHAR_CAP = JOB_OUTPUT_READ_CHUNK_BYTES
+TASK_LEASE_TTL_SECONDS = 30
 JOB_OUTPUT_TRUNCATION_NOTICE = "[可审计输出已达到 1 MiB 上限；后续正文未保存或显示]\n"
 JOB_STREAM_SANITIZER_CARRY_CHARS = 256
 JOB_STREAM_STRUCTURE_SPACE_REPORT_LIMIT = 64
@@ -423,6 +424,20 @@ def _sanitize_manifest(payload: dict) -> dict:
         ]
     if "output" in clean:
         clean["output"] = sanitize_text(clean["output"])
+    def sanitize_structure(value: object, key: str = "") -> object:
+        if re.search(
+                r"(?i)(api[_ -]?key|access[_ -]?token|authorization|password|secret|credential)$",
+                key):
+            return "***"
+        if isinstance(value, dict):
+            return {str(item_key): sanitize_structure(item, str(item_key))
+                    for item_key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [sanitize_structure(item) for item in value]
+        return sanitize_text(value) if isinstance(value, str) else value
+    for field in ("operation_payload", "time_window"):
+        if field in clean:
+            clean[field] = sanitize_structure(clean[field])
     return clean
 
 
@@ -763,7 +778,31 @@ class ManagedJob:
         self.on_finish = on_finish
         self.env = env
         self.metadata = dict(metadata or {})
+        self._ledger_enabled = False
         self.run_id = uuid.uuid4().hex
+        ledger = manager.ledger
+        operation_payload = self.metadata.get("operation_payload")
+        if not isinstance(operation_payload, dict):
+            operation_payload = {}
+        folder = str(self.metadata.get("folder") or
+                     operation_payload.get("folder") or "").strip()
+        if ledger is not None and folder:
+            task = ledger.create_task(
+                folder=folder,
+                operation=str(self.metadata.get("operation") or "job"),
+                input=operation_payload,
+                origin=str(self.metadata.get("origin") or "app"),
+                provider=str(self.metadata.get("provider") or
+                             operation_payload.get("provider") or "local"),
+                model=str(self.metadata.get("model") or
+                          operation_payload.get("model") or ""),
+                parent_run_id=self.metadata.get("parent_run_id"),
+                time_window=self.metadata.get("time_window"),
+                output_path=str(self.metadata.get("output_path") or ""),
+                credential_handle_ref=self.metadata.get("credential_handle_ref"),
+            )
+            self.run_id = task["id"]
+            self._ledger_enabled = True
         self._cancel = threading.Event()
         self._process: subprocess.Popen | None = None
         self._lock = threading.Lock()
@@ -805,6 +844,15 @@ class ManagedJob:
         if self.result is not None:
             return False
         self._cancel.set()
+        if self._ledger_enabled:
+            try:
+                self.manager.ledger.transition(
+                    self.run_id, expected={"queued", "running"},
+                    target="cancelling",
+                    error={"category": "cancel_requested",
+                           "message": "Cancelled by user"})
+            except (ValueError, RuntimeError):
+                pass
         self._manifest.update({"status": "cancelling", "cancel_requested": True,
                                "updated_at": _now()})
         self.manager.store.write(self._manifest)
@@ -841,6 +889,25 @@ class ManagedJob:
         self._manifest.update(changes)
         self._manifest["updated_at"] = _now()
         self.manager.store.write(self._manifest)
+        if self._ledger_enabled and ({"stage", "progress", "last_heartbeat_at"}
+                                     & set(changes)):
+            status = self.manager.ledger.get_task(self.run_id)["status"]
+            if status in {"running", "cancelling"}:
+                progress = self._manifest.get("progress", 0)
+                percent = int(round(float(progress) * 100)) if float(progress) <= 1 else int(
+                    round(float(progress)))
+                self.manager.ledger.heartbeat(
+                    self.run_id, owner=self.manager.ledger_owner,
+                    stage=str(self._manifest.get("stage") or "running"),
+                    progress=max(0, min(percent, 100)),
+                    checkpoint={
+                        "output_bytes": int(self._manifest.get("output_bytes") or 0),
+                        "output_truncated": bool(self._manifest.get("output_truncated")),
+                    })
+        if self._ledger_enabled and changes.get("artifact_path"):
+            self.manager.ledger.update_task_output(
+                self.run_id, str(changes["artifact_path"]),
+                owner=self.manager.ledger_owner)
 
     def _emit(self, line: str) -> None:
         if self._manifest.get("output_truncated"):
@@ -883,6 +950,20 @@ class ManagedJob:
             maxsize=JOB_OUTPUT_QUEUE_MAX_CHUNKS,
         )
         try:
+            if self._ledger_enabled and not self.manager.ledger.claim_expired(
+                    self.run_id, self.manager.ledger_owner,
+                    TASK_LEASE_TTL_SECONDS):
+                task = self.manager.ledger.get_task(self.run_id)
+                status = task["status"]
+                error = str(task.get("error", {}).get("message") or
+                            "Task could not acquire its authoritative lease")
+                result = JobResult(self.run_id, status, None, "", error)
+                self.result = result
+                self._save(status=status, error=error, finished_at=_now())
+                self.manager._finish(self)
+                if self.on_finish:
+                    self.on_finish(result)
+                return result
             flags = 0
             kwargs = {}
             if os.name == "nt":
@@ -890,13 +971,45 @@ class ManagedJob:
                          getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
             else:
                 kwargs["start_new_session"] = True
+            child_env = self.env
+            credential_payload: dict = {}
+            if self.manager.credential_supplier:
+                child_env = dict(self.env or os.environ)
+                child_env["INTDOG_CREDENTIAL_PIPE"] = "1"
+                operation_payload = self.metadata.get("operation_payload")
+                payload_provider = (operation_payload.get("provider")
+                                    if isinstance(operation_payload, dict) else "")
+                credential_payload = self.manager.credential_supplier(
+                    str(self.metadata.get("provider") or
+                        payload_provider or "local"),
+                    str(self.metadata.get("operation") or "job")) or {}
+                if not isinstance(credential_payload, dict):
+                    raise TypeError("credential supplier must return an object")
             proc = subprocess.Popen(
-                self.command, cwd=self.cwd, env=self.env,
+                self.command, cwd=self.cwd, env=child_env,
+                stdin=(subprocess.PIPE if self.manager.credential_supplier
+                       else subprocess.DEVNULL),
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 creationflags=flags, **kwargs)
             with self._lock:
                 self._process = proc
+            if self.manager.credential_supplier:
+                from runtime.credential_pipe import write_credential_frame
+                try:
+                    assert proc.stdin is not None
+                    write_credential_frame(
+                        proc.stdin, credential_payload)
+                except Exception as exc:
+                    self._terminate(force=True)
+                    raise RuntimeError("credential pipe delivery failed") from exc
+                finally:
+                    for key in tuple(credential_payload):
+                        credential_payload[key] = ""
+                    credential_payload.clear()
             self._save(status="running", pid=proc.pid, started_at=_now())
+            if self._ledger_enabled:
+                self.manager.ledger.mark_request_dispatched(
+                    self.run_id, owner=self.manager.ledger_owner)
             last_heartbeat = time.monotonic()
 
             def read_output():
@@ -963,8 +1076,12 @@ class ManagedJob:
             else:
                 status, error = "failed", f"Process exited with {returncode}"
         except Exception as exc:
+            lease_lost = isinstance(exc, RuntimeError) and "lease was lost" in str(exc)
+            if lease_lost:
+                self._terminate(force=True)
             returncode = None
-            status = "cancelled" if self._cancel.is_set() else "failed"
+            status = ("interrupted" if lease_lost else
+                      "cancelled" if self._cancel.is_set() else "failed")
             error = sanitize_text(f"{type(exc).__name__}: {exc}")
             self._emit(error + "\n")
         finally:
@@ -979,6 +1096,17 @@ class ManagedJob:
             self.manager.store.read_output(self._manifest), error,
         )
         self.result = result
+        if self._ledger_enabled:
+            current = self.manager.ledger.get_task(self.run_id)["status"]
+            try:
+                self.manager.ledger.transition(
+                    self.run_id, expected={current}, target=status,
+                    owner=self.manager.ledger_owner,
+                    error=({"category": "process_failure", "message": error}
+                           if error else None))
+            except RuntimeError as exc:
+                if "lease was lost" not in str(exc):
+                    raise
         self._save(
             status=status, returncode=returncode, error=error,
             finished_at=_now(),
@@ -990,12 +1118,19 @@ class ManagedJob:
 
 
 class JobManager:
-    def __init__(self, data_root: str | Path):
+    def __init__(self, data_root: str | Path, *, ledger=None,
+                 credential_supplier: Callable[[str, str], dict] | None = None):
         self.store = JobStore(data_root)
         self.session_id = uuid.uuid4().hex
+        self.ledger = ledger
+        self.credential_supplier = credential_supplier
+        self.ledger_owner = f"job-manager:{os.getpid()}:{self.session_id}"
         self._active: dict[str, ManagedJob] = {}
         self._lock = threading.Lock()
         self.recovered = self.store.recover_interrupted()
+        self.recovered_ledger = (
+            self.ledger.recover_expired_tasks(actor=self.ledger_owner)
+            if self.ledger is not None else [])
 
     def create(self, command: list[str], *, cwd: str | Path, title: str,
                timeout: float | None = None,

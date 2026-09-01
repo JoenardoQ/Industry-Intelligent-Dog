@@ -23,12 +23,22 @@ class ClaudeResult:
 
 
 class ClaudeCLIService:
-    def __init__(self, config: dict, workspace: str | Path):
+    def __init__(self, config: dict, workspace: str | Path,
+                 *, executable_binding: dict | None = None):
         cfg = config.get("claude", {}) or {}
         self.workspace = Path(workspace).resolve()
         self.timeout = int(cfg.get("timeout_seconds", 1800))
         self.model = str(cfg.get("model") or "").strip()
-        self.executable = shutil.which("claude") or ""
+        self._executable_binding = executable_binding
+        if executable_binding is not None:
+            from .agent_registry import (ExecutableBindingError,
+                                         validate_executable_binding)
+            try:
+                self.executable = validate_executable_binding(executable_binding)
+            except ExecutableBindingError as exc:
+                raise ClaudeCLIError(str(exc)) from exc
+        else:
+            self.executable = shutil.which("claude") or ""
         if not self.executable:
             raise ClaudeCLIError("未找到 Claude Code；请安装后运行 claude auth login")
 
@@ -49,6 +59,14 @@ class ClaudeCLIService:
                 "executable": self.executable, "detail": detail[-800:]}
 
     def complete(self, prompt: str) -> ClaudeResult:
+        binding = getattr(self, "_executable_binding", None)
+        if binding is not None:
+            from .agent_registry import (ExecutableBindingError,
+                                         validate_executable_binding)
+            try:
+                self.executable = validate_executable_binding(binding)
+            except ExecutableBindingError as exc:
+                raise ClaudeCLIError(str(exc)) from exc
         command = [self.executable, "-p", "--permission-mode", "plan"]
         if self.model:
             command.extend(["--model", self.model])

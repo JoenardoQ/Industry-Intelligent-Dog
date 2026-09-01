@@ -4,6 +4,13 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const PROVIDER_ID = /^[a-z][a-z0-9_-]{0,79}$/
+const AUTH_TYPES = new Set(['bearer', 'api_key_header'])
+// Read-only migration contract for provider-config v1. These are the fixed
+// authentication modes declared by capability_manifest; explicit/generic
+// providers are intentionally absent because their mode cannot be inferred.
+const LEGACY_V1_AUTH_TYPE_BY_PROVIDER = Object.freeze({
+  openai: 'bearer', deepseek: 'bearer', qwen: 'bearer', azure: 'api_key_header',
+})
 
 function configPath(userData) { return path.join(userData, 'provider-config.json') }
 
@@ -17,7 +24,8 @@ function publicStatus(userData, safeStorage) {
   const stored = readConfig(userData, safeStorage)
   return { secureStorage: secureStorageAvailable(safeStorage),
     configured: Boolean(stored?.apiKey), provider: stored?.provider || '',
-    model: stored?.model || '', apiBase: stored?.apiBase || '' }
+    model: stored?.model || '', apiBase: stored?.apiBase || '',
+    authType: stored?.authType || '' }
 }
 
 function validate(input) {
@@ -25,9 +33,15 @@ function validate(input) {
   const model = String(input?.model || '').trim()
   const apiKey = String(input?.apiKey || '').trim()
   const apiBase = String(input?.apiBase || '').trim()
+  const authType = String(input?.authType || '').trim().toLowerCase()
   if (!PROVIDER_ID.test(provider)) throw new Error('API Provider ID 无效')
   if (!model) throw new Error('模型名称不能为空')
   if (!apiKey) throw new Error('API Key 不能为空')
+  if (!AUTH_TYPES.has(authType)) throw new Error('认证类型必须是 bearer 或 api_key_header')
+  const fixedAuthType = LEGACY_V1_AUTH_TYPE_BY_PROVIDER[provider]
+  if (fixedAuthType && authType !== fixedAuthType) {
+    throw new Error(`${provider} 认证类型必须是 ${fixedAuthType}`)
+  }
   if (apiBase) {
     const parsed = new URL(apiBase)
     const local = ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname)
@@ -35,7 +49,7 @@ function validate(input) {
       throw new Error('非本机 API Base 必须使用 HTTPS')
     }
   }
-  return { provider, model, apiKey, apiBase: apiBase.replace(/\/$/, '') }
+  return { provider, model, apiKey, apiBase: apiBase.replace(/\/$/, ''), authType }
 }
 
 function saveConfig(userData, safeStorage, input) {
@@ -44,8 +58,8 @@ function saveConfig(userData, safeStorage, input) {
   fs.mkdirSync(userData, { recursive: true })
   const target = configPath(userData)
   const temporary = `${target}.tmp`
-  const payload = { version: 1, provider: value.provider, model: value.model,
-    apiBase: value.apiBase,
+  const payload = { version: 2, provider: value.provider, model: value.model,
+    apiBase: value.apiBase, authType: value.authType,
     encryptedKey: safeStorage.encryptString(value.apiKey).toString('base64') }
   fs.writeFileSync(temporary, JSON.stringify(payload, null, 2), { mode: 0o600 })
   fs.renameSync(temporary, target)
@@ -57,9 +71,12 @@ function readConfig(userData, safeStorage) {
   if (!secureStorageAvailable(safeStorage) || !fs.existsSync(target)) return null
   try {
     const payload = JSON.parse(fs.readFileSync(target, 'utf8'))
-    if (!PROVIDER_ID.test(payload.provider) || !payload.model || !payload.encryptedKey) return null
+    const authType = AUTH_TYPES.has(payload.authType) ? payload.authType :
+      (payload.version === 1 ? LEGACY_V1_AUTH_TYPE_BY_PROVIDER[payload.provider] : '')
+    if (!PROVIDER_ID.test(payload.provider) || !payload.model || !payload.encryptedKey ||
+        !AUTH_TYPES.has(authType)) return null
     return { provider: payload.provider, model: payload.model,
-      apiBase: String(payload.apiBase || ''),
+      apiBase: String(payload.apiBase || ''), authType,
       apiKey: safeStorage.decryptString(Buffer.from(payload.encryptedKey, 'base64')) }
   } catch { return null }
 }

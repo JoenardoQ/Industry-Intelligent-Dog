@@ -21,8 +21,11 @@ from pathlib import Path
 
 from intdog_core import IntDogService, stable_id
 
-ENTITY_TYPES = ("company", "research_group", "regulator", "association",
-                "person", "technology", "product", "facility")
+ENTITY_TYPES = (
+    "company", "research_group", "government_institution", "association",
+    "investment_institution", "person", "product", "technology", "standard",
+    "policy", "regulator", "facility",
+)
 
 
 class KnowledgeModel:
@@ -95,11 +98,15 @@ class KnowledgeModel:
             "src_node_id": chains[src_name]["id"], "dst_node_id": chains[dst_name]["id"],
             "relation": relation, **metadata})
         for reference in references:
-            if isinstance(reference, str):
-                reference = {"url": reference}
-            if isinstance(reference, dict) and reference.get("url"):
+            if isinstance(reference, dict) and (
+                    reference.get("document_id") or reference.get("claim_id") or
+                    reference.get("assertion_id")):
                 self.service.repo.add_chain_edge_evidence(
-                    edge_id, reference.get("relation", "supports"), url=reference["url"],
+                    edge_id, reference.get("relation", "supports"),
+                    document_id=reference.get("document_id"),
+                    claim_id=reference.get("claim_id"),
+                    assertion_id=reference.get("assertion_id"),
+                    url=reference.get("url", ""),
                     excerpt=reference.get("title", ""),
                     publisher_cluster=reference.get("publisher_cluster", ""),
                     confidence=reference.get("confidence"))

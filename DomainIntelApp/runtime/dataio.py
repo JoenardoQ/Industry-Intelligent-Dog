@@ -107,6 +107,15 @@ def archive_industry(root: Path, folder: str) -> Path:
     return _service(root).archive_industry(validate_folder(folder))
 
 
+def export_industry(root: Path, folder: str) -> dict:
+    return _service(root).export_industry_bundle(validate_folder(folder))
+
+
+def import_industry(root: Path, folder: str, name: str, bundle: dict) -> dict:
+    return _service(root).import_industry_bundle(
+        validate_folder(folder), name.strip(), bundle)
+
+
 def list_trash(root: Path) -> list[dict]:
     return _service(root).list_trash()
 
@@ -141,7 +150,7 @@ def update_control(root: Path, folder: str, changes: dict) -> dict:
 def read_sources(root: Path, folder: str) -> dict:
     payload = {key: [] for key in SOURCE_CATEGORIES}
     for item in _service(root).repo.list_sources(folder):
-        category = item.pop("category")
+        category = item["category"]
         payload.setdefault(category, []).append(item)
     metadata = read_json(root / folder / "one_time/knowledge/industry.json", {})
     payload["industry"] = metadata.get("name") or folder
@@ -267,6 +276,10 @@ def list_chain_knowledge(root: Path, folder: str) -> list[dict]:
     return _service(root).repo.list_chain_nodes(folder)
 
 
+def list_chain_edges(root: Path, folder: str) -> list[dict]:
+    return _service(root).repo.list_chain_edges(folder)
+
+
 def delete_entity(root: Path, folder: str, entity_id: str) -> bool:
     return _service(root).delete_entity(folder, entity_id)
 
@@ -317,6 +330,8 @@ def list_reports(root: Path, folder: str) -> list[dict]:
             "status": status,
             "limitations": limitations,
             "visualization": visualization if isinstance(visualization, dict) else {},
+            "portable_file": visualization.get("portable_file"),
+            "quality": visualization.get("quality", {}),
         })
     return out
 
@@ -481,5 +496,15 @@ def list_deep_reports(root: Path, folder: str) -> list[dict]:
     if not d.exists():
         return out
     for f in sorted(d.glob("*.md")):
-        out.append({"name": f.name, "path": str(f), "size": f.stat().st_size})
+        metadata = read_json(f.with_suffix(".viz.json"), {})
+        out.append({"name": f.name, "path": str(f), "size": f.stat().st_size,
+                    "title": metadata.get("title") or f.stem,
+                    "status": metadata.get("status") or "draft_review_required",
+                    "provider": metadata.get("provider") or "N/A",
+                    "model": metadata.get("model") or "N/A",
+                    "limitations": metadata.get("limitations") or [],
+                    "references": metadata.get("references") or [],
+                    "portable_file": metadata.get("portable_file"),
+                    "quality": metadata.get("quality") or {},
+                    "visualization": metadata})
     return out

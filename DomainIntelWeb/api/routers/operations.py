@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Callable
 
@@ -12,6 +11,7 @@ from ..commands import search_command, search_cwd
 
 
 def build_operations_router(*, jobs, job_rows: Callable[[], list[dict]],
+                            repo,
                             resolve_folder: Callable[[str], str], data_root: Path,
                             search_root: Path, project_root: Path, dataio,
                             sanitize_text: Callable[[object], str]) -> APIRouter:
@@ -32,16 +32,35 @@ def build_operations_router(*, jobs, job_rows: Callable[[], list[dict]],
     @router.post("/jobs/{run_id}/cancel", response_model=CancelState)
     def cancel_job(run_id: str) -> dict:
         job = next((item for item in jobs.active() if item.run_id == run_id), None)
-        if job is None:
-            raise HTTPException(409, "任务不在当前服务会话中运行")
-        return {"cancelled": bool(job.cancel())}
+        if job is not None:
+            return {"cancelled": bool(job.cancel())}
+        try:
+            repo.recover_expired_tasks(actor="local-user", run_id=run_id)
+            task = repo.get_task(run_id)
+            if task["status"] == "running":
+                repo.transition(run_id, expected={"running"}, target="cancelling",
+                                error={"category": "cancel_requested",
+                                       "message": "Cancellation requested from another session"})
+            elif task["status"] in {"queued", "paused", "cancelling", "interrupted"}:
+                repo.transition(run_id, expected={task["status"]}, target="cancelled",
+                                error={"category": "cancel_requested",
+                                       "message": "Cancelled by user"})
+            else:
+                raise HTTPException(409, "任务已处于不可取消的终态")
+            return {"cancelled": True}
+        except FileNotFoundError as exc:
+            raise HTTPException(404, "任务不存在") from exc
 
-    def submit(folder: str, request: GenerateRequest, *, parent_run_id: str = ""):
-        model_free = (request.action == "daily" or
-                      (request.action in {"weekly", "monthly", "quarterly"}
-                       and request.pipeline_mode == "aggregate") or
-                      (request.action == "bootstrap" and not request.provider))
-        if request.provider and not model_free:
+    def submit(folder: str, request: GenerateRequest, *, parent_run_id: str = "",
+               origin: str = "app"):
+        from src.background_worker import _safe_environment
+        taskpack = request.execution_mode == "taskpack"
+        public_direct = request.execution_mode == "direct" and request.provider == "public_sources"
+        model_free = public_direct and (
+            request.action in {"daily", "bootstrap", "history"} or
+            (request.action in {"weekly", "monthly", "quarterly"}
+             and request.pipeline_mode == "aggregate"))
+        if request.execution_mode == "direct" and not model_free:
             from src.services.provider_readiness import provider_readiness
             readiness = provider_readiness(request.provider, data_root / folder)
             if not readiness.get("ready"):
@@ -61,7 +80,23 @@ def build_operations_router(*, jobs, job_rows: Callable[[], list[dict]],
             "bootstrap": ("初始化行业研究", ["bootstrap-industry", "--folder", folder]),
             "coverage": ("执行覆盖搜索", ["execute-coverage", "--folder", folder]),
         }
-        if request.action in command_map:
+        if public_direct and request.action == "bootstrap":
+            command_map["bootstrap"] = (
+                "公开免凭据初始化行业研究",
+                ["public-bootstrap", "--folder", folder])
+        taskpack_commands = {
+            "bootstrap": ("创建行业初始化任务包", ["bootstrap-industry", "--folder", folder]),
+            "report": ("创建行业报告任务包", ["report-tasks", "--folder", folder]),
+            "deep_report": ("创建深度研究任务包", ["deep-reports", "--folder", folder,
+                                                     "--rtype", request.kind]),
+            "impact": ("创建影响分析任务包", ["impact", "--folder", folder,
+                                              "--event", request.event.strip()]),
+        }
+        if taskpack:
+            if request.action not in taskpack_commands:
+                raise HTTPException(400, "该操作不支持任务包；请选择 direct 并显式选择 Provider")
+            title, args = taskpack_commands[request.action]
+        elif request.action in command_map:
             title, args = command_map[request.action]
         elif request.action == "report":
             if request.kind not in dataio.INDUSTRY_REPORT_IDS:
@@ -85,17 +120,19 @@ def build_operations_router(*, jobs, job_rows: Callable[[], list[dict]],
                 raise HTTPException(400, "影响分析需要事件描述")
             title, args = "生成事件影响分析", ["generate-impact", "--folder", folder,
                                                "--event", request.event.strip()]
-        if request.provider and not model_free:
+        if request.execution_mode == "direct":
             args.extend(["--provider", request.provider])
+        args.extend(["--execution-mode", request.execution_mode])
         timeout = 14400 if request.action in {"history", "report", "deep_report"} else 3600
         return jobs.start(
             search_command(args), cwd=search_cwd(search_root),
             title=f"{title} · {folder}", timeout=timeout,
-            env={**os.environ, "DOMAIN_INTEL_DATA_ROOT": str(data_root),
-                 "INTDOG_PROJECT_ROOT": str(project_root), "PYTHONUTF8": "1",
-                 "INTDOG_DISABLE_EMAIL": "1"},
-            metadata={"operation": request.action,
+            env=_safe_environment(data_root, project_root),
+            metadata={"folder": folder, "operation": request.action,
                       "operation_payload": {**request.model_dump(), "folder": folder},
+                      "origin": origin,
+                      "provider": ("taskpack" if taskpack else request.provider),
+                      "execution_mode": request.execution_mode,
                       "parent_run_id": parent_run_id or None})
 
     @router.post("/industries/{folder}/generate", status_code=202,
@@ -110,19 +147,30 @@ def build_operations_router(*, jobs, job_rows: Callable[[], list[dict]],
     def retry_job(run_id: str) -> dict:
         row = next((item for item in jobs.store.list()
                     if item.get("run_id") == run_id), None)
-        if row is None:
+        authoritative = None
+        try:
+            authoritative = repo.get_task(run_id)
+        except FileNotFoundError:
+            pass
+        state = authoritative.get("status") if authoritative else row.get("status") if row else None
+        if state is None:
             raise HTTPException(404, "任务不存在")
-        if row.get("status") not in {"failed", "partial", "cancelled", "interrupted"}:
+        if state not in {"paused", "failed", "partial", "cancelled", "interrupted"}:
             raise HTTPException(409, "只有失败、部分完成、取消或中断任务可以重试")
-        payload = row.get("operation_payload")
-        if not isinstance(payload, dict) or not row.get("operation"):
+        payload = (authoritative.get("input") if authoritative else
+                   row.get("operation_payload"))
+        operation = (authoritative.get("operation") if authoritative else
+                     row.get("operation"))
+        if not isinstance(payload, dict) or not operation:
             raise HTTPException(409, "历史任务缺少可验证的操作元数据，拒绝重放命令")
         folder = resolve_folder(str(payload.get("folder") or ""))
         try:
-            request = GenerateRequest.model_validate({**payload, "action": row["operation"]})
+            request = GenerateRequest.model_validate({**payload, "action": operation})
         except ValueError as exc:
             raise HTTPException(409, "历史操作元数据无效") from exc
-        job = submit(folder, request, parent_run_id=run_id)
+        job = submit(folder, request, parent_run_id=run_id,
+                     origin=str(authoritative.get("origin") or "app")
+                     if authoritative else "app")
         return {"run_id": job.run_id, "status": "queued", "title": job.title,
                 "action": request.action}
 

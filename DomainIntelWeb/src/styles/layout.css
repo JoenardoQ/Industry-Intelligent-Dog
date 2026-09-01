@@ -1,0 +1,12 @@
+/* Zoom-safe layout primitives. Component-specific visuals stay in components.css. */
+.reader-layout { grid-template-columns:minmax(300px,360px) minmax(0,1fr);gap:24px; }
+.workbench-reader { display:grid;grid-template-columns:minmax(220px,300px) minmax(0,1fr);gap:18px; }
+
+@media (max-width:1100px) {
+  .reader-layout { grid-template-columns:1fr; }
+  .workspace { padding-inline:26px; }
+}
+@media (max-width:760px) {
+  .workbench-reader { grid-template-columns:1fr; }
+  .workspace { padding-inline:18px; }
+}

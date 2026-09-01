@@ -50,7 +50,7 @@ _STOP = {
 SIM_THRESHOLD = 0.42   # token overlap 系数阈值（|交|/min(|A|,|B|)）
 MIN_INTER = 3          # 至少共享 3 个 token，防短标题误并
 DUP_RATIO = 0.75       # 字符级近似重复直接归并（同稿转载/格式差异）
-CLUSTERING_VERSION = "title-entity-event-time-v3"
+CLUSTERING_VERSION = "title-entity-event-time-v4"
 
 
 def _norm_title(title: str) -> str:
@@ -179,11 +179,11 @@ def group_stories(items: list[dict]) -> list[list[int]]:
     def union(x, y):
         rx, ry = find(x), find(y)
         if rx != ry:
-            parent[rx] = ry
+            parent[max(rx, ry)] = min(rx, ry)
 
     seen_url: dict[str, int] = {}
     for i, it in enumerate(items):
-        u = (it.get("url") or "").strip()
+        u = canonical_url(it.get("url", ""))
         if u:
             if u in seen_url:
                 union(i, seen_url[u])
@@ -216,7 +216,11 @@ def group_stories(items: list[dict]) -> list[list[int]]:
     groups: dict[int, list[int]] = {}
     for i in range(n):
         groups.setdefault(find(i), []).append(i)
-    return list(groups.values())
+    item_key = lambda index: (
+        canonical_url(items[index].get("url", "")),
+        str(items[index].get("id") or ""), norms[index])
+    ordered_groups = [sorted(group, key=item_key) for group in groups.values()]
+    return sorted(ordered_groups, key=lambda group: item_key(group[0]))
 
 
 def score_group(members: list[dict]) -> dict:
@@ -367,4 +371,18 @@ def verify_store_daily(store, date: str = None, days: int = 1) -> dict:
             stats["verified_items"] += 1
         lbl = it.get("credibility_label", "低")
         stats[{"高": "high", "中": "medium", "低": "low"}[lbl]] += 1
+    observed_date = date or datetime.now().date().isoformat()
+    store.service.repo.record_quality_observations(store.folder, [{
+        "observed_at": f"{observed_date}T05:00:00+08:00",
+        "metric": "valid_yield", "numerator": stats["verified_items"],
+        "denominator": stats["stories"],
+        "algorithm_version": CLUSTERING_VERSION,
+        "dimensions": {"pipeline_stage": "verification", "window_days": days},
+    }, {
+        "observed_at": f"{observed_date}T05:00:00+08:00",
+        "metric": "citation_failure_rate",
+        "numerator": sum(not bool(item.get("references")) for item in items),
+        "denominator": len(items), "algorithm_version": CLUSTERING_VERSION,
+        "dimensions": {"pipeline_stage": "story_corroboration", "window_days": days},
+    }])
     return stats

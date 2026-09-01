@@ -27,7 +27,6 @@ from .routers.automation import build_automation_router
 from .routers.intelligence import build_intelligence_router
 from .routers.recovery import build_recovery_router
 from .routers.agent_bridge import build_agent_bridge_router
-from .automation import AutomationScheduler
 from .security import install_security
 
 PROJECT_ROOT = Path(os.environ.get("INTDOG_PROJECT_ROOT") or Path(__file__).resolve().parents[2])
@@ -41,6 +40,9 @@ from runtime import dataio  # noqa: E402
 from runtime.jobs import JobManager, sanitize_text  # noqa: E402
 from intdog_core.models import validate_folder  # noqa: E402
 from intdog_core import IntDogService  # noqa: E402
+from src.services.semantic_verifier import build_production_assertion_verifier  # noqa: E402
+from src.services.runtime_credentials import credential_bundle  # noqa: E402
+from .automation import AutomationScheduler  # noqa: E402
 
 
 DATA_ROOT = Path(
@@ -50,8 +52,9 @@ DATA_ROOT = Path(
 ).resolve()
 WEB_DIST = PROJECT_ROOT / "DomainIntelWeb" / "dist"
 
-jobs = JobManager(DATA_ROOT)
 service = IntDogService(DATA_ROOT)
+jobs = JobManager(
+    DATA_ROOT, ledger=service.repo, credential_supplier=credential_bundle)
 automation = AutomationScheduler(
     DATA_ROOT, jobs, search_root=SEARCH_ROOT, project_root=PROJECT_ROOT)
 
@@ -95,7 +98,7 @@ def _display_source(item: dict) -> str:
         return str(item.get("account") or item.get("publisher") or item.get("author") or "N/A")
     return str(
         item.get("source_name") or item.get("publication") or item.get("source")
-        or item.get("publisher") or "N/A"
+        or item.get("publisher") or item.get("account") or item.get("author") or "N/A"
     )
 
 
@@ -115,13 +118,15 @@ daily_router = build_daily_router(
     data_root=DATA_ROOT, dataio=dataio, resolve_folder=_folder,
     present_item=_daily_item)
 sources_router = build_sources_router(
-    data_root=DATA_ROOT, dataio=dataio, resolve_folder=_folder)
+    data_root=DATA_ROOT, dataio=dataio, service=service, resolve_folder=_folder,
+    jobs=jobs, search_root=SEARCH_ROOT, project_root=PROJECT_ROOT)
 industries_router = build_industries_router(
     data_root=DATA_ROOT, dataio=dataio, resolve_folder=_folder)
 content_router = build_content_router(
     data_root=DATA_ROOT, dataio=dataio, resolve_folder=_folder)
 system_router = build_system_router(
     data_root=DATA_ROOT, jobs=jobs, automation=automation,
+    repo=service.repo,
     session_required=bool(os.environ.get("INTDOG_SESSION_TOKEN")))
 app.include_router(daily_router)
 app.include_router(sources_router)
@@ -131,11 +136,14 @@ app.include_router(system_router)
 app.include_router(build_automation_router(
     automation=automation, resolve_folder=_folder))
 intelligence_router = build_intelligence_router(
-    data_root=DATA_ROOT, service=service, resolve_folder=_folder, dataio=dataio)
+    data_root=DATA_ROOT, service=service, resolve_folder=_folder, dataio=dataio,
+    jobs=jobs, search_root=SEARCH_ROOT, project_root=PROJECT_ROOT)
 app.include_router(intelligence_router)
 app.include_router(build_recovery_router(data_root=DATA_ROOT, dataio=dataio))
+agent_bridge_verifier = build_production_assertion_verifier(PROJECT_ROOT)
 agent_bridge_router = build_agent_bridge_router(
-    data_root=DATA_ROOT, dataio=dataio, resolve_folder=_folder, service=service)
+    data_root=DATA_ROOT, dataio=dataio, resolve_folder=_folder, service=service,
+    verifier=agent_bridge_verifier)
 app.include_router(agent_bridge_router)
 # Preserve direct-call compatibility for the existing Python contract tests.
 daily = next(route.endpoint for route in daily_router.routes
@@ -157,30 +165,88 @@ history = next(route.endpoint for route in intelligence_router.routes
 
 
 def _job_rows() -> list[dict]:
-    rows = []
     active_ids = {job.run_id for job in jobs.active()}
-    for row in jobs.store.list():
-        clean = dict(row)
-        clean["active"] = clean.get("run_id") in active_ids
-        heartbeat = clean.get("last_heartbeat_at") or clean.get("updated_at")
+    manifests = {str(row.get("run_id")): row for row in jobs.store.list()
+                 if row.get("run_id")}
+    rows = []
+
+    def heartbeat_age(value) -> float | None:
         try:
-            heartbeat_age = (datetime.now(timezone.utc) - datetime.fromisoformat(
-                str(heartbeat).replace("Z", "+00:00"))).total_seconds()
+            return (datetime.now(timezone.utc) - datetime.fromisoformat(
+                str(value).replace("Z", "+00:00"))).total_seconds()
         except (TypeError, ValueError):
-            heartbeat_age = None
-        clean["heartbeat_age_seconds"] = heartbeat_age
-        clean["stalled"] = bool(
-            clean.get("status") in {"queued", "running", "cancelling"}
-            and heartbeat_age is not None and heartbeat_age > 45
-        )
-        clean["title"] = sanitize_text(clean.get("title") or "")
-        clean["error"] = sanitize_text(clean.get("error") or "")
-        rows.append(clean)
-    return rows
+            return None
+
+    for task in service.repo.list_tasks(limit=500):
+        run_id = task["id"]
+        manifest = manifests.pop(run_id, {})
+        error = task.get("error") if isinstance(task.get("error"), dict) else {}
+        heartbeat = task.get("heartbeat_at") or task.get("updated_at")
+        age = heartbeat_age(heartbeat)
+        status = str(task["status"])
+        recovery = []
+        if status in {"queued", "running", "cancelling", "paused"}:
+            recovery.append("cancel")
+        if status in {"paused", "failed", "partial", "cancelled", "interrupted"}:
+            recovery.append("retry")
+        rows.append({
+            "run_id": run_id,
+            "title": sanitize_text(manifest.get("title") or task["operation"]),
+            "status": status, "updated_at": str(task.get("updated_at") or ""),
+            "stalled": bool(status in {"queued", "running", "cancelling"}
+                            and age is not None and age > 45),
+            "active": run_id in active_ids,
+            "stage": str(task.get("stage") or "queued"),
+            "progress": max(0, min(100, int(task.get("progress") or 0))),
+            "artifact_path": task.get("output_path") or
+                             manifest.get("artifact_path") or None,
+            "parent_run_id": task.get("parent_run_id"),
+            "operation": task.get("operation"),
+            "error": sanitize_text(error.get("message") or manifest.get("error") or ""),
+            "error_category": str(error.get("category") or ""),
+            "origin": task.get("origin") or "app",
+            "provider": task.get("provider") or "local",
+            "model": task.get("model") or "",
+            "time_window": task.get("time_window") or {
+                "start": None, "end": None, "timezone": None},
+            "heartbeat_at": task.get("heartbeat_at"),
+            "checkpoint": task.get("checkpoint") or {},
+            "request_dispatched_at": task.get("request_dispatched_at"),
+            "recovery_actions": recovery,
+        })
+    for manifest in manifests.values():
+        raw_progress = float(manifest.get("progress") or 0)
+        progress = round(raw_progress * 100) if raw_progress <= 1 else round(raw_progress)
+        status = str(manifest.get("status") or "interrupted")
+        heartbeat = manifest.get("last_heartbeat_at") or manifest.get("updated_at")
+        age = heartbeat_age(heartbeat)
+        rows.append({
+            "run_id": str(manifest.get("run_id")),
+            "title": sanitize_text(manifest.get("title") or "Legacy task"),
+            "status": status, "updated_at": str(manifest.get("updated_at") or ""),
+            "stalled": bool(status in {"queued", "running", "cancelling"}
+                            and age is not None and age > 45),
+            "active": manifest.get("run_id") in active_ids,
+            "stage": manifest.get("stage"),
+            "progress": max(0, min(100, progress)),
+            "artifact_path": manifest.get("artifact_path"),
+            "parent_run_id": manifest.get("parent_run_id"),
+            "operation": manifest.get("operation"),
+            "error": sanitize_text(manifest.get("error") or ""),
+            "error_category": "legacy_process" if manifest.get("error") else "",
+            "origin": "app", "provider": "local", "model": "",
+            "time_window": {"start": None, "end": None, "timezone": None},
+            "heartbeat_at": manifest.get("last_heartbeat_at"), "checkpoint": {},
+            "request_dispatched_at": None,
+            "recovery_actions": (["retry"] if status in {
+                "failed", "partial", "cancelled", "interrupted"} else
+                ["cancel"] if status in {"queued", "running", "cancelling"} else []),
+        })
+    return sorted(rows, key=lambda row: (row["updated_at"], row["run_id"]), reverse=True)
 
 
 operations_router = build_operations_router(
-    jobs=jobs, job_rows=_job_rows, resolve_folder=_folder, data_root=DATA_ROOT,
+    jobs=jobs, repo=service.repo, job_rows=_job_rows, resolve_folder=_folder, data_root=DATA_ROOT,
     search_root=SEARCH_ROOT, project_root=PROJECT_ROOT, dataio=dataio,
     sanitize_text=sanitize_text)
 app.include_router(operations_router)

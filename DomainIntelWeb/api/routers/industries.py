@@ -5,8 +5,10 @@ from typing import Callable
 
 from fastapi import APIRouter, HTTPException
 
-from ..schemas import (ArchiveState, IndustryCreate, IndustryMutationState,
-                       IndustryRename, IndustryState, OverviewState)
+from ..schemas import (ArchiveState, IndustryBundleState, IndustryCreate,
+                       IndustryImportRequest, IndustryImportState,
+                       IndustryMutationState, IndustryRename, IndustryState,
+                       OverviewState)
 
 
 def build_industries_router(*, data_root: Path, dataio,
@@ -25,6 +27,18 @@ def build_industries_router(*, data_root: Path, dataio,
             raise HTTPException(409, str(exc)) from exc
         return {"folder": path.name, "name": request.name or path.name}
 
+    @router.post("/industries/import", status_code=201,
+                 response_model=IndustryImportState)
+    def import_industry(request: IndustryImportRequest) -> dict:
+        try:
+            return dataio.import_industry(
+                data_root, request.folder, request.name,
+                request.bundle.model_dump(mode="json"))
+        except FileNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except (ValueError, FileExistsError, OSError) as exc:
+            raise HTTPException(409, str(exc)) from exc
+
     @router.patch("/industries/{folder}", response_model=IndustryMutationState)
     def rename_industry(folder: str, request: IndustryRename) -> dict:
         folder = resolve_folder(folder)
@@ -40,6 +54,13 @@ def build_industries_router(*, data_root: Path, dataio,
         return {"archived_to": str(dataio.archive_industry(
             data_root, resolve_folder(folder)))}
 
+    @router.get("/industries/{folder}/export", response_model=IndustryBundleState)
+    def export_industry(folder: str) -> dict:
+        try:
+            return dataio.export_industry(data_root, resolve_folder(folder))
+        except FileNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
     @router.get("/industries/{folder}/overview", response_model=OverviewState)
     def overview(folder: str) -> dict:
         folder = resolve_folder(folder)
@@ -50,7 +71,9 @@ def build_industries_router(*, data_root: Path, dataio,
         dates = dataio.list_daily_dates(data_root, folder)
         return {
             "industry": industry, "stats": stats,
-            "chain": chains, "entities": [],
+            "chain": chains,
+            "chain_edges": dataio.list_chain_edges(data_root, folder),
+            "entities": [],
             "source_categories": {category: len(items) for category, items in sources.items()
                                   if isinstance(items, list)},
             "latest_document_date": dates[0] if dates else None,

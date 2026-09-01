@@ -5,59 +5,20 @@ from __future__ import annotations
 import os
 import threading
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .commands import search_command, search_cwd
+from src.background_worker import (
+    ScheduleClaim,
+    SchedulePaused,
+    _safe_environment,
+    claim_due_schedules,
+    schedule_moment,
+)
 
 ACTIONS = ("daily", "weekly", "monthly", "quarterly")
 COMMANDS = {"daily": ("自动抓取每日情报", "crawl-daily")}
-
-
-def _timezone(name: str) -> ZoneInfo:
-    try:
-        return ZoneInfo(name)
-    except ZoneInfoNotFoundError as exc:
-        raise ValueError(f"未知时区：{name}") from exc
-
-
-def schedule_moment(schedule: dict, now: datetime) -> tuple[str | None, datetime, datetime]:
-    """Return (due period key, current scheduled moment, next moment)."""
-    zone = _timezone(str(schedule.get("timezone") or "Asia/Shanghai"))
-    local = now.astimezone(zone)
-    hour, minute = (int(value) for value in str(schedule["local_time"]).split(":"))
-    action = schedule["action"]
-    if action == "daily":
-        moment = local.replace(hour=hour, minute=minute, second=0, microsecond=0)
-        key, following = local.date().isoformat(), moment + timedelta(days=1)
-    elif action == "weekly":
-        start = local - timedelta(days=local.weekday())
-        moment = start.replace(hour=hour, minute=minute, second=0, microsecond=0)
-        moment += timedelta(days=int(schedule.get("weekday") or 0))
-        iso = moment.isocalendar()
-        key, following = f"{iso.year}-W{iso.week:02d}", moment + timedelta(days=7)
-    elif action == "monthly":
-        moment = local.replace(day=int(schedule.get("monthday") or 1), hour=hour,
-                               minute=minute, second=0, microsecond=0)
-        if moment.month == 12:
-            following = moment.replace(year=moment.year + 1, month=1)
-        else:
-            following = moment.replace(month=moment.month + 1)
-        key = f"{moment.year}-{moment.month:02d}"
-    elif action == "quarterly":
-        quarter_month = ((local.month - 1) // 3) * 3 + 1
-        moment = local.replace(month=quarter_month,
-                               day=int(schedule.get("monthday") or 1), hour=hour,
-                               minute=minute, second=0, microsecond=0)
-        following = (moment.replace(year=moment.year + 1, month=1)
-                     if quarter_month == 10 else moment.replace(month=quarter_month + 3))
-        key = f"{moment.year}-Q{((quarter_month - 1) // 3) + 1}"
-    else:
-        raise ValueError("不支持的调度动作")
-    if local < moment:
-        return None, moment, moment
-    return key, moment, following
 
 
 class AutomationScheduler:
@@ -146,31 +107,33 @@ class AutomationScheduler:
             self.repo.update_schedule(
                 folder, action, enabled=enabled, local_time=local_time,
                 weekday=weekly, monthday=monthday, catch_up=True,
-                pipeline_mode="generate", provider="codex")
+                pipeline_mode="aggregate" if action == "daily" else "generate",
+                provider="public_sources" if action == "daily" else "codex")
         self.service.update_control(folder, {"scheduler_owner": "web"})
 
     def tick(self) -> int:
         enqueued = 0
-        for schedule in self.repo.list_schedules():
-            if not schedule["enabled"]:
-                continue
-            folder, action = schedule["folder"], schedule["action"]
+        claims = claim_due_schedules(
+            self.repo, now=self.now(), owner=self.owner,
+            poll_seconds=self.poll_seconds, origin="system_schedule")
+        for claim in claims:
             try:
-                key, moment, following = schedule_moment(schedule, self.now())
-                self.repo.set_schedule_next_run(
-                    folder, action, following.isoformat(timespec="minutes"))
-                if not key:
-                    continue
-                delay = (self.now().astimezone(moment.tzinfo) - moment).total_seconds()
-                if not schedule["catch_up"] and delay > self.poll_seconds * 2:
-                    continue
-                if not self.repo.claim_schedule(folder, action, key, self.owner):
-                    continue
-                self._start_job(folder, action, schedule=schedule)
+                self._start_job(
+                    claim.folder, claim.action, schedule=claim.schedule,
+                    claim=claim)
                 enqueued += 1
+            except SchedulePaused as exc:
+                self.repo.finish_schedule(
+                    claim.folder, claim.action, self.owner, success=False,
+                    outcome="paused", error=str(exc),
+                    error_category=exc.category,
+                    time_window=self._window_dict(claim))
             except Exception as exc:
-                self.repo.finish_schedule(folder, action, self.owner,
-                                          success=False, error=str(exc))
+                self.repo.finish_schedule(
+                    claim.folder, claim.action, self.owner, success=False,
+                    outcome="failed", error=str(exc),
+                    error_category=type(exc).__name__,
+                    time_window=self._window_dict(claim))
         return enqueued
 
     def run_now(self, folder: str, action: str):
@@ -189,39 +152,67 @@ class AutomationScheduler:
         return row
 
     def _start_job(self, folder: str, action: str, *, scheduled: bool = True,
-                   schedule: dict | None = None):
+                   schedule: dict | None = None,
+                   claim: ScheduleClaim | None = None):
         schedule = schedule or self.repo.get_schedule(folder, action)
+        provider = "public_sources"
+        model = ""
         if action == "daily":
             title, args = COMMANDS[action][0], ["crawl-daily", "--folder", folder]
         elif schedule.get("pipeline_mode") == "aggregate":
             title, args = f"自动聚合{action}情报", [f"crawl-{action}", "--folder", folder]
         else:
             title = f"自动生成{action}报告"
-            provider = str(schedule.get("provider") or "codex")
+            provider = str(schedule.get("provider") or "")
+            if not provider:
+                raise SchedulePaused("provider_required", "生成计划必须显式选择 Provider")
             ready = self.readiness(provider, self.data_root / folder)
             if not ready.get("ready"):
-                raise ValueError(f"Provider {provider} 未就绪：{ready.get('detail', '请检查连接设置')}")
+                raise SchedulePaused(
+                    "provider_not_ready",
+                    f"Provider {provider} 未就绪：{ready.get('detail', '请检查连接设置')}")
+            model = str(ready.get("model") or "")
             args = ["generate-period", "--folder", folder, "--kind", action,
-                    "--provider", provider]
+                    "--provider", provider, "--execution-mode", "direct"]
+        if "--execution-mode" not in args:
+            args.extend(["--provider", provider, "--execution-mode", "direct"])
+
+        time_window = self._window_dict(claim) if claim else None
 
         def finished(result) -> None:
             if scheduled:
-                self.repo.finish_schedule(folder, action, self.owner,
-                                          success=result.status == "completed",
-                                          error=result.error)
+                status = str(result.status or "interrupted")
+                self.repo.finish_schedule(
+                    folder, action, self.owner,
+                    success=status == "completed", outcome=status,
+                    error=result.error,
+                    error_category=("partial" if status == "partial" else
+                                    "worker_process" if status != "completed" else ""),
+                    successful_boundary=(time_window or {}).get("end"),
+                    time_window=time_window)
 
         job = self.jobs.start(
             search_command(args),
             cwd=search_cwd(self.search_root), title=f"{title} · {folder}", timeout=3600,
             on_finish=finished,
-            env={**os.environ, "DOMAIN_INTEL_DATA_ROOT": str(self.data_root),
-                 "INTDOG_PROJECT_ROOT": str(self.project_root), "PYTHONUTF8": "1",
-                 "INTDOG_DISABLE_EMAIL": "1"},
-            metadata={"operation": action,
+            env=_safe_environment(self.data_root, self.project_root),
+            metadata={"folder": folder, "operation": action,
                       "operation_payload": {"action": action, "folder": folder,
-                                            "provider": schedule.get("provider", ""),
+                                            "provider": provider,
+                                            "execution_mode": "direct",
                                             "pipeline_mode": schedule.get("pipeline_mode", "generate")},
+                      "origin": "system_schedule" if scheduled else "manual",
+                      "provider": provider, "model": model,
+                      "time_window": time_window,
                       "schedule_action": action})
         if scheduled:
             self.repo.set_schedule_job(folder, action, self.owner, job.run_id)
         return job
+
+    @staticmethod
+    def _window_dict(claim: ScheduleClaim) -> dict:
+        return {
+            "start": claim.window.start.isoformat(timespec="seconds"),
+            "end": claim.window.end.isoformat(timespec="seconds"),
+            "timezone": str(claim.window.end.tzinfo),
+        }

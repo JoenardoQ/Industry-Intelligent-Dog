@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import sqlite3
 import uuid
@@ -16,13 +17,31 @@ from .source_trust import publisher_profile
 from .chain_repository import ChainRepositoryMixin
 from .analysis_repository import AnalysisRepositoryMixin
 from .workbench_repository import WorkbenchRepositoryMixin
+from .evidence_repository import EvidenceRepositoryMixin
+from .source_repository import SourceRepositoryMixin
+from .observability_repository import ObservabilityRepositoryMixin
+from .task_repository import TaskRepositoryMixin
 
 
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 21
+
+
+def _execute_script(con: sqlite3.Connection, script: str) -> None:
+    """Execute a SQLite script without ``executescript``'s implicit COMMIT."""
+    statement = ""
+    for line in str(script).splitlines(keepends=True):
+        statement += line
+        if sqlite3.complete_statement(statement):
+            if statement.strip():
+                con.execute(statement)
+            statement = ""
+    if statement.strip():
+        raise sqlite3.OperationalError("incomplete migration statement")
 
 
 class IntelligenceRepository(
-        WorkbenchRepositoryMixin, AnalysisRepositoryMixin, ChainRepositoryMixin):
+        TaskRepositoryMixin, ObservabilityRepositoryMixin, SourceRepositoryMixin, EvidenceRepositoryMixin, WorkbenchRepositoryMixin,
+        AnalysisRepositoryMixin, ChainRepositoryMixin):
     """One repository per DomainIntelData root.
 
     Connections are deliberately short lived.  WAL plus a busy timeout keeps
@@ -68,7 +87,11 @@ class IntelligenceRepository(
     def migrate(self) -> None:
         with self.connection() as con:
             con.execute("PRAGMA journal_mode=WAL")
-            con.executescript("""
+        # App and the independently scheduled Worker may start together.  The
+        # immediate lock is acquired before the first version read, so only one
+        # runtime can decide which migration is pending.
+        with self.transaction() as con:
+            _execute_script(con, """
                 CREATE TABLE IF NOT EXISTS schema_migrations (
                     version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS industries (
@@ -157,7 +180,7 @@ class IntelligenceRepository(
                         (1, utc_now()))
             if not con.execute(
                     "SELECT 1 FROM schema_migrations WHERE version=2").fetchone():
-                con.executescript("""
+                _execute_script(con, """
                     CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(
                         title, abstract, content='documents', content_rowid='rowid');
                     CREATE TRIGGER IF NOT EXISTS documents_ai AFTER INSERT ON documents BEGIN
@@ -180,7 +203,7 @@ class IntelligenceRepository(
                             (2, utc_now()))
             if not con.execute(
                     "SELECT 1 FROM schema_migrations WHERE version=3").fetchone():
-                con.executescript("""
+                _execute_script(con, """
                     CREATE TABLE IF NOT EXISTS events (
                         id TEXT PRIMARY KEY,
                         industry_id TEXT NOT NULL REFERENCES industries(id) ON DELETE CASCADE,
@@ -201,7 +224,7 @@ class IntelligenceRepository(
                             (3, utc_now()))
             if not con.execute(
                     "SELECT 1 FROM schema_migrations WHERE version=4").fetchone():
-                con.executescript("""
+                _execute_script(con, """
                     CREATE TABLE IF NOT EXISTS locks (
                         lock_key TEXT PRIMARY KEY, owner TEXT NOT NULL,
                         acquired_at TEXT NOT NULL, expires_at TEXT NOT NULL);
@@ -217,7 +240,7 @@ class IntelligenceRepository(
                             (5, utc_now()))
             if not con.execute(
                     "SELECT 1 FROM schema_migrations WHERE version=6").fetchone():
-                con.executescript("""
+                _execute_script(con, """
                     CREATE TABLE IF NOT EXISTS compatibility_views (
                         industry_id TEXT NOT NULL REFERENCES industries(id) ON DELETE CASCADE,
                         view_key TEXT NOT NULL, dirty INTEGER NOT NULL DEFAULT 1,
@@ -230,7 +253,7 @@ class IntelligenceRepository(
                             (6, utc_now()))
             if not con.execute(
                     "SELECT 1 FROM schema_migrations WHERE version=7").fetchone():
-                con.executescript("""
+                _execute_script(con, """
                     CREATE TABLE IF NOT EXISTS publishers (
                         id TEXT PRIMARY KEY, canonical_name TEXT NOT NULL,
                         country TEXT, owner_cluster TEXT NOT NULL,
@@ -301,7 +324,7 @@ class IntelligenceRepository(
                             (7, utc_now()))
             if not con.execute(
                     "SELECT 1 FROM schema_migrations WHERE version=8").fetchone():
-                con.executescript("""
+                _execute_script(con, """
                     CREATE TABLE IF NOT EXISTS analysis_artifacts (
                         id TEXT PRIMARY KEY,
                         industry_id TEXT NOT NULL REFERENCES industries(id) ON DELETE CASCADE,
@@ -328,7 +351,7 @@ class IntelligenceRepository(
                             (8, utc_now()))
             if not con.execute(
                     "SELECT 1 FROM schema_migrations WHERE version=9").fetchone():
-                con.executescript("""
+                _execute_script(con, """
                     CREATE TABLE IF NOT EXISTS value_chain_edges (
                         id TEXT PRIMARY KEY,
                         industry_id TEXT NOT NULL REFERENCES industries(id) ON DELETE CASCADE,
@@ -356,7 +379,7 @@ class IntelligenceRepository(
                         TEXT NOT NULL DEFAULT 'uncertain'""")
                 if "lag_days" not in edge_columns:
                     con.execute("ALTER TABLE value_chain_edges ADD COLUMN lag_days INTEGER")
-                con.executescript("""
+                _execute_script(con, """
                     CREATE TABLE IF NOT EXISTS chain_edge_evidence (
                         id TEXT PRIMARY KEY,
                         edge_id TEXT NOT NULL REFERENCES value_chain_edges(id) ON DELETE CASCADE,
@@ -387,7 +410,7 @@ class IntelligenceRepository(
                             (10, utc_now()))
             if not con.execute(
                     "SELECT 1 FROM schema_migrations WHERE version=11").fetchone():
-                con.executescript("""
+                _execute_script(con, """
                     CREATE TABLE IF NOT EXISTS stories (
                         id TEXT PRIMARY KEY,
                         industry_id TEXT NOT NULL REFERENCES industries(id) ON DELETE CASCADE,
@@ -429,7 +452,7 @@ class IntelligenceRepository(
                             (11, utc_now()))
             if not con.execute(
                     "SELECT 1 FROM schema_migrations WHERE version=12").fetchone():
-                con.executescript("""
+                _execute_script(con, """
                     CREATE TABLE IF NOT EXISTS automation_schedules (
                         industry_id TEXT NOT NULL REFERENCES industries(id) ON DELETE CASCADE,
                         action TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 0,
@@ -487,7 +510,7 @@ class IntelligenceRepository(
                     except sqlite3.OperationalError as exc:
                         if "duplicate column name" not in str(exc).casefold():
                             raise
-                con.executescript("""
+                _execute_script(con, """
                     CREATE TABLE IF NOT EXISTS story_editorial_constraints (
                         industry_id TEXT NOT NULL REFERENCES industries(id) ON DELETE CASCADE,
                         document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
@@ -501,6 +524,506 @@ class IntelligenceRepository(
                 """)
                 con.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)",
                             (13, utc_now()))
+            if not con.execute(
+                    "SELECT 1 FROM schema_migrations WHERE version=14").fetchone():
+                _execute_script(con, """
+                    CREATE TABLE IF NOT EXISTS agent_results (
+                        id TEXT PRIMARY KEY,
+                        industry_id TEXT NOT NULL REFERENCES industries(id) ON DELETE CASCADE,
+                        task_id TEXT NOT NULL, agent_id TEXT NOT NULL,
+                        original_file TEXT NOT NULL, content_hash TEXT NOT NULL,
+                        summary TEXT NOT NULL DEFAULT '', status TEXT NOT NULL,
+                        record_json TEXT NOT NULL, created_at TEXT NOT NULL,
+                        UNIQUE(industry_id,content_hash));
+                    CREATE TABLE IF NOT EXISTS agent_assertions (
+                        id TEXT PRIMARY KEY,
+                        result_id TEXT NOT NULL REFERENCES agent_results(id) ON DELETE CASCADE,
+                        ordinal INTEGER NOT NULL, assertion_text TEXT NOT NULL,
+                        assertion_type TEXT NOT NULL DEFAULT 'unspecified',
+                        status TEXT NOT NULL DEFAULT 'draft_review_required',
+                        claim_id TEXT REFERENCES claims(id),
+                        verification_json TEXT NOT NULL DEFAULT '{}',
+                        created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                        UNIQUE(result_id,ordinal));
+                    CREATE TABLE IF NOT EXISTS agent_citations (
+                        id TEXT PRIMARY KEY,
+                        assertion_id TEXT NOT NULL REFERENCES agent_assertions(id) ON DELETE CASCADE,
+                        url TEXT NOT NULL, canonical_url TEXT NOT NULL,
+                        reachability TEXT NOT NULL DEFAULT 'unchecked',
+                        source_id TEXT REFERENCES sources(id),
+                        document_id TEXT REFERENCES documents(id), verified_at TEXT,
+                        created_at TEXT NOT NULL,
+                        UNIQUE(assertion_id,canonical_url));
+                    CREATE TABLE IF NOT EXISTS agent_result_reviews (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        result_id TEXT NOT NULL REFERENCES agent_results(id) ON DELETE CASCADE,
+                        assertion_id TEXT NOT NULL REFERENCES agent_assertions(id) ON DELETE CASCADE,
+                        from_status TEXT NOT NULL, action TEXT NOT NULL,
+                        actor TEXT NOT NULL, explanation TEXT NOT NULL DEFAULT '',
+                        occurred_at TEXT NOT NULL);
+                    CREATE INDEX IF NOT EXISTS idx_agent_results_industry
+                        ON agent_results(industry_id,created_at DESC);
+                    CREATE INDEX IF NOT EXISTS idx_agent_assertions_result
+                        ON agent_assertions(result_id,ordinal);
+                    CREATE INDEX IF NOT EXISTS idx_agent_reviews_result
+                        ON agent_result_reviews(result_id,occurred_at);
+                """)
+                con.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)",
+                            (14, utc_now()))
+            if not con.execute(
+                    "SELECT 1 FROM schema_migrations WHERE version=15").fetchone():
+                for statement in (
+                    "ALTER TABLE agent_citations ADD COLUMN snapshot_id TEXT REFERENCES document_snapshots(id)",
+                    "ALTER TABLE evidence ADD COLUMN snapshot_id TEXT REFERENCES document_snapshots(id)",
+                ):
+                    try:
+                        con.execute(statement)
+                    except sqlite3.OperationalError as exc:
+                        if "duplicate column name" not in str(exc).casefold():
+                            raise
+                _execute_script(con, """
+                    CREATE TABLE IF NOT EXISTS document_snapshots (
+                        id TEXT PRIMARY KEY,
+                        document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+                        source_id TEXT REFERENCES sources(id),
+                        content_hash TEXT NOT NULL, content_text TEXT NOT NULL,
+                        title TEXT NOT NULL DEFAULT '', published_at TEXT,
+                        locator_json TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'observed',
+                        created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                        UNIQUE(document_id,content_hash));
+                    CREATE TABLE IF NOT EXISTS claim_evidence_snapshots (
+                        claim_id TEXT NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
+                        snapshot_id TEXT NOT NULL REFERENCES document_snapshots(id) ON DELETE CASCADE,
+                        relation TEXT NOT NULL, excerpt TEXT NOT NULL DEFAULT '',
+                        publisher_cluster TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL,
+                        PRIMARY KEY(claim_id,snapshot_id,relation));
+                    CREATE INDEX IF NOT EXISTS idx_document_snapshots_document
+                        ON document_snapshots(document_id,created_at DESC);
+                """)
+                legacy_rows = con.execute("""SELECT d.id AS document_id,d.source_id,
+                    d.content_hash AS original_content_hash,
+                    d.title,d.abstract,d.published_at,d.retrieved_at,
+                    e.id AS evidence_id,e.claim_id,e.relation,e.excerpt,
+                    e.publisher_cluster,c.status AS claim_status
+                    FROM documents d LEFT JOIN evidence e ON e.document_id=d.id
+                    LEFT JOIN claims c ON c.id=e.claim_id
+                    WHERE e.id IS NOT NULL OR EXISTS(
+                        SELECT 1 FROM agent_citations ac WHERE ac.document_id=d.id)
+                    ORDER BY d.id,e.id""").fetchall()
+                for legacy in legacy_rows:
+                    content = str(legacy["excerpt"] or legacy["abstract"] or
+                                  legacy["title"] or legacy["document_id"])
+                    content_hash = hashlib.sha256(
+                        content.encode("utf-8")).hexdigest()
+                    snapshot_id = stable_id(
+                        "dsp", legacy["document_id"], content_hash)
+                    status = "legacy_unresolved"
+                    applied_at = legacy["retrieved_at"] or utc_now()
+                    con.execute("""INSERT INTO document_snapshots
+                        (id,document_id,source_id,content_hash,content_text,title,
+                         published_at,locator_json,status,created_at,updated_at)
+                        VALUES(?,?,?,?,?,?,?,?,?,?,?)
+                        ON CONFLICT(document_id,content_hash) DO UPDATE SET
+                        status=document_snapshots.status""",
+                        (snapshot_id, legacy["document_id"], legacy["source_id"],
+                         content_hash, content, legacy["title"] or "",
+                         legacy["published_at"], json_text({
+                             "type": "legacy_unresolved",
+                             "reason": "pre-v15 raw content and locator are unavailable",
+                             "original_content_hash": legacy["original_content_hash"]}),
+                         status, applied_at, applied_at))
+                    if legacy["evidence_id"]:
+                        con.execute("UPDATE evidence SET snapshot_id=? WHERE id=?",
+                                    (snapshot_id, legacy["evidence_id"]))
+                        con.execute("""INSERT INTO claim_evidence_snapshots
+                            (claim_id,snapshot_id,relation,excerpt,publisher_cluster,created_at)
+                            VALUES(?,?,?,?,?,?) ON CONFLICT DO NOTHING""",
+                            (legacy["claim_id"], snapshot_id, legacy["relation"],
+                             legacy["excerpt"] or "",
+                             legacy["publisher_cluster"] or "", applied_at))
+                    con.execute("""INSERT INTO audit_log
+                        (occurred_at,actor,action,object_type,object_id,details_json)
+                        VALUES(?, 'schema-migration',
+                        'schema15_backfill_needs_reverification','evidence',?,?)""",
+                        (applied_at, legacy["evidence_id"] or legacy["document_id"],
+                         json_text({"document_id": legacy["document_id"],
+                            "snapshot_id": snapshot_id,
+                            "reason": "legacy raw content/locator unavailable"})))
+                citation_rows = con.execute("""SELECT ac.id,ac.document_id,
+                    aa.claim_id,aa.status AS assertion_status
+                    FROM agent_citations ac
+                    JOIN agent_assertions aa ON aa.id=ac.assertion_id
+                    WHERE ac.snapshot_id IS NULL AND ac.document_id IS NOT NULL
+                    ORDER BY ac.id""").fetchall()
+                for citation in citation_rows:
+                    candidates = []
+                    if (citation["claim_id"] and
+                            citation["assertion_status"] == "accepted"):
+                        candidates = [row[0] for row in con.execute("""SELECT DISTINCT
+                            e.snapshot_id FROM evidence e
+                            JOIN claims c ON c.id=e.claim_id
+                            WHERE e.claim_id=? AND e.document_id=?
+                            AND e.snapshot_id IS NOT NULL
+                            AND c.status IN ('accepted','verified','corroborated')
+                            ORDER BY e.snapshot_id""",
+                            (citation["claim_id"], citation["document_id"]))]
+                    if len(candidates) == 1:
+                        con.execute("UPDATE agent_citations SET snapshot_id=? WHERE id=?",
+                                    (candidates[0], citation["id"]))
+                        continue
+                    reason = ("citation has no accepted assertion/claim relationship"
+                              if not citation["claim_id"] or
+                              citation["assertion_status"] != "accepted"
+                              else "claim/document evidence snapshot mapping is ambiguous")
+                    con.execute("""INSERT INTO audit_log
+                        (occurred_at,actor,action,object_type,object_id,details_json)
+                        VALUES(?, 'schema-migration',
+                        'schema15_backfill_needs_reverification',
+                        'agent_citation',?,?)""",
+                        (utc_now(), citation["id"], json_text({
+                            "document_id": citation["document_id"],
+                            "claim_id": citation["claim_id"],
+                            "candidate_snapshot_ids": candidates,
+                            "reason": reason})))
+                con.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)",
+                            (15, utc_now()))
+            if not con.execute(
+                    "SELECT 1 FROM schema_migrations WHERE version=16").fetchone():
+                _execute_script(con, """
+                    CREATE TABLE IF NOT EXISTS source_campaigns (
+                        id TEXT PRIMARY KEY,
+                        industry_id TEXT NOT NULL REFERENCES industries(id) ON DELETE CASCADE,
+                        targets_json TEXT NOT NULL,
+                        status TEXT NOT NULL DEFAULT 'planned'
+                            CHECK(status IN ('planned','running','paused','converged','failed')),
+                        rounds INTEGER NOT NULL DEFAULT 0 CHECK(rounds >= 0),
+                        budget INTEGER NOT NULL CHECK(budget > 0),
+                        stopping_reason TEXT NOT NULL DEFAULT '',
+                        created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+                    CREATE TABLE IF NOT EXISTS source_queries (
+                        id TEXT PRIMARY KEY,
+                        campaign_id TEXT NOT NULL REFERENCES source_campaigns(id) ON DELETE CASCADE,
+                        round_no INTEGER NOT NULL CHECK(round_no > 0),
+                        language TEXT NOT NULL, family TEXT NOT NULL,
+                        dimensions_json TEXT NOT NULL, query TEXT NOT NULL,
+                        outcome_json TEXT NOT NULL, created_at TEXT NOT NULL);
+                    CREATE TABLE IF NOT EXISTS source_candidates (
+                        id TEXT PRIMARY KEY,
+                        campaign_id TEXT NOT NULL REFERENCES source_campaigns(id) ON DELETE CASCADE,
+                        canonical_url TEXT NOT NULL,
+                        source_id TEXT REFERENCES sources(id),
+                        publisher_id TEXT NOT NULL REFERENCES publishers(id),
+                        name TEXT NOT NULL, category TEXT NOT NULL,
+                        ownership_json TEXT NOT NULL DEFAULT '{}',
+                        attributes_json TEXT NOT NULL DEFAULT '{}',
+                        score REAL NOT NULL DEFAULT 0,
+                        status TEXT NOT NULL DEFAULT 'candidate'
+                            CHECK(status IN ('candidate','manual_review','active','reserve','rejected')),
+                        selection_reason TEXT NOT NULL DEFAULT '',
+                        status_reason TEXT NOT NULL DEFAULT '',
+                        created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                        UNIQUE(campaign_id,canonical_url));
+                    CREATE TABLE IF NOT EXISTS source_candidate_queries (
+                        candidate_id TEXT NOT NULL REFERENCES source_candidates(id) ON DELETE CASCADE,
+                        query_id TEXT NOT NULL REFERENCES source_queries(id) ON DELETE CASCADE,
+                        created_at TEXT NOT NULL,
+                        PRIMARY KEY(candidate_id,query_id));
+                    CREATE TABLE IF NOT EXISTS source_reviews (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        candidate_id TEXT NOT NULL REFERENCES source_candidates(id) ON DELETE CASCADE,
+                        from_status TEXT NOT NULL, to_status TEXT NOT NULL,
+                        decision TEXT NOT NULL, actor TEXT NOT NULL, reason TEXT NOT NULL,
+                        snapshot_json TEXT NOT NULL, occurred_at TEXT NOT NULL);
+                    CREATE INDEX IF NOT EXISTS idx_source_campaigns_industry
+                        ON source_campaigns(industry_id,status,updated_at DESC);
+                    CREATE INDEX IF NOT EXISTS idx_source_queries_campaign
+                        ON source_queries(campaign_id,round_no,created_at);
+                    CREATE INDEX IF NOT EXISTS idx_source_candidates_campaign
+                        ON source_candidates(campaign_id,status,score DESC);
+                    CREATE INDEX IF NOT EXISTS idx_source_candidates_publisher
+                        ON source_candidates(publisher_id,status);
+                    CREATE INDEX IF NOT EXISTS idx_source_reviews_candidate
+                        ON source_reviews(candidate_id,occurred_at,id);
+                    CREATE TRIGGER IF NOT EXISTS source_reviews_no_update
+                    BEFORE UPDATE ON source_reviews BEGIN
+                        SELECT RAISE(ABORT, 'source_reviews is append-only');
+                    END;
+                    CREATE TRIGGER IF NOT EXISTS source_reviews_no_delete
+                    BEFORE DELETE ON source_reviews BEGIN
+                        SELECT RAISE(ABORT, 'source_reviews is append-only');
+                    END;
+                """)
+                con.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)",
+                            (16, utc_now()))
+            if not con.execute(
+                    "SELECT 1 FROM schema_migrations WHERE version=17").fetchone():
+                _execute_script(con, """
+                    CREATE TABLE IF NOT EXISTS story_observations (
+                        id TEXT PRIMARY KEY,
+                        industry_id TEXT NOT NULL REFERENCES industries(id) ON DELETE CASCADE,
+                        story_id TEXT NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+                        intelligence_date TEXT NOT NULL, observed_at TEXT NOT NULL,
+                        rank INTEGER NOT NULL CHECK(rank > 0), score REAL NOT NULL,
+                        independent_publishers INTEGER NOT NULL CHECK(independent_publishers >= 0),
+                        publisher_clusters_json TEXT NOT NULL,
+                        evidence_strength REAL NOT NULL CHECK(evidence_strength >= 0),
+                        classification TEXT NOT NULL, algorithm_version TEXT NOT NULL,
+                        raw_json TEXT NOT NULL, created_at TEXT NOT NULL);
+                    CREATE TABLE IF NOT EXISTS quality_observations (
+                        id TEXT PRIMARY KEY,
+                        industry_id TEXT NOT NULL REFERENCES industries(id) ON DELETE CASCADE,
+                        observed_date TEXT NOT NULL, observed_at TEXT NOT NULL,
+                        metric TEXT NOT NULL, numerator REAL NOT NULL,
+                        denominator REAL NOT NULL CHECK(denominator >= 0),
+                        algorithm_version TEXT NOT NULL,
+                        dimensions_json TEXT NOT NULL, raw_json TEXT NOT NULL,
+                        created_at TEXT NOT NULL);
+                    CREATE INDEX IF NOT EXISTS idx_story_observations_timeline
+                        ON story_observations(industry_id,story_id,intelligence_date,
+                                              algorithm_version,observed_at);
+                    CREATE INDEX IF NOT EXISTS idx_quality_observations_window
+                        ON quality_observations(industry_id,metric,algorithm_version,
+                                                observed_date);
+                    CREATE TRIGGER IF NOT EXISTS story_observations_no_update
+                    BEFORE UPDATE ON story_observations BEGIN
+                        SELECT RAISE(ABORT, 'story_observations is append-only');
+                    END;
+                    CREATE TRIGGER IF NOT EXISTS story_observations_no_delete
+                    BEFORE DELETE ON story_observations
+                    WHEN EXISTS(SELECT 1 FROM industries WHERE id=OLD.industry_id) BEGIN
+                        SELECT RAISE(ABORT, 'story_observations is append-only');
+                    END;
+                    CREATE TRIGGER IF NOT EXISTS quality_observations_no_update
+                    BEFORE UPDATE ON quality_observations BEGIN
+                        SELECT RAISE(ABORT, 'quality_observations is append-only');
+                    END;
+                    CREATE TRIGGER IF NOT EXISTS quality_observations_no_delete
+                    BEFORE DELETE ON quality_observations
+                    WHEN EXISTS(SELECT 1 FROM industries WHERE id=OLD.industry_id) BEGIN
+                        SELECT RAISE(ABORT, 'quality_observations is append-only');
+                    END;
+                """)
+                con.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)",
+                            (17, utc_now()))
+            if not con.execute(
+                    "SELECT 1 FROM schema_migrations WHERE version=18").fetchone():
+                _execute_script(con, """
+                    CREATE TABLE IF NOT EXISTS source_campaign_rounds (
+                        id TEXT PRIMARY KEY,
+                        campaign_id TEXT NOT NULL REFERENCES source_campaigns(id) ON DELETE CASCADE,
+                        round_no INTEGER NOT NULL CHECK(round_no > 0),
+                        status TEXT NOT NULL CHECK(status IN
+                            ('running','paused','completed','failed')),
+                        lease_token TEXT NOT NULL, plan_json TEXT NOT NULL DEFAULT '[]',
+                        frontier_json TEXT NOT NULL DEFAULT '[]',
+                        outcome_json TEXT NOT NULL DEFAULT '{}',
+                        log_json TEXT NOT NULL DEFAULT '[]',
+                        started_at TEXT NOT NULL, finished_at TEXT, updated_at TEXT NOT NULL,
+                        UNIQUE(campaign_id,round_no));
+                    CREATE INDEX IF NOT EXISTS idx_source_campaign_rounds
+                        ON source_campaign_rounds(campaign_id,round_no DESC);
+                    CREATE TABLE IF NOT EXISTS coverage_rounds (
+                        id TEXT PRIMARY KEY,
+                        industry_id TEXT NOT NULL REFERENCES industries(id) ON DELETE CASCADE,
+                        round_no INTEGER NOT NULL CHECK(round_no > 0),
+                        status TEXT NOT NULL CHECK(status IN
+                            ('planned','running','paused','completed','converged','failed')),
+                        lease_token TEXT NOT NULL DEFAULT '',
+                        frontier_json TEXT NOT NULL DEFAULT '[]',
+                        outcome_json TEXT NOT NULL DEFAULT '{}',
+                        log_json TEXT NOT NULL DEFAULT '[]',
+                        stopping_reason TEXT NOT NULL DEFAULT '',
+                        created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                        UNIQUE(industry_id,round_no));
+                    CREATE TABLE IF NOT EXISTS coverage_round_queries (
+                        id TEXT PRIMARY KEY,
+                        round_id TEXT NOT NULL REFERENCES coverage_rounds(id) ON DELETE CASCADE,
+                        cell_id TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('entity','relation')),
+                        language TEXT NOT NULL, family TEXT NOT NULL DEFAULT '',
+                        dimensions_json TEXT NOT NULL, query TEXT NOT NULL,
+                        status TEXT NOT NULL DEFAULT 'planned',
+                        outcome_json TEXT NOT NULL DEFAULT '{}',
+                        created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                        UNIQUE(round_id,kind,cell_id,query));
+                    CREATE TABLE IF NOT EXISTS entity_candidates (
+                        id TEXT PRIMARY KEY,
+                        industry_id TEXT NOT NULL REFERENCES industries(id) ON DELETE CASCADE,
+                        round_id TEXT NOT NULL REFERENCES coverage_rounds(id) ON DELETE CASCADE,
+                        query_id TEXT REFERENCES coverage_round_queries(id),
+                        cell_id TEXT NOT NULL, canonical_key TEXT NOT NULL,
+                        payload_json TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'candidate'
+                            CHECK(status IN ('candidate','manual_review','accepted','rejected')),
+                        status_reason TEXT NOT NULL DEFAULT '', entity_id TEXT REFERENCES entities(id),
+                        created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                        UNIQUE(industry_id,canonical_key,cell_id));
+                    CREATE TABLE IF NOT EXISTS relation_candidates (
+                        id TEXT PRIMARY KEY,
+                        industry_id TEXT NOT NULL REFERENCES industries(id) ON DELETE CASCADE,
+                        round_id TEXT NOT NULL REFERENCES coverage_rounds(id) ON DELETE CASCADE,
+                        query_id TEXT REFERENCES coverage_round_queries(id),
+                        cell_id TEXT NOT NULL, canonical_key TEXT NOT NULL,
+                        payload_json TEXT NOT NULL, document_id TEXT REFERENCES documents(id),
+                        assertion_id TEXT REFERENCES agent_assertions(id),
+                        status TEXT NOT NULL DEFAULT 'candidate'
+                            CHECK(status IN ('candidate','manual_review','accepted','rejected')),
+                        status_reason TEXT NOT NULL DEFAULT '',
+                        created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                        UNIQUE(industry_id,canonical_key,cell_id));
+                    CREATE TABLE IF NOT EXISTS coverage_candidate_reviews (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        candidate_kind TEXT NOT NULL CHECK(candidate_kind IN ('entity','relation')),
+                        candidate_id TEXT NOT NULL, from_status TEXT NOT NULL,
+                        to_status TEXT NOT NULL, actor TEXT NOT NULL, reason TEXT NOT NULL,
+                        snapshot_json TEXT NOT NULL, occurred_at TEXT NOT NULL);
+                    CREATE INDEX IF NOT EXISTS idx_coverage_rounds_industry
+                        ON coverage_rounds(industry_id,round_no DESC);
+                    CREATE INDEX IF NOT EXISTS idx_coverage_queries_round
+                        ON coverage_round_queries(round_id,status,kind);
+                    CREATE INDEX IF NOT EXISTS idx_entity_candidates_review
+                        ON entity_candidates(industry_id,status,updated_at DESC);
+                    CREATE INDEX IF NOT EXISTS idx_relation_candidates_review
+                        ON relation_candidates(industry_id,status,updated_at DESC);
+                    CREATE TRIGGER IF NOT EXISTS coverage_candidate_reviews_no_update
+                    BEFORE UPDATE ON coverage_candidate_reviews BEGIN
+                        SELECT RAISE(ABORT, 'coverage_candidate_reviews is append-only');
+                    END;
+                    CREATE TRIGGER IF NOT EXISTS coverage_candidate_reviews_no_delete
+                    BEFORE DELETE ON coverage_candidate_reviews BEGIN
+                        SELECT RAISE(ABORT, 'coverage_candidate_reviews is append-only');
+                    END;
+                """)
+                con.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)",
+                            (18, utc_now()))
+            if not con.execute(
+                    "SELECT 1 FROM schema_migrations WHERE version=19").fetchone():
+                _execute_script(con, """
+                    CREATE TABLE IF NOT EXISTS story_daily_snapshots (
+                        id TEXT PRIMARY KEY,
+                        industry_id TEXT NOT NULL REFERENCES industries(id) ON DELETE CASCADE,
+                        story_id TEXT NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+                        source_observation_id TEXT NOT NULL REFERENCES story_observations(id),
+                        intelligence_date TEXT NOT NULL, observed_at TEXT NOT NULL,
+                        rank INTEGER NOT NULL CHECK(rank > 0), score REAL NOT NULL,
+                        independent_publishers INTEGER NOT NULL CHECK(independent_publishers >= 0),
+                        publisher_clusters_json TEXT NOT NULL,
+                        evidence_strength REAL NOT NULL CHECK(evidence_strength >= 0),
+                        classification TEXT NOT NULL, algorithm_version TEXT NOT NULL,
+                        raw_json TEXT NOT NULL, created_at TEXT NOT NULL,
+                        UNIQUE(industry_id,story_id,intelligence_date,algorithm_version));
+                    CREATE INDEX IF NOT EXISTS idx_story_daily_snapshot_timeline
+                        ON story_daily_snapshots(industry_id,story_id,intelligence_date,
+                                                 algorithm_version);
+                    CREATE TRIGGER IF NOT EXISTS story_daily_snapshots_no_update
+                    BEFORE UPDATE ON story_daily_snapshots BEGIN
+                        SELECT RAISE(ABORT, 'story_daily_snapshots is append-only');
+                    END;
+                    CREATE TRIGGER IF NOT EXISTS story_daily_snapshots_no_delete
+                    BEFORE DELETE ON story_daily_snapshots
+                    WHEN EXISTS(SELECT 1 FROM industries WHERE id=OLD.industry_id) BEGIN
+                        SELECT RAISE(ABORT, 'story_daily_snapshots is append-only');
+                    END;
+                """)
+                con.execute("""INSERT OR IGNORE INTO story_daily_snapshots
+                    (id,industry_id,story_id,source_observation_id,intelligence_date,
+                     observed_at,rank,score,independent_publishers,publisher_clusters_json,
+                     evidence_strength,classification,algorithm_version,raw_json,created_at)
+                    SELECT 'sday_' || id,industry_id,story_id,id,intelligence_date,
+                    observed_at,rank,score,independent_publishers,publisher_clusters_json,
+                    evidence_strength,classification,algorithm_version,raw_json,created_at
+                    FROM story_observations
+                    WHERE id IN (SELECT MIN(id) FROM story_observations
+                        GROUP BY industry_id,story_id,intelligence_date,algorithm_version)""")
+                con.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)",
+                            (19, utc_now()))
+            if not con.execute(
+                    "SELECT 1 FROM schema_migrations WHERE version=20").fetchone():
+                _execute_script(con, """
+                    CREATE TABLE IF NOT EXISTS task_runs (
+                        id TEXT PRIMARY KEY,
+                        industry_id TEXT NOT NULL REFERENCES industries(id) ON DELETE CASCADE,
+                        operation TEXT NOT NULL,
+                        origin TEXT NOT NULL CHECK(origin IN
+                            ('app','manual','system_schedule','background_worker')),
+                        status TEXT NOT NULL CHECK(status IN
+                            ('queued','running','cancelling','paused','completed','partial',
+                             'failed','cancelled','interrupted')),
+                        input_json TEXT NOT NULL DEFAULT '{}',
+                        provider TEXT NOT NULL, model TEXT NOT NULL DEFAULT '',
+                        parent_run_id TEXT REFERENCES task_runs(id) ON DELETE SET NULL,
+                        window_start TEXT, window_end TEXT, window_timezone TEXT,
+                        output_path TEXT NOT NULL DEFAULT '', stage TEXT NOT NULL DEFAULT 'queued',
+                        progress INTEGER NOT NULL DEFAULT 0 CHECK(progress BETWEEN 0 AND 100),
+                        checkpoint_json TEXT NOT NULL DEFAULT '{}',
+                        error_json TEXT NOT NULL DEFAULT '{}',
+                        lease_owner TEXT, lease_expires_at TEXT,
+                        lease_ttl_seconds INTEGER NOT NULL DEFAULT 60,
+                        heartbeat_at TEXT, request_dispatched_at TEXT,
+                        credential_handle_ref TEXT,
+                        created_at TEXT NOT NULL, started_at TEXT, finished_at TEXT,
+                        updated_at TEXT NOT NULL);
+                    CREATE TABLE IF NOT EXISTS task_state_events (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        run_id TEXT NOT NULL REFERENCES task_runs(id) ON DELETE CASCADE,
+                        from_status TEXT,
+                        to_status TEXT NOT NULL CHECK(to_status IN
+                            ('queued','running','cancelling','paused','completed','partial',
+                             'failed','cancelled','interrupted')),
+                        action TEXT NOT NULL, actor TEXT NOT NULL,
+                        details_json TEXT NOT NULL DEFAULT '{}', occurred_at TEXT NOT NULL);
+                    CREATE TABLE IF NOT EXISTS background_authorizations (
+                        industry_id TEXT NOT NULL REFERENCES industries(id) ON DELETE CASCADE,
+                        provider TEXT NOT NULL, operation TEXT NOT NULL,
+                        allowed INTEGER NOT NULL DEFAULT 0 CHECK(allowed IN (0,1)),
+                        granted_by TEXT NOT NULL DEFAULT '', granted_at TEXT NOT NULL DEFAULT '',
+                        revoked_by TEXT, revoked_at TEXT, updated_at TEXT NOT NULL,
+                        PRIMARY KEY(industry_id,provider,operation));
+                    CREATE INDEX IF NOT EXISTS idx_task_runs_industry_status
+                        ON task_runs(industry_id,status,updated_at DESC);
+                    CREATE INDEX IF NOT EXISTS idx_task_runs_lease
+                        ON task_runs(status,lease_expires_at);
+                    CREATE INDEX IF NOT EXISTS idx_task_events_run
+                        ON task_state_events(run_id,id);
+                    CREATE TRIGGER IF NOT EXISTS task_state_events_no_update
+                    BEFORE UPDATE ON task_state_events BEGIN
+                        SELECT RAISE(ABORT, 'task_state_events is append-only');
+                    END;
+                    CREATE TRIGGER IF NOT EXISTS task_state_events_no_delete
+                    BEFORE DELETE ON task_state_events
+                    WHEN EXISTS(SELECT 1 FROM task_runs WHERE id=OLD.run_id) BEGIN
+                        SELECT RAISE(ABORT, 'task_state_events is append-only');
+                    END;
+                """)
+                con.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)",
+                            (20, utc_now()))
+            if not con.execute(
+                    "SELECT 1 FROM schema_migrations WHERE version=21").fetchone():
+                for statement in (
+                    "ALTER TABLE automation_schedules ADD COLUMN last_period_identity TEXT",
+                    "ALTER TABLE automation_schedules ADD COLUMN attempted_period_identity TEXT",
+                    "ALTER TABLE automation_schedules ADD COLUMN runtime_status TEXT NOT NULL DEFAULT 'idle'",
+                    "ALTER TABLE automation_schedules ADD COLUMN pause_reason TEXT NOT NULL DEFAULT ''",
+                    "ALTER TABLE automation_schedules ADD COLUMN max_retries INTEGER NOT NULL DEFAULT 5",
+                    "ALTER TABLE automation_schedules ADD COLUMN last_origin TEXT NOT NULL DEFAULT ''",
+                    "ALTER TABLE automation_schedules ADD COLUMN last_window_start TEXT",
+                    "ALTER TABLE automation_schedules ADD COLUMN last_window_end TEXT",
+                    "ALTER TABLE automation_schedules ADD COLUMN last_window_timezone TEXT",
+                    "ALTER TABLE automation_schedules ADD COLUMN last_success_boundary TEXT",
+                ):
+                    try:
+                        con.execute(statement)
+                    except sqlite3.OperationalError as exc:
+                        if "duplicate column name" not in str(exc).casefold():
+                            raise
+                _execute_script(con, """
+                    CREATE TABLE IF NOT EXISTS worker_wakeups (
+                        id TEXT PRIMARY KEY, owner TEXT NOT NULL, origin TEXT NOT NULL,
+                        started_at TEXT NOT NULL, finished_at TEXT, status TEXT NOT NULL,
+                        summary_json TEXT NOT NULL DEFAULT '{}', error_json TEXT NOT NULL DEFAULT '{}');
+                    CREATE INDEX IF NOT EXISTS idx_worker_wakeups_started
+                        ON worker_wakeups(started_at DESC);
+                """)
+                con.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)",
+                            (21, utc_now()))
 
 
     def ensure_industry(self, folder: str, name: str = "") -> str:
@@ -592,56 +1115,78 @@ class IntelligenceRepository(
                 self._mark_compat_dirty(con, iid, "sources")
         return cur.rowcount > 0
 
-    def upsert_source(self, folder: str, category: str, item: dict) -> str:
+    def _upsert_source_in_transaction(self, con: sqlite3.Connection, iid: str,
+                                      category: str, item: dict, *,
+                                      monitoring_status: str) -> str:
         url = canonical_url(item.get("url", ""))
         if not url:
             raise ValueError("来源需要有效的 http/https URL")
-        iid = self.industry_id(folder)
         sid = stable_id("src", url)
         publisher = publisher_profile({**item, "url": url})
         publisher_id = stable_id("pub", publisher["owner_cluster"])
         now = utc_now()
-        with self.transaction() as con:
-            con.execute("""INSERT INTO sources
-                (id,canonical_url,name,publisher_country,metadata_json,created_at,updated_at)
-                VALUES(?,?,?,?,?,?,?) ON CONFLICT(canonical_url) DO UPDATE SET
-                name=excluded.name,publisher_country=excluded.publisher_country,
-                metadata_json=excluded.metadata_json,updated_at=excluded.updated_at""",
-                (sid, url, item.get("name") or url, item.get("publisher_country", ""),
-                 json_text(item), now, now))
-            con.execute("""INSERT INTO publishers
-                (id,canonical_name,country,owner_cluster,verification_status,
-                 metadata_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)
-                ON CONFLICT(id) DO UPDATE SET
-                canonical_name=excluded.canonical_name,
-                country=CASE WHEN excluded.country!='' THEN excluded.country ELSE publishers.country END,
-                verification_status=CASE WHEN excluded.verification_status='verified'
-                    THEN 'verified' ELSE publishers.verification_status END,
-                metadata_json=excluded.metadata_json,updated_at=excluded.updated_at""",
-                (publisher_id, publisher["name"], item.get("publisher_country", ""),
-                 publisher["owner_cluster"], publisher["verification_status"],
-                 json_text(publisher), now, now))
-            if publisher["domain"]:
-                con.execute("""INSERT INTO publisher_domains(domain,publisher_id,verified,source)
-                    VALUES(?,?,?,?) ON CONFLICT(domain) DO UPDATE SET
-                    publisher_id=excluded.publisher_id,
-                    verified=MAX(publisher_domains.verified,excluded.verified)""",
-                    (publisher["domain"], publisher_id,
-                     int(publisher["verification_status"] == "verified"), "registry"))
-            con.execute("""INSERT OR REPLACE INTO source_publishers
-                (source_id,publisher_id,relation,confidence) VALUES(?,?,?,?)""",
-                (sid, publisher_id, "publishes",
-                 1.0 if publisher["verification_status"] == "verified" else 0.6))
-            con.execute("""INSERT INTO industry_sources
-                (industry_id,source_id,category,monitoring_status,added_manually,metadata_json)
-                VALUES(?,?,?,?,?,?) ON CONFLICT(industry_id,source_id,category) DO UPDATE SET
-                monitoring_status=excluded.monitoring_status,
-                added_manually=MAX(industry_sources.added_manually,excluded.added_manually),
-                metadata_json=excluded.metadata_json,deleted_at=NULL""",
-                (iid, sid, category, item.get("monitoring_status", "active"),
-                 int(bool(item.get("added_manually"))), json_text(item)))
-            self._mark_compat_dirty(con, iid, "sources")
+        stored_item = {**item, "monitoring_status": monitoring_status}
+        con.execute("""INSERT INTO sources
+            (id,canonical_url,name,publisher_country,metadata_json,created_at,updated_at)
+            VALUES(?,?,?,?,?,?,?) ON CONFLICT(canonical_url) DO UPDATE SET
+            name=excluded.name,publisher_country=excluded.publisher_country,
+            metadata_json=excluded.metadata_json,updated_at=excluded.updated_at""",
+            (sid, url, item.get("name") or url, item.get("publisher_country", ""),
+             json_text(stored_item), now, now))
+        con.execute("""INSERT INTO publishers
+            (id,canonical_name,country,owner_cluster,verification_status,
+             metadata_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)
+            ON CONFLICT(id) DO UPDATE SET
+            canonical_name=excluded.canonical_name,
+            country=CASE WHEN excluded.country!='' THEN excluded.country ELSE publishers.country END,
+            verification_status=CASE WHEN excluded.verification_status='verified'
+                THEN 'verified' ELSE publishers.verification_status END,
+            metadata_json=excluded.metadata_json,updated_at=excluded.updated_at""",
+            (publisher_id, publisher["name"], item.get("publisher_country", ""),
+             publisher["owner_cluster"], publisher["verification_status"],
+             json_text(publisher), now, now))
+        if publisher["domain"]:
+            con.execute("""INSERT INTO publisher_domains(domain,publisher_id,verified,source)
+                VALUES(?,?,?,?) ON CONFLICT(domain) DO UPDATE SET
+                publisher_id=excluded.publisher_id,
+                verified=MAX(publisher_domains.verified,excluded.verified)""",
+                (publisher["domain"], publisher_id,
+                 int(publisher["verification_status"] == "verified"), "registry"))
+        con.execute("""INSERT OR REPLACE INTO source_publishers
+            (source_id,publisher_id,relation,confidence) VALUES(?,?,?,?)""",
+            (sid, publisher_id, "publishes",
+             1.0 if publisher["verification_status"] == "verified" else 0.6))
+        con.execute("""INSERT INTO industry_sources
+            (industry_id,source_id,category,monitoring_status,added_manually,metadata_json)
+            VALUES(?,?,?,?,?,?) ON CONFLICT(industry_id,source_id,category) DO UPDATE SET
+            monitoring_status=excluded.monitoring_status,
+            added_manually=MAX(industry_sources.added_manually,excluded.added_manually),
+            metadata_json=excluded.metadata_json,deleted_at=NULL""",
+            (iid, sid, category, monitoring_status,
+             int(bool(item.get("added_manually"))), json_text(stored_item)))
+        self._mark_compat_dirty(con, iid, "sources")
         return sid
+
+    def upsert_source(self, folder: str, category: str, item: dict) -> str:
+        from src.source_review import assess_source_candidate
+
+        iid = self.industry_id(folder)
+        requested = str(item.get("monitoring_status") or "recommended_manual").casefold()
+        monitoring_status = requested
+        if item.get("added_manually"):
+            monitoring_status = "recommended_manual"
+        elif requested == "active":
+            assessment = assess_source_candidate(item, category=category)
+            monitoring_status = (
+                "active" if assessment["decision"] == "active"
+                else "recommended_manual")
+        elif requested in {"manual", "manual_review"}:
+            monitoring_status = "recommended_manual"
+        elif requested not in {"recommended_manual", "reserve", "quarantined", "rejected"}:
+            monitoring_status = "recommended_manual"
+        with self.transaction() as con:
+            return self._upsert_source_in_transaction(
+                con, iid, category, item, monitoring_status=monitoring_status)
 
     def list_sources(self, folder: str) -> list[dict]:
         iid = self.industry_id(folder)
@@ -731,12 +1276,27 @@ class IntelligenceRepository(
                 (iid, source_id, adapter, status, now, last_success, last_good,
                  retry_after, failures, error_code, error_message,
                  json_text(metadata or {})))
+            dimensions = {"source_id": source_id, "adapter": adapter,
+                          "error_code": error_code or "none"}
+            self._insert_quality_observation(con, iid, {
+                "observed_at": now, "metric": "source_success_rate",
+                "numerator": int(success), "denominator": 1,
+                "algorithm_version": "source-health-v1", "dimensions": dimensions,
+            })
+            latency = (metadata or {}).get("latency_ms")
+            if latency is not None:
+                self._insert_quality_observation(con, iid, {
+                    "observed_at": now, "metric": "source_latency_ms",
+                    "numerator": latency, "denominator": 1,
+                    "algorithm_version": "source-health-v1", "dimensions": dimensions,
+                })
 
     def save_story_groups(self, folder: str, groups: list[dict],
                           clustering_version: str) -> list[str]:
         """Persist clusters while preserving identity through document overlap."""
         iid, now = self.industry_id(folder), utc_now()
         saved: list[str] = []
+        run_observed: list[str] = []
         with self.transaction() as con:
             locked_documents = {row["document_id"] for row in con.execute(
                 "SELECT document_id FROM story_editorial_constraints WHERE industry_id=?",
@@ -756,6 +1316,7 @@ class IntelligenceRepository(
                 story_id = existing["story_id"] if existing else stable_id(
                     "story", f"{iid}:{normalized_name(group.get('title', ''))}")
                 observed = [str(item.get("observed_at") or now) for item in documents]
+                run_observed.extend(observed)
                 con.execute("""INSERT INTO stories
                     (id,industry_id,canonical_title,story_family,status,
                      clustering_version,first_seen_at,last_seen_at,metadata_json,
@@ -778,6 +1339,40 @@ class IntelligenceRepository(
                         (story_id, item["document_id"], item.get("relation", "reports"),
                          item.get("publisher_cluster"), now))
                 saved.append(story_id)
+            from src.signal_momentum import rank_signals
+            from intdog_core.observability_repository import _intelligence_date
+            run_observed_at = max(run_observed) if run_observed else now
+            run_day = _intelligence_date(run_observed_at)
+            qualified = con.execute("""SELECT id,status,last_seen_at,metadata_json FROM stories
+                WHERE industry_id=? AND status IN
+                ('accepted','verified','corroborated','collected')""", (iid,)).fetchall()
+            signals = []
+            for story in qualified:
+                if _intelligence_date(story["last_seen_at"]) != run_day:
+                    continue
+                metadata = json_value(story["metadata_json"], {})
+                clusters = [row[0] for row in con.execute("""SELECT DISTINCT
+                    publisher_cluster FROM story_documents WHERE story_id=?
+                    AND publisher_cluster IS NOT NULL AND publisher_cluster!=''
+                    ORDER BY publisher_cluster""", (story["id"],))]
+                signals.append({
+                    "story_id": story["id"],
+                    "score": float(metadata.get(
+                        "ranking_score", metadata.get("source_quality", 0)) or 0),
+                    "publisher_clusters": clusters,
+                    "evidence_strength": float(metadata.get(
+                        "evidence_strength", metadata.get("source_quality", 0)) or 0),
+                    "classification": story["status"],
+                })
+            for signal in rank_signals(signals):
+                self._insert_story_observation(con, iid, signal["story_id"], {
+                    "observed_at": run_observed_at, "rank": signal["rank"],
+                    "score": signal["score"],
+                    "publisher_clusters": signal["publisher_clusters"],
+                    "evidence_strength": signal["evidence_strength"],
+                    "classification": signal["classification"],
+                    "algorithm_version": clustering_version,
+                }, canonical_snapshot=True)
         return saved
 
     def list_stories(self, folder: str, limit: int = 100) -> list[dict]:
@@ -786,9 +1381,47 @@ class IntelligenceRepository(
             rows = con.execute("""SELECT s.*,COUNT(sd.document_id) AS document_count,
                 COUNT(DISTINCT sd.publisher_cluster) AS publisher_count
                 FROM stories s LEFT JOIN story_documents sd ON sd.story_id=s.id
-                WHERE s.industry_id=? AND s.status!='merged' GROUP BY s.id
+                WHERE s.industry_id=? AND s.status NOT IN ('merged','ignored') GROUP BY s.id
                 ORDER BY s.last_seen_at DESC LIMIT ?""", (iid, limit)).fetchall()
         return [dict(row) for row in rows]
+
+    def ignore_story(self, folder: str, story_id: str, *, actor: str,
+                     reason: str) -> None:
+        """Hide one Story while retaining an auditable drift signal."""
+        iid, now = self.industry_id(folder), utc_now()
+        actor = str(actor or "").strip()
+        reason = str(reason or "").strip()
+        if not actor or not reason:
+            raise ValueError("actor and reason are required")
+        with self.transaction() as con:
+            story = con.execute(
+                "SELECT status FROM stories WHERE id=? AND industry_id=?",
+                (story_id, iid)).fetchone()
+            if story is None:
+                raise FileNotFoundError("Story 不存在")
+            if story["status"] == "ignored":
+                raise ValueError("Story already ignored")
+            snapshot = con.execute("""SELECT rank,intelligence_date,algorithm_version
+                FROM story_daily_snapshots WHERE industry_id=? AND story_id=?
+                ORDER BY intelligence_date DESC,observed_at DESC,id DESC LIMIT 1""",
+                (iid, story_id)).fetchone()
+            con.execute("UPDATE stories SET status='ignored',updated_at=? WHERE id=?",
+                        (now, story_id))
+            details = {"reason": reason}
+            if snapshot:
+                details.update({"rank": int(snapshot["rank"]),
+                                "intelligence_date": snapshot["intelligence_date"],
+                                "ranking_version": snapshot["algorithm_version"]})
+            con.execute("""INSERT INTO story_reviews
+                (story_id,action,actor,details_json,occurred_at) VALUES(?,?,?,?,?)""",
+                (story_id, "ignore", actor, json_text(details), now))
+            self._insert_quality_observation(con, iid, {
+                "observed_at": now, "metric": "top_item_ignore_rate",
+                "numerator": 1, "denominator": 1,
+                "algorithm_version": "story-editorial-v1",
+                "dimensions": {"story_id": story_id, "rank": (
+                    int(snapshot["rank"]) if snapshot else 0), "reason": reason},
+            })
 
     def merge_stories(self, folder: str, target_id: str, source_id: str,
                       actor: str = "app") -> None:
@@ -821,6 +1454,12 @@ class IntelligenceRepository(
             con.execute("""INSERT INTO story_reviews
                 (story_id,action,actor,details_json,occurred_at) VALUES(?,?,?,?,?)""",
                 (target_id, "merge", actor, json_text({"source_story_id": source_id}), now))
+            self._insert_quality_observation(con, iid, {
+                "observed_at": now, "metric": "manual_correction_rate",
+                "numerator": 1, "denominator": 1,
+                "algorithm_version": "story-editorial-v1",
+                "dimensions": {"action": "merge"},
+            })
 
     def split_story(self, folder: str, story_id: str, document_ids: list[str],
                     title: str, actor: str = "app") -> str:
@@ -868,6 +1507,12 @@ class IntelligenceRepository(
                 (story_id,action,actor,details_json,occurred_at) VALUES(?,?,?,?,?)""",
                 (story_id, "split", actor,
                  json_text({"new_story_id": new_id, "document_ids": document_ids}), now))
+            self._insert_quality_observation(con, iid, {
+                "observed_at": now, "metric": "manual_correction_rate",
+                "numerator": 1, "denominator": 1,
+                "algorithm_version": "story-editorial-v1",
+                "dimensions": {"action": "split"},
+            })
         return new_id
 
     def upsert_document(self, folder: str, category: str, date: str, item: dict) -> str:
@@ -1044,6 +1689,7 @@ class IntelligenceRepository(
             "title": "LOWER(d.title),d.id",
             "category": "LOWER(x.category),LOWER(d.title),d.id",
             "source": f"{source_expr},LOWER(d.title),d.id",
+            "published_at": "COALESCE(d.published_at,x.observed_date),LOWER(d.title),d.id",
         }.get(sort)
         if order is None:
             raise ValueError("不支持的排序方式")
@@ -1169,6 +1815,49 @@ class IntelligenceRepository(
         iid = self.industry_id(folder)
         now = utc_now()
         with self.transaction() as con:
+            role = str(item.get("role") or kind)
+            chain = chain_name or str(item.get("chain") or "")
+            valid_evidence: set[tuple[str, str]] = set()
+            for reference in item.get("references") or []:
+                if not isinstance(reference, dict):
+                    continue
+                relation = str(reference.get("relation") or "supports").casefold()
+                if relation not in {"supports", "qualifies", "supports_role"}:
+                    continue
+                if reference.get("role") and str(reference["role"]) != role:
+                    continue
+                referenced_chain = reference.get("chain") or reference.get("chain_stage")
+                if referenced_chain and str(referenced_chain) != chain:
+                    continue
+                document_id = str(reference.get("document_id") or "").strip()
+                if document_id and con.execute("""SELECT 1 FROM industry_documents
+                    WHERE industry_id=? AND document_id=? AND deleted_at IS NULL""",
+                    (iid, document_id)).fetchone():
+                    valid_evidence.add(("document", document_id))
+                claim_id = str(reference.get("claim_id") or "").strip()
+                if claim_id and con.execute("""SELECT 1 FROM claims
+                    WHERE id=? AND industry_id=? AND status='accepted'""",
+                    (claim_id, iid)).fetchone():
+                    valid_evidence.add(("claim", claim_id))
+                assertion_id = str(reference.get("assertion_id") or "").strip()
+                if assertion_id:
+                    assertion = con.execute("""SELECT a.claim_id
+                        FROM agent_assertions a
+                        JOIN agent_results r ON r.id=a.result_id
+                        JOIN claims c ON c.id=a.claim_id
+                        WHERE a.id=? AND r.industry_id=? AND a.status='accepted'
+                        AND c.industry_id=? AND c.status='accepted'""",
+                        (assertion_id, iid, iid)).fetchone()
+                    if assertion:
+                        valid_evidence.add(("assertion", assertion_id))
+            evidence_count = len(valid_evidence)
+            derived_status = "accepted" if evidence_count else "candidate"
+            stored_metadata = {
+                **item,
+                "requested_status": item.get("status", "candidate"),
+                "derived_status": derived_status,
+                "derived_evidence_count": evidence_count,
+            }
             con.execute("""INSERT INTO entities
                 (id,kind,canonical_name,name_en,country,external_ids_json,metadata_json,created_at,updated_at)
                 VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET
@@ -1178,16 +1867,14 @@ class IntelligenceRepository(
                 metadata_json=excluded.metadata_json,updated_at=excluded.updated_at""",
                 (eid, kind, name, item.get("name_en", ""), country,
                  json_text(item.get("external_ids", {})),
-                 json_text({**item, "legacy_id": item.get("id", "")}), now, now))
-            role = str(item.get("role") or kind)
-            chain = chain_name or str(item.get("chain") or "")
+                 json_text({**stored_metadata, "legacy_id": item.get("id", "")}), now, now))
             con.execute("""INSERT INTO industry_entities
                 (industry_id,entity_id,role,chain_name,status,confidence,metadata_json)
                 VALUES(?,?,?,?,?,?,?) ON CONFLICT(industry_id,entity_id,role,chain_name)
                 DO UPDATE SET status=excluded.status,confidence=excluded.confidence,
                 metadata_json=excluded.metadata_json""",
-                (iid, eid, role, chain, item.get("status", "candidate"),
-                 item.get("confidence"), json_text(item)))
+                (iid, eid, role, chain, derived_status,
+                 item.get("confidence"), json_text(stored_metadata)))
             for alias in aliases:
                 con.execute("INSERT OR IGNORE INTO entity_aliases(entity_id,alias) VALUES(?,?)",
                             (eid, alias))
@@ -1216,8 +1903,8 @@ class IntelligenceRepository(
                     status=excluded.status,confidence=excluded.confidence,
                     evidence_count=excluded.evidence_count,metadata_json=excluded.metadata_json""",
                     (role_id, iid, eid, chain_id, role, item.get("valid_from") or None,
-                     item.get("valid_to") or None, item.get("status", "candidate"),
-                     item.get("confidence"), len(item.get("references") or []), json_text(item)))
+                     item.get("valid_to") or None, derived_status,
+                     item.get("confidence"), evidence_count, json_text(stored_metadata)))
                 self._mark_compat_dirty(con, iid, "chains")
             if kind != "supply_chain_activity":
                 self._mark_compat_dirty(con, iid, "entities")
@@ -1225,17 +1912,90 @@ class IntelligenceRepository(
 
     def upsert_relation(self, folder: str, src_id: str, predicate: str, dst_id: str,
                         *, valid_from: str = "", valid_to: str = "",
-                        confidence: float | None = None, metadata: dict | None = None) -> str:
+                        confidence: float | None = None, metadata: dict | None = None,
+                        references: list[dict] | None = None) -> str:
+        """Admit an evidenced relation or route it to the review queue.
+
+        A caller-controlled status is intentionally not accepted.  Canonical
+        relation rows require a current-industry Document or an accepted
+        current-industry Claim/Assertion; otherwise only a candidate is saved.
+        """
         iid = self.industry_id(folder)
         rid = stable_id("rel", iid, src_id, predicate, dst_id, valid_from)
+        metadata = dict(metadata or {})
+        requested_references = references if references is not None else metadata.get(
+            "references", [])
         with self.transaction() as con:
+            membership_count = con.execute("""SELECT COUNT(DISTINCT entity_id)
+                FROM industry_entities WHERE industry_id=? AND entity_id IN (?,?)""",
+                (iid, src_id, dst_id)).fetchone()[0]
+            if membership_count != 2:
+                raise ValueError("relation endpoints must belong to the current industry")
+            valid_evidence: list[dict] = []
+            for item in requested_references if isinstance(requested_references, list) else []:
+                if not isinstance(item, dict):
+                    continue
+                document_id = str(item.get("document_id") or "").strip()
+                if document_id and con.execute("""SELECT 1 FROM industry_documents
+                        WHERE industry_id=? AND document_id=? AND deleted_at IS NULL""",
+                        (iid, document_id)).fetchone():
+                    valid_evidence.append({"kind": "document", "id": document_id})
+                    continue
+                claim_id = str(item.get("claim_id") or "").strip()
+                if claim_id and con.execute("""SELECT 1 FROM claims WHERE id=?
+                        AND industry_id=? AND status='accepted' AND superseded_at IS NULL""",
+                        (claim_id, iid)).fetchone():
+                    valid_evidence.append({"kind": "claim", "id": claim_id})
+                    continue
+                assertion_id = str(item.get("assertion_id") or "").strip()
+                if assertion_id and con.execute("""SELECT 1 FROM agent_assertions a
+                        JOIN agent_results r ON r.id=a.result_id JOIN claims c ON c.id=a.claim_id
+                        WHERE a.id=? AND r.industry_id=? AND a.status='accepted'
+                        AND c.industry_id=? AND c.status='accepted' AND c.superseded_at IS NULL""",
+                        (assertion_id, iid, iid)).fetchone():
+                    valid_evidence.append({"kind": "assertion", "id": assertion_id})
+            if not valid_evidence:
+                now = utc_now()
+                row = con.execute("""SELECT id FROM coverage_rounds WHERE industry_id=?
+                    AND status='planned' AND stopping_reason='relation admission review'
+                    ORDER BY round_no DESC LIMIT 1""", (iid,)).fetchone()
+                if row:
+                    round_id = row["id"]
+                else:
+                    round_no = int(con.execute("""SELECT COALESCE(MAX(round_no),0)+1
+                        FROM coverage_rounds WHERE industry_id=?""", (iid,)).fetchone()[0])
+                    round_id = stable_id("cvr", iid, round_no)
+                    con.execute("""INSERT INTO coverage_rounds
+                        (id,industry_id,round_no,status,frontier_json,outcome_json,log_json,
+                         stopping_reason,created_at,updated_at)
+                        VALUES(?,?,?,'planned','[]','{}','[]','relation admission review',?,?)""",
+                        (round_id, iid, round_no, now, now))
+                payload = {"source": src_id, "target": dst_id, "relation": predicate,
+                           "valid_from": valid_from, "valid_to": valid_to,
+                           "confidence": confidence, **metadata}
+                canonical_key = stable_id("relation-candidate-key", src_id, predicate, dst_id)
+                candidate_id = stable_id("rlc", iid, canonical_key, "relation-admission")
+                con.execute("""INSERT INTO relation_candidates
+                    (id,industry_id,round_id,query_id,cell_id,canonical_key,payload_json,
+                     document_id,assertion_id,status,status_reason,created_at,updated_at)
+                    VALUES(?,?,?,?,?,?,?,NULL,NULL,'manual_review',?,?,?)
+                    ON CONFLICT(industry_id,canonical_key,cell_id) DO UPDATE SET
+                    payload_json=CASE WHEN relation_candidates.status IN
+                        ('candidate','manual_review') THEN excluded.payload_json
+                        ELSE relation_candidates.payload_json END,
+                    updated_at=excluded.updated_at""",
+                    (candidate_id, iid, round_id, None, "relation-admission", canonical_key,
+                     json_text(payload), "canonical relation requires evidence", now, now))
+                return candidate_id
+            stored_metadata = {**metadata, "evidence": valid_evidence,
+                               "derived_evidence_count": len(valid_evidence)}
             con.execute("""INSERT INTO relations
                 (id,src_entity_id,predicate,dst_entity_id,industry_id,valid_from,valid_to,
                  confidence,metadata_json) VALUES(?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(id) DO UPDATE SET valid_to=excluded.valid_to,
                 confidence=excluded.confidence,metadata_json=excluded.metadata_json""",
                 (rid, src_id, predicate, dst_id, iid, valid_from or None, valid_to or None,
-                 confidence, json_text(metadata or {})))
+                 confidence, json_text(stored_metadata)))
         return rid
 
     def upsert_claim(self, folder: str, predicate: str, object_value,
@@ -1412,7 +2172,8 @@ class IntelligenceRepository(
                 "claims": scalar("SELECT COUNT(*) FROM claims WHERE industry_id=? AND superseded_at IS NULL"),
                 "verified_claims": scalar(
                     "SELECT COUNT(*) FROM claims WHERE industry_id=? "
-                    "AND superseded_at IS NULL AND status IN ('verified','corroborated')"),
+                    "AND superseded_at IS NULL "
+                    "AND status IN ('accepted','verified','corroborated')"),
                 "evidence": scalar(
                     "SELECT COUNT(*) FROM evidence e JOIN claims c ON c.id=e.claim_id "
                     "WHERE c.industry_id=? AND c.superseded_at IS NULL"),

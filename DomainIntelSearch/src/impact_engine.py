@@ -277,6 +277,8 @@ def _build_impact_task(industry: str, event: str, affected: dict,
   "references": [...]}}，并把 Markdown 正文写入 analysis.md。"""
     return {
         "type": "impact_analysis",
+        "status": "waiting_for_agent",
+        "execution_mode": "taskpack",
         "industry": industry,
         "event": event,
         "prompt": prompt,

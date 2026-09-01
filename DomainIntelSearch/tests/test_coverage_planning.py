@@ -45,7 +45,7 @@ def test_model_discovery_ledger_never_receives_verified_yield(tmp_path):
     assert attempt["evidence"][0]["validation_status"] == "unverified_model_lead"
 
 
-def test_coverage_executor_derives_yield_only_from_validated_canonical_records(tmp_path):
+def test_coverage_executor_persists_only_candidates_and_query_results(tmp_path):
     service = IntDogService(tmp_path)
     service.create_industry("AI", "人工智能")
     cell_id = service.repo.upsert_coverage_cell("AI", {
@@ -70,9 +70,16 @@ def test_coverage_executor_derives_yield_only_from_validated_canonical_records(t
             Probe(True, url, 200) if "valid" in url else
             Probe(False, url, 503, "HTTP 503")))
 
-    assert result["source_yield"] == 1 and result["entity_yield"] == 1
-    assert result["rejected"] == 1
+    assert result["source_yield"] == 0 and result["entity_yield"] == 0
+    assert result["candidate_yield"] == 2
+    assert result["rejected"] == 0
+    assert service.repo.list_sources("AI") == []
+    assert service.repo.list_compat_entities("AI") == []
+    candidates = service.repo.list_source_candidates(result["campaign_id"])
+    assert len(candidates) == 2
+    assert {item["status"] for item in candidates} == {"candidate"}
     attempt = service.repo.coverage_attempts(cell_id)[0]
     assert attempt["status"] == "completed"
-    assert attempt["source_yield"] == 1
-    assert {item["status"] for item in attempt["evidence"]} == {"validated", "rejected"}
+    assert attempt["source_yield"] == 0 and attempt["entity_yield"] == 0
+    assert {item["status"] for item in attempt["evidence"]} == {
+        "candidate_reachable", "candidate_unreachable"}

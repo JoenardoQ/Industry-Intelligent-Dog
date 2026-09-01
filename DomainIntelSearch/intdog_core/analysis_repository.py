@@ -212,7 +212,7 @@ class AnalysisRepositoryMixin:
                     VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
                     ON CONFLICT(industry_id,dimension,target_key) DO UPDATE SET
                     title=excluded.title,priority=excluded.priority,
-                    status=CASE WHEN research_agenda_items.status IN ('done','dismissed')
+                    status=CASE WHEN research_agenda_items.status IN ('in_progress','done','dismissed')
                         THEN research_agenda_items.status ELSE excluded.status END,
                     rationale=excluded.rationale,query_json=excluded.query_json,
                     acceptance_json=excluded.acceptance_json,updated_at=excluded.updated_at""",

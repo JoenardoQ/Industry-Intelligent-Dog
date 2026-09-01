@@ -7,6 +7,7 @@ used automatically inside one publisher cluster and a bounded time window.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import unicodedata
 from datetime import datetime
@@ -97,9 +98,47 @@ def _richness(item: dict) -> tuple[int, int, int, int]:
             -len(str(item.get("url") or "")))
 
 
+def _item_order(item: dict) -> tuple:
+    """Choose one representative independently of caller input order."""
+    richness = _richness(item)
+    syndicated = bool(item.get("syndicated_from") or
+                      item.get("original_publisher_url") or item.get("original_url"))
+    return (*(-value for value in richness), syndicated,
+            canonical_url(item.get("url", "")), str(item.get("id") or ""),
+            normalize_text(item.get("title")))
+
+
+def _document_provenance(item: dict) -> list[dict]:
+    """Retain every absorbed Document-to-Source observation in the merged record."""
+    rows = list(item.get("document_provenance") or [])
+    document_id = str(item.get("document_id") or item.get("id") or "")
+    source_id = str(item.get("source_id") or "")
+    url = canonical_url(item.get("url", ""))
+    if document_id or source_id:
+        rows.append({
+            "document_id": document_id,
+            "source_id": source_id,
+            "url": url,
+            "publisher_cluster": publisher_key(item),
+        })
+    unique: dict[str, dict] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        normalized = {
+            "document_id": str(row.get("document_id") or ""),
+            "source_id": str(row.get("source_id") or ""),
+            "url": canonical_url(row.get("url", "")),
+            "publisher_cluster": str(row.get("publisher_cluster") or ""),
+        }
+        key = json.dumps(normalized, ensure_ascii=False, sort_keys=True,
+                         separators=(",", ":"))
+        unique[key] = normalized
+    return [unique[key] for key in sorted(unique)]
+
+
 def merge_duplicate(primary: dict, duplicate: dict, reason: str) -> dict:
-    richer, other = ((duplicate, primary) if _richness(duplicate) > _richness(primary)
-                     else (primary, duplicate))
+    richer, other = sorted((primary, duplicate), key=_item_order)
     merged = dict(richer)
     for key, value in other.items():
         if key not in merged or merged[key] in (None, "", [], {}):
@@ -113,6 +152,13 @@ def merge_duplicate(primary: dict, duplicate: dict, reason: str) -> dict:
     merged["duplicate_count"] = max(
         int(primary.get("duplicate_count") or 1),
         int(duplicate.get("duplicate_count") or 1)) + 1
+    merged["document_provenance"] = _document_provenance(primary) + [
+        row for row in _document_provenance(duplicate)
+        if row not in _document_provenance(primary)]
+    merged["document_provenance"] = sorted(
+        merged["document_provenance"],
+        key=lambda row: (row["document_id"], row["source_id"], row["url"],
+                         row["publisher_cluster"]))
     merged["dedup_reason"] = reason
     merged["dedup_algorithm"] = ALGORITHM_VERSION
     merged["content_hash"] = content_fingerprint(merged)
@@ -122,7 +168,7 @@ def merge_duplicate(primary: dict, duplicate: dict, reason: str) -> dict:
 def collapse_batch(items: list[dict]) -> tuple[list[dict], dict]:
     kept: list[dict] = []
     reasons: dict[str, int] = {}
-    for item in items:
+    for item in sorted(items, key=_item_order):
         match = next(((index, duplicate_reason(existing, item))
                       for index, existing in enumerate(kept)
                       if duplicate_reason(existing, item)), None)
@@ -132,6 +178,7 @@ def collapse_batch(items: list[dict]) -> tuple[list[dict], dict]:
         index, reason = match
         kept[index] = merge_duplicate(kept[index], item, reason)
         reasons[reason] = reasons.get(reason, 0) + 1
+    kept.sort(key=_item_order)
     return kept, {"input": len(items), "kept": len(kept),
                   "duplicates": len(items) - len(kept), "reasons": reasons,
                   "algorithm": ALGORITHM_VERSION}

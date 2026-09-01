@@ -82,6 +82,41 @@ def publisher_profile(item: dict) -> dict:
             "quality": 0.35 if domain in LOW_SIGNAL_DOMAINS else 0.50}
 
 
+def evidence_publisher_profile(url: str) -> dict:
+    """Resolve verification identity from a fetched URL only.
+
+    Agent-supplied publisher names, tiers, indexed-source labels, and ownership
+    claims are intentionally excluded from this boundary.
+    """
+    profile = publisher_profile({"url": str(url or "")})
+    parsed = urlsplit(str(url or ""))
+    domain = domain_of(url)
+    path = parsed.path.casefold()
+    authorities: set[str] = set()
+
+    # Authority is granted to a reviewed document class, not to every page on
+    # a trusted domain.  These rules are intentionally narrow and local.
+    if domain == "sec.gov" or domain.endswith(".sec.gov"):
+        authorities.update({"official_identity", "direct_party"})
+        if "/archives/edgar/" in path:
+            authorities.update({"regulatory_filing", "audited_statement"})
+    elif domain in {"cninfo.com.cn", "hkexnews.hk"}:
+        authorities.update({"official_identity", "direct_party",
+                            "regulatory_filing", "audited_statement"})
+    elif profile["evidence_type"] == "official_primary":
+        authorities.update({"official_identity", "direct_party"})
+
+    if domain == "nist.gov" or domain.endswith(".nist.gov"):
+        if any(marker in path for marker in
+               ("/publications/", "/standards/", "/standard/", "/specifications/")):
+            authorities.update({"standard", "official_spec"})
+    if domain in {"nature.com", "science.org", "ieee.org", "acm.org",
+                  "arxiv.org", "doi.org"}:
+        authorities.add("academic_result")
+
+    return {**profile, "authorities": sorted(authorities)}
+
+
 def publisher_key(item: dict) -> str:
     indexed = _indexed_publisher(item)
     if indexed:
@@ -96,3 +131,67 @@ def publisher_key(item: dict) -> str:
 def source_assessment(item: dict) -> tuple[float, str]:
     profile = publisher_profile(item)
     return float(profile["quality"]), str(profile["evidence_type"])
+
+
+def _review_record(item: dict, key: str) -> dict:
+    value = item.get(key)
+    return value if isinstance(value, dict) else {}
+
+
+def _has_evidence_url(record: dict) -> bool:
+    return bool(domain_of(record.get("evidence_url", "")))
+
+
+def source_verification(item: dict) -> dict:
+    """Evaluate explicit source-review records without promoting domain hints.
+
+    `TRUSTED_DOMAINS` remains useful for routing and prioritization, but cannot
+    itself satisfy identity, ownership, or URL admission gates.
+    """
+    profile = publisher_profile(item)
+    identity = _review_record(item, "identity_verification")
+    ownership = _review_record(item, "ownership_verification")
+    url_review = _review_record(item, "url_verification")
+
+    identity_passed = (
+        str(identity.get("status") or "").casefold() == "verified"
+        and _has_evidence_url(identity)
+        and bool(str(identity.get("verified_by") or "").strip()))
+    owner_cluster = str(ownership.get("owner_cluster") or "").strip().casefold()
+    ownership_passed = (
+        str(ownership.get("status") or "").casefold() == "verified"
+        and bool(owner_cluster) and _has_evidence_url(ownership)
+        and bool(str(ownership.get("verified_by") or "").strip()))
+    checked_domain = domain_of(url_review.get("checked_url", ""))
+    candidate_domain = domain_of(item.get("url", ""))
+    try:
+        status_code = int(url_review.get("status_code"))
+    except (TypeError, ValueError):
+        status_code = 0
+    url_passed = (
+        str(url_review.get("status") or "").casefold() == "verified"
+        and url_review.get("reachable") is True
+        and 200 <= status_code < 400
+        and bool(candidate_domain) and checked_domain == candidate_domain
+        and str(url_review.get("verification_origin") or "").casefold()
+        == "server_guarded")
+
+    observed_owner = str(item.get("observed_owner_cluster") or "").strip().casefold()
+    ownership_changed = bool(
+        item.get("ownership_changed") or
+        (observed_owner and owner_cluster and observed_owner != owner_cluster))
+    return {
+        "identity_passed": identity_passed,
+        "ownership_passed": ownership_passed,
+        "url_passed": url_passed,
+        "all_passed": identity_passed and ownership_passed and url_passed,
+        "identity_hint": profile["verification_status"] == "verified",
+        "hint_evidence_type": profile["evidence_type"],
+        "owner_cluster": owner_cluster or profile["owner_cluster"],
+        "ownership_changed": ownership_changed,
+        "records": {
+            "identity": identity,
+            "ownership": ownership,
+            "url": url_review,
+        },
+    }

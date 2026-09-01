@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       version: { description: Test SemVer without v, required: true, default: 4.0.0-test.1, type: string }
-      issue_number: { description: Windows release Issue number, required: true, type: string }
+      issue_number: { description: Existing Windows release Issue number (optional), required: false, type: string }
 permissions:
   actions: read
   contents: write
@@ -11,4 +11,5 @@ permissions:
 jobs:
   release:
     uses: ./.github/workflows/_native-package.yml
-    with: { platform: windows, version: "${{ inputs.version }}", issue_number: "${{ inputs.issue_number }}", publish_prerelease: true }
+    with: { platform: windows, revision: "${{ github.sha }}", version: "${{ inputs.version }}", issue_number: "${{ inputs.issue_number }}", publish_prerelease: true }
+    secrets: inherit

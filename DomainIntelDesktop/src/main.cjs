@@ -9,12 +9,24 @@ const net = require('node:net')
 const path = require('node:path')
 const { backendExecutable, runtimeEnvironment, isAllowedExternalUrl } = require('./runtime.cjs')
 const { clearConfig, publicStatus, readConfig, saveConfig, secureStorageAvailable } = require('./credential-store.cjs')
+const { backgroundServiceStatus, encodeCredentialFrame, installBackgroundService,
+  launchBackgroundWorker, removeBackgroundService, writeCredentialFrame } = require('./background-service.cjs')
+const { InstallNonceStore, assertTrustedIpcEvent, stableBackgroundExecutable,
+  validateInstallRequest } = require('./ipc-security.cjs')
 
 let mainWindow = null
 let backend = null
 let backendOrigin = ''
 let capability = ''
 let stopping = false
+const installNonces = new InstallNonceStore()
+
+function privileged(handler) {
+  return (event,...args) => {
+    assertTrustedIpcEvent(event,{mainWindow,backendOrigin})
+    return handler(...args)
+  }
+}
 
 function writeE2EMarker(state, extra = {}) {
   const marker = process.env.INTDOG_E2E_MARKER
@@ -75,12 +87,19 @@ async function runE2EWorkflow() {
   const headers = { 'X-IntDog-Session': capability }
   const setup = await requestJson('GET', `${backendOrigin}/api/setup`, headers)
   if (!setup?.runtime_ready || !setup?.taskpack_ready) throw new Error('setup contract is not ready')
+  const referenceAgentContract = Array.isArray(setup.mcp_command) && setup.mcp_command.length >= 2
+    && Array.isArray(setup.mcp_configs)
+    && ['codex','claude','workbuddy','generic'].every(id => setup.mcp_configs.some(row => row.id === id))
+  const referenceApiContract = Array.isArray(setup.api_providers)
+    && setup.api_providers.every(row => row.id && row.auth_type && row.default_model !== undefined)
+  if (!referenceAgentContract || !referenceApiContract) throw new Error('reference connection contract failed')
   let credentialLifecycle = 'unavailable'
   if (secureStorageAvailable(safeStorage)) {
     const dummy = 'intdog-e2e-secret-must-not-leak'
     const userData = app.getPath('userData')
     const status = saveConfig(userData, safeStorage, {
-      provider:'openai', model:'e2e-model', apiKey:dummy, apiBase:'https://api.openai.com/v1' })
+      provider:'openai', model:'e2e-model', apiKey:dummy,
+      apiBase:'https://api.openai.com/v1', authType:'bearer' })
     const storedText = fs.readFileSync(path.join(userData, 'provider-config.json'), 'utf8')
     if (!status.configured || storedText.includes(dummy)) throw new Error('secure credential lifecycle failed')
     clearConfig(userData)
@@ -93,13 +112,14 @@ async function runE2EWorkflow() {
     const operated = await mainWindow.webContents.executeJavaScript(`(async()=>{
       const wait=async(test)=>{const end=Date.now()+30000;while(Date.now()<end){const value=test();if(value)return value;await new Promise(r=>setTimeout(r,100))}throw new Error('renderer onboarding timeout')}
       await wait(()=>document.querySelector('#setup-title'))
-      const taskpack=[...document.querySelectorAll('.agent-options label')].find(node=>node.textContent.includes('通用任务包'))?.querySelector('input')
-      if(!taskpack)throw new Error('task-package option missing');taskpack.click()
+      const click=label=>{const button=[...document.querySelectorAll('button')].find(node=>node.textContent.includes(label));if(!button||button.disabled)throw new Error('missing action '+label);button.click()}
+      click('继续：选择连接');await wait(()=>document.querySelector('#connection-title'))
+      const taskpack=[...document.querySelectorAll('.agent-options label')].find(node=>node.textContent.includes('无模型任务包'))?.querySelector('input')
+      if(!taskpack)throw new Error('task-package option missing');taskpack.click();click('继续：选择行业');await wait(()=>document.querySelector('#industry-title'))
+      const createMode=[...document.querySelectorAll('button')].find(node=>node.textContent.trim()==='新建行业');if(createMode)createMode.click()
       const set=(name,value)=>{const input=document.querySelector('[name="'+name+'"]');if(!input)throw new Error('missing '+name);const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;setter.call(input,value);input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}))}
       set('name','发行验收行业');set('folder','E2E')
-      const button=[...document.querySelectorAll('button')].find(node=>node.textContent.includes('创建并开始研究'))
-      if(!button||button.disabled)throw new Error('first task button unavailable')
-      button.click();await wait(()=>location.hash==='#/jobs');return true
+      click('创建并开始研究');await wait(()=>document.querySelector('#bootstrap-title'));return true
     })()`)
     if (!operated) throw new Error('renderer did not submit onboarding')
   }
@@ -113,6 +133,7 @@ async function runE2EWorkflow() {
     await new Promise(resolve => setTimeout(resolve, 250))
   }
   if (!industryPreexisting && (!final || final.status !== 'completed')) throw new Error(`first task failed: ${final?.status || 'timeout'} ${final?.error || ''}`)
+  if (!industryPreexisting) await mainWindow.webContents.executeJavaScript(`(async()=>{const end=Date.now()+15000;while(Date.now()<end){const button=[...document.querySelectorAll('button')].find(node=>node.textContent.includes('进入行业概览'));if(button){button.click();return true}await new Promise(r=>setTimeout(r,100))}throw new Error('onboarding completion unavailable')})()`)
   const overview = await requestJson('GET', `${backendOrigin}/api/industries/E2E/overview`, headers)
   if (!overview?.industry || !Array.isArray(overview.chain)) throw new Error('first overview contract failed')
   const rendererReady = await mainWindow.webContents.executeJavaScript(`(async()=>{
@@ -124,7 +145,8 @@ async function runE2EWorkflow() {
   if (!rendererReady) throw new Error('renderer product contract failed')
   writeE2EMarker('workflow-ready', { workflow:'completed', taskpack:true,
     firstTask:industryPreexisting ? 'persisted' : final.status,
-    rendererReady:true, credentialLifecycle, sourceCount:overview.stats?.sources || 0,
+    rendererReady:true, credentialLifecycle, referenceAgentContract,
+    referenceApiContract, sourceCount:overview.stats?.sources || 0,
     industryPreexisting })
 }
 
@@ -167,10 +189,18 @@ async function start() {
   const providerConfig = readConfig(app.getPath('userData'), safeStorage)
   backend = spawn(executable, ['serve', '--port', String(port)], {
     env: runtimeEnvironment({ resourcesPath: process.resourcesPath,
-      userData: app.getPath('userData'), token: capability, executable, providerConfig }),
+      userData: app.getPath('userData'), token: capability, executable }),
     windowsHide: true,
-    stdio: ['ignore', log, log],
+    stdio: ['pipe', log, log], shell: false,
   })
+  try {
+    await writeCredentialFrame(backend.stdin, encodeCredentialFrame(providerConfig || {}))
+  } catch (error) {
+    try { backend.kill('SIGTERM') } catch { /* already exited */ }
+    throw new Error(`无法安全传递 Provider 凭据：${error.name || 'PipeError'}`)
+  } finally {
+    if (providerConfig) for (const key of Object.keys(providerConfig)) providerConfig[key] = ''
+  }
   fs.closeSync(log)
   await waitUntilReady(backendOrigin, backend)
   session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
@@ -196,14 +226,91 @@ async function start() {
   if (closeAfter > 0) setTimeout(() => app.quit(), closeAfter)
 }
 
-if (!app.requestSingleInstanceLock()) {
+async function startBackgroundWorker() {
+  const executable = backendExecutable(process.resourcesPath)
+  if (!fs.existsSync(executable)) throw new Error(`缺少运行组件：${executable}`)
+  const userData = app.getPath('userData')
+  const status = await launchBackgroundWorker({ executable,
+    resourcesPath:process.resourcesPath, userData, safeStorage,
+    readCredential:(root, storage) => {
+      const encrypted = path.join(root, 'provider-config.json')
+      if (fs.existsSync(encrypted) && !secureStorageAvailable(storage)) {
+        throw new Error('secure storage locked')
+      }
+      return readConfig(root, storage)
+    } })
+  writeE2EMarker('background-finished', {backgroundStatus:status.status,
+    backgroundErrorCategory:status.errorCategory})
+  if (!['completed','paused'].includes(status.status)) process.exitCode = 1
+  return status
+}
+
+async function runE2EServiceCommand(action) {
+  if (process.env.INTDOG_NATIVE_SMOKE_ALLOW_SERVICE !== '1') {
+    throw new Error('native service mutation was not explicitly enabled')
+  }
+  const options = {platform:process.platform, executable:stableBackgroundExecutable({}),
+    userData:app.getPath('userData'), intervalMinutes:15}
+  let status
+  if (action === 'install') {
+    status = await installBackgroundService(options)
+  } else if (action === 'remove') {
+    status = await removeBackgroundService(options)
+  } else {
+    status = await backgroundServiceStatus(options)
+  }
+  writeE2EMarker(`service-${action}-finished`, {serviceAction:action,
+    serviceInstalled:Boolean(status.installed),serviceEnabled:Boolean(status.enabled),
+    servicePlatform:status.platform || process.platform})
+  return status
+}
+
+const backgroundMode = process.argv.includes('--background-worker')
+const serviceMode = process.argv.includes('--e2e-service-install') ? 'install'
+  : process.argv.includes('--e2e-service-remove') ? 'remove'
+    : process.argv.includes('--e2e-service-status') ? 'status' : ''
+
+if (serviceMode) {
+  app.whenReady().then(() => runE2EServiceCommand(serviceMode))
+    .catch(() => { process.exitCode = 1 }).finally(() => app.quit())
+} else if (backgroundMode) {
+  app.whenReady().then(startBackgroundWorker).catch(() => { process.exitCode = 1 })
+    .finally(() => app.quit())
+} else if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
-  ipcMain.handle('intdog:credential-status', () => publicStatus(app.getPath('userData'), safeStorage))
-  ipcMain.handle('intdog:save-provider', (_event, value) =>
-    saveConfig(app.getPath('userData'), safeStorage, value))
-  ipcMain.handle('intdog:clear-provider', () => clearConfig(app.getPath('userData')))
-  ipcMain.handle('intdog:relaunch', () => { app.relaunch(); app.quit(); return true })
+  ipcMain.handle('intdog:credential-status', privileged(() =>
+    publicStatus(app.getPath('userData'), safeStorage)))
+  ipcMain.handle('intdog:save-provider', privileged(value =>
+    saveConfig(app.getPath('userData'), safeStorage, value)))
+  ipcMain.handle('intdog:clear-provider', privileged(() =>
+    clearConfig(app.getPath('userData'))))
+  ipcMain.handle('intdog:background-status', privileged(() => backgroundServiceStatus({
+    platform:process.platform,executable:stableBackgroundExecutable({}),
+    userData:app.getPath('userData') })))
+  ipcMain.handle('intdog:background-request-install', privileged(async () => {
+    const result = await dialog.showMessageBox(mainWindow, {type:'warning',
+      title:'启用 IntDog 后台运行',buttons:['确认启用','取消'],defaultId:1,cancelId:1,
+      message:'允许操作系统在关闭窗口后定期唤醒 IntDog？',
+      detail:'只有已单独授权的行业、Provider 与任务可以使用模型或联网能力。'})
+    if (result.response !== 0) throw new Error('background installation was not approved')
+    return {nonce:installNonces.issue()}
+  }))
+  ipcMain.handle('intdog:background-install', privileged((value = {}) => {
+    const request = validateInstallRequest(value,installNonces)
+    return installBackgroundService({platform:process.platform,
+      executable:stableBackgroundExecutable({}),userData:app.getPath('userData'),
+      intervalMinutes:request.intervalMinutes})
+  }))
+  ipcMain.handle('intdog:background-remove', privileged(() => removeBackgroundService({
+    platform:process.platform,executable:stableBackgroundExecutable({}),
+    userData:app.getPath('userData') })))
+  ipcMain.handle('intdog:relaunch', privileged(() => {
+    app.relaunch(); app.quit(); return true
+  }))
+  ipcMain.handle('intdog:close', privileged(() => {
+    setImmediate(() => app.quit()); return true
+  }))
   app.on('second-instance', () => {
     if (mainWindow) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.focus() }
   })

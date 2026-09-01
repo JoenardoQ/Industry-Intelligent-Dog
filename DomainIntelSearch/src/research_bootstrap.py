@@ -16,6 +16,7 @@ from html.parser import HTMLParser
 from urllib.parse import urljoin, urlsplit
 
 from intdog_core import tracked_function
+from intdog_core.models import json_text, utc_now
 from .services.provider_factory import create_provider
 
 from .knowledge_model import KnowledgeModel
@@ -407,6 +408,8 @@ def build_tasks(industry: str, industry_en: str = "") -> list[dict]:
     source_task = {
         "stage": "sources", "title": "01 信息源发现与核验",
         "output_file": "sources.candidate.json",
+        "admission": "candidate_only",
+        "allowed_statuses": ["candidate"],
         "depends_on": [],
         "prompt": f"""为“{industry} / {industry_en or industry}”建立全面的信息源地图。先搜索再作答。
 只输出 JSON 对象；类别必须包含 official, associations, blogs, platforms, self_media,
@@ -415,12 +418,13 @@ region × subdomain × value_chain_stage × entity_type × source_type × event_
 time_horizon 覆盖单元，按缺口和边际新增搜索。不设中外比例硬限制，但要尽可能提高
 中国发布者原生来源覆盖，尤其是政府/监管、官方媒体、垂直媒体与可靠行业自媒体。每项字段：
 name,url,note,tier,coverage,publisher_country,language(zh/en),
-origin(china/international),access,selection_reason,monitoring_status(active/recommended_manual),
+	origin(china/international),access,selection_reason,monitoring_status(candidate),
 access_note。中文源必须是中国发布者原生网站，
 不得用外站中文翻译页充数。优先政府/监管/统计、标准组织、公司披露、同行评审论文；
 媒体用于交叉验证，社交媒体只能作为线索。优质但因登录、付费墙、反爬或无 RSS 而无法
 自动抓取的来源仍应推荐，标为 recommended_manual 并说明接入障碍。禁止虚构 URL。
-另输出 coverage_ledger、query_ledger 和 stopping_reason；每条 query 记录 dimensions、
+	所有发现项只能是待审查 candidate；URL 可访问、模型评分或搜索排名都不能直接产生 active/trusted。
+	另输出 coverage_ledger、query_ledger 和 stopping_reason；每条 query 记录 dimensions、
 实际查询词、选择理由、discovered_urls 与停止理由。这些记录一律视为待验证线索。""",
     }
     chain_task = {
@@ -483,12 +487,77 @@ def _persist_source_coverage(store, candidate: dict) -> dict:
             "model_yield_credited": 0}
 
 
+def _stage_source_payload(store, payload: dict, *, query_text: str,
+                          family: str) -> dict:
+    """Persist one actual provider/seed batch as candidates, never active sources."""
+    repo = store.service.repo
+    targets = [category for category, _ in SOURCE_CATEGORIES]
+    campaign = repo.create_source_campaign(store.folder, targets, 1)
+    repo.transition_source_campaign(campaign["id"], "running")
+    returned = sum(len(payload.get(category, []) or []) for category in targets
+                   if isinstance(payload.get(category, []) or [], list))
+    query = repo.record_source_query(
+        campaign["id"], round_no=1, language="multilingual", family=family,
+        dimensions={"region": "china+global", "source_type": "all",
+                    "subdomain": "all", "chain_stage": "all",
+                    "entity_type": "publisher", "time_horizon": "current"},
+        query=query_text,
+        outcome={"status": "completed", "returned_count": returned,
+                 "admission": "candidate_only"})
+    saved: dict[str, dict] = {}
+    invalid = 0
+    for category in targets:
+        for item in payload.get(category, []) or []:
+            if not isinstance(item, dict):
+                invalid += 1
+                continue
+            try:
+                candidate = repo.upsert_source_candidate(campaign["id"], {
+                    **item,
+                    "category": category,
+                    "status": "candidate",
+                    "monitoring_status": "candidate",
+                    "query_id": query["id"],
+                })
+            except ValueError:
+                invalid += 1
+                continue
+            saved[candidate["id"]] = candidate
+    qualified_by_category = {category: len({
+        item["publisher_owner_cluster"] for item in saved.values()
+        if item["category"] == category
+    }) for category in targets}
+    now = utc_now()
+    with repo.transaction() as con:
+        con.execute("""UPDATE source_campaigns SET rounds=1,updated_at=?
+            WHERE id=? AND status='running'""", (now, campaign["id"]))
+        con.execute("""INSERT INTO audit_log
+            (occurred_at,actor,action,object_type,object_id,details_json)
+            VALUES(?,'source-payload-stager','source_campaign_round',
+                   'source_campaign',?,?)""",
+                    (now, campaign["id"], json_text({
+                        "round_no": 1,
+                        "new_qualified": sum(qualified_by_category.values()),
+                        "candidate_total": len(saved),
+                        "qualified_by_category": qualified_by_category,
+                        "query_count": 1,
+                        "invalid_count": invalid,
+                    })))
+    return {
+        "campaign_id": campaign["id"],
+        "status": "running",
+        "candidate_total": len(saved),
+        "invalid_count": invalid,
+        "qualified_by_category": qualified_by_category,
+    }
+
+
 def prepare_bootstrap(store, industry_en: str = "", profile: dict | None = None) -> dict:
     seed = seed_sources(store.name, industry_en, profile)
     existing = store.get_sources()
-    merged = merge_sources(existing, seed) if existing else seed
-    merged["industry"] = store.name
-    store.save_sources(merged)
+    seed_campaign = _stage_source_payload(
+        store, seed, query_text="bundled reviewed seed catalog",
+        family="bundled_seed_baseline")
     tasks = build_tasks(store.name, industry_en)
     task_path = store.save_task("industry_bootstrap", {
         "type": "industry_bootstrap", "execution": "strictly_sequential",
@@ -496,7 +565,9 @@ def prepare_bootstrap(store, industry_en: str = "", profile: dict | None = None)
     })
     status = {"industry": store.name, "state": "waiting_for_agent",
               "mode": "task_package", "updated_at": _now(),
-              "stages": {"sources": {"state": "candidate", "audit": audit_sources(merged)},
+              "stages": {"sources": {"state": "candidate",
+                                      "active_catalog_audit": audit_sources(existing),
+                                      "candidate_campaign": seed_campaign},
                          "value_chain": {"state": "blocked", "requires": "sources:passed"},
                          "entities": {"state": "blocked", "requires": "value_chain:passed"}},
               "task_file": str(task_path), "review_required": True}
@@ -518,19 +589,8 @@ def refresh_sources_with_agent(config: dict, store, industry_en: str = "",
         raise ValueError("信息源阶段必须返回 JSON 对象")
     coverage_metrics = _persist_source_coverage(store, candidate)
     candidate["industry"] = store.name
-    candidate = merge_sources(seed_sources(store.name, industry_en, profile), candidate)
-    # A refresh must not erase user-added sources or already validated feed endpoints.
-    preserved = {category: [item for item in existing.get(category, []) or []
-                            if isinstance(item, dict) and
-                            (item.get("added_manually") or item.get("rss_url") or
-                             item.get("feed_url"))]
-                 for category, _ in SOURCE_CATEGORIES}
-    candidate = merge_sources(candidate, preserved)
-    candidate = balance_source_origins(candidate)
-    progress("[来源] 验证 URL 可达性；不可抓取的优质源转为人工关注推荐…")
-    candidate = check_source_accessibility(candidate)
-    candidate = discover_rss_endpoints(candidate)
-    audit = audit_sources(candidate)
+    candidate_campaign = _stage_source_payload(
+        store, candidate, query_text=task["prompt"], family="provider_batch_candidate")
     candidate_dir = store.one_time / "research" / "bootstrap"
     _write(candidate_dir / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_sources_candidate.json",
            candidate)
@@ -541,17 +601,14 @@ def refresh_sources_with_agent(config: dict, store, industry_en: str = "",
     status["updated_at"] = _now()
     status["review_required"] = True
     status["stages"]["sources"] = {
-        "state": "passed" if audit["passed"] else "failed", "audit": audit,
+        "state": "candidate",
+        "active_catalog_audit": audit_sources(existing),
+        "candidate_campaign": candidate_campaign,
         "coverage_planning": coverage_metrics}
-    if not audit["passed"]:
-        status["state"] = "blocked_by_source_gate"
-        _write(store.root / "bootstrap_status.json", status)
-        raise RuntimeError(f"信息源质量门槛未通过: {audit['checks']}（中外分布仅观察，不参与阻断）")
-    store.save_sources(candidate)
-    status["state"] = "ready_for_review"
+    status["state"] = "awaiting_source_review"
     _write(store.root / "bootstrap_status.json", status)
-    progress(f"[完成] 中文 {audit['origin_counts']['china']} / "
-             f"外文 {audit['origin_counts']['foreign']}")
+    progress(f"[完成] 已保存 {candidate_campaign['candidate_total']} 个待审查来源；"
+             "未自动激活。")
     return status
 
 
@@ -568,53 +625,22 @@ def run_bootstrap(config: dict, store, industry_en: str = "", profile: dict | No
         raise ValueError("信息源阶段必须返回 JSON 对象")
     coverage_metrics = _persist_source_coverage(store, candidate)
     candidate["industry"] = store.name
-    # API/Codex runs rebuild the source universe from a clean, versioned seed
-    # instead of accumulating stale sources that make language ratios impossible.
-    candidate = merge_sources(seed_sources(store.name, industry_en, profile), candidate)
-    candidate = balance_source_origins(candidate)
-    progress("[1/3] 正在验证候选来源可达性…")
-    candidate = check_source_accessibility(candidate)
-    candidate = discover_rss_endpoints(candidate)
-    source_audit = audit_sources(candidate)
+    candidate_campaign = _stage_source_payload(
+        store, candidate, query_text=tasks[0]["prompt"],
+        family="provider_batch_candidate")
+    candidate_dir = store.one_time / "research" / "bootstrap"
+    _write(candidate_dir / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_sources_candidate.json",
+           candidate)
     status["stages"]["sources"] = {
-        "state": "passed" if source_audit["passed"] else "failed",
-        "audit": source_audit, "coverage_planning": coverage_metrics}
-    if not source_audit["passed"]:
-        status["state"] = "blocked_by_source_gate"; status["updated_at"] = _now()
-        _write(store.root / "bootstrap_status.json", status)
-        raise RuntimeError(f"信息源质量门槛未通过: {source_audit['checks']}")
-    store.save_sources(candidate)
-    status["stages"]["sources"]["state"] = "passed"
-    status["stages"]["value_chain"] = {"state": "running"}
+        "state": "candidate", "candidate_campaign": candidate_campaign,
+        "coverage_planning": coverage_metrics}
+    status["state"] = "awaiting_source_review"
+    status["stages"]["value_chain"] = {
+        "state": "blocked", "requires": "sources:passed"}
+    status["stages"]["entities"] = {
+        "state": "blocked", "requires": "value_chain:passed"}
     status["updated_at"] = _now()
     _write(store.root / "bootstrap_status.json", status)
-
-    source_context = json.dumps(candidate, ensure_ascii=False)[:50000]
-    progress("[2/3] 仅基于合格来源研究产业链…")
-    chain_result = _extract_json(client.complete(tasks[1]["prompt"] +
-        "\n已通过门槛的信息源：\n" + source_context).text)
-    chains = chain_result.get("chains", []) if isinstance(chain_result, dict) else []
-    chain_audit = audit_chains(chains)
-    status["stages"]["value_chain"] = {"state": "passed" if chain_audit["passed"] else "failed",
-                                              "audit": chain_audit}
-    if not chain_audit["passed"]:
-        status["state"] = "blocked_by_value_chain_gate"; status["updated_at"] = _now()
-        _write(store.root / "bootstrap_status.json", status)
-        raise RuntimeError(f"产业链质量门槛未通过: {chain_audit['checks']}")
-    status["stages"]["value_chain"]["state"] = "passed"
-    status["stages"]["value_chain"]["audit"] = chain_audit
-    status["stages"]["entities"] = {"state": "running"}
-    status["updated_at"] = _now()
-    _write(store.root / "bootstrap_status.json", status)
-
-    progress("[3/3] 按产业链发现并交叉引用实体…")
-    entity_result = _extract_json(client.complete(tasks[2]["prompt"] +
-        "\n产业链：\n" + json.dumps(chains, ensure_ascii=False)[:50000] +
-        "\n合格信息源：\n" + source_context).text)
-    entities = normalize_entities(
-        entity_result.get("entities", []) if isinstance(entity_result, dict) else [],
-        {chain.get("name") for chain in chains})
-    status = _persist_knowledge(store, industry_en, chains, entities,
-                                chain_result, entity_result, status)
-    progress("[完成] 已生成可追溯草稿，需人工复核后使用。")
+    progress(f"[暂停] 已保存 {candidate_campaign['candidate_total']} 个候选来源；"
+             "完成来源审查后才能研究产业链。")
     return status

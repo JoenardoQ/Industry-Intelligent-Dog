@@ -51,15 +51,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.utils import BASE_DIR, load_config
 
 
-COMMANDS = ["daily", "weekly", "timeline", "brief", "collect", "test-email",
+COMMANDS = ["daily", "weekly", "timeline", "brief", "collect",
                  "archive", "query", "serve", "plan", "agent", "execute-tasks", "kg",
                  "modules",
                  "init-industry", "bootstrap-industry", "resume-bootstrap", "refresh-sources",
+                 "public-bootstrap",
                  "discover-sources", "enrich-sources", "report-tasks",
                  "crawl-daily", "crawl-weekly", "crawl-monthly", "crawl-quarterly",
                  "generate-period", "generate-report", "generate-deep-report",
                  "generate-impact",
-                 "execute-coverage",
+                 "execute-coverage", "run-source-campaign",
                  "backfill-history",
                  "knowledge", "industries", "migrate-data", "reconcile-data",
                  "verify", "doctor", "landscape", "impact", "deep-reports", "mcp-serve",
@@ -88,6 +89,8 @@ def build_parser() -> argparse.ArgumentParser:
     common.add_argument("--no-send", action="store_true", help="不发送邮件")
     common.add_argument("--provider", default=None,
                         help="执行 provider（由 capability manifest 定义）")
+    common.add_argument("--execution-mode", choices=["taskpack", "direct"], default=None,
+                        help="显式执行模式；direct 必须同时提供 --provider")
     common.add_argument("--kw", default="", help="查询关键词（query 命令）")
     common.add_argument("--category", default="", help="查询类别（query 命令）")
     common.add_argument("--port", type=int, default=8765, help="服务端口（serve 命令）")
@@ -127,6 +130,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="历史回填目标数；0 使用周期默认值")
     common.add_argument("--max-buckets", type=int, default=0,
                         help="本次最多处理的历史时间桶；0 处理全部，可用于分批续跑")
+    common.add_argument("--campaign-id", default="",
+                        help="要执行或恢复的来源检索活动 ID")
+    common.add_argument("--coverage-round-id", default="",
+                        help="要执行或恢复的实体/关系覆盖轮次 ID")
     common.add_argument("--repair-latest", action="store_true",
                         help="校验产物时重建 latest 指针")
     common.add_argument("--status", default="",
@@ -164,7 +171,7 @@ def main():
 
     # Orchestrator 初始化会向 stdout 打印 spec 摘要；协议型命令（mcp-serve）必须保持
     # stdout 纯净，故按需懒构造——只有旧版监控/查询/serve/kg 命令真正用到 orch。
-    NEEDS_ORCH = {"daily", "weekly", "timeline", "brief", "collect", "test-email",
+    NEEDS_ORCH = {"daily", "weekly", "timeline", "brief", "collect",
                   "archive", "serve"}
     if args.command in NEEDS_ORCH:
         from src.orchestrator import Orchestrator
@@ -210,13 +217,6 @@ def main():
         save_json(r, out)
         print(f"[完成] 抓取：新闻 {len(r['news'])} | 学术 {len(r['academic'])}")
         print(f"  数据: {out}")
-
-    elif args.command == "test-email":
-        ok = orch.email.send_html(
-            "Domain Intelligence - 邮件测试",
-            "<p>如果你收到这封邮件，说明 SMTP 配置正确 ✅</p>"
-        )
-        print("[结果] 邮件发送" + ("成功" if ok else "失败，请检查 config/settings.yaml"))
 
     elif args.command == "archive":
         project_dir = BASE_DIR
@@ -369,10 +369,12 @@ def main():
     # 新版：按行业分目录 + 三层知识 + 定期监控
     # ==================================================================
     elif args.command in ("init-industry", "bootstrap-industry", "resume-bootstrap", "refresh-sources",
+                          "public-bootstrap",
                           "discover-sources", "enrich-sources", "report-tasks",
                           "crawl-daily", "crawl-weekly", "crawl-monthly",
                           "crawl-quarterly", "generate-period", "generate-report",
                           "generate-deep-report", "generate-impact", "execute-coverage",
+                          "run-source-campaign",
                           "backfill-history",
                           "knowledge", "industries",
                           "verify", "doctor", "landscape", "impact", "deep-reports",
@@ -412,7 +414,27 @@ def main():
             metadata = store._read_json(store.knowledge / "industry.json", {})
             store.name = str(metadata.get("name") or folder)
 
-        if args.command == "init-industry":
+        direct_commands = {"generate-period", "generate-report", "generate-deep-report",
+                           "generate-impact", "execute-coverage", "run-source-campaign"}
+        taskpack_commands = {"report-tasks", "impact", "deep-reports"}
+        if args.command in direct_commands:
+            if args.execution_mode != "direct" or not args.provider:
+                parser.error(f"{args.command} requires --execution-mode direct and --provider")
+        if args.command in taskpack_commands and args.execution_mode not in {None, "taskpack"}:
+            parser.error(f"{args.command} only supports --execution-mode taskpack")
+
+        if args.command == "public-bootstrap":
+            if args.execution_mode != "direct" or args.provider != "public_sources":
+                parser.error("public-bootstrap requires --execution-mode direct --provider public_sources")
+            from src.public_bootstrap import ReviewedFeedAdapter, collect_public_bootstrap
+            result = collect_public_bootstrap(
+                ReviewedFeedAdapter(store), industry=store.name,
+                output_dir=store.one_time / "research" / "bootstrap", store=store)
+            print(__import__("json").dumps(result, ensure_ascii=False))
+            if result["status"] != "completed":
+                sys.exit(4)
+
+        elif args.command == "init-industry":
             from src.source_discovery import (seed_sources, build_discovery_task,
                                               merge_sources)
             from src.report_tasks import build_report_tasks
@@ -451,11 +473,15 @@ def main():
         elif args.command == "bootstrap-industry":
             from src.research_bootstrap import prepare_bootstrap, run_bootstrap
             try:
-                if args.provider:
+                if args.execution_mode == "direct":
+                    if not args.provider:
+                        parser.error("bootstrap-industry direct mode requires --provider")
                     status = run_bootstrap(pcfg, store, (profile or {}).get("name_en", ""),
                                            profile, provider=args.provider)
-                else:
+                elif args.execution_mode == "taskpack":
                     status = prepare_bootstrap(store, (profile or {}).get("name_en", ""), profile)
+                else:
+                    parser.error("bootstrap-industry requires --execution-mode taskpack|direct")
             except Exception as exc:
                 print(f"[错误] 行业研究初始化失败：{type(exc).__name__}: {exc}", file=sys.stderr)
                 sys.exit(2)
@@ -549,7 +575,7 @@ def main():
             from src.report_generation import generate_periodic
             kind = args.kind or "weekly"
             try:
-                result = generate_periodic(pcfg, store, kind, args.provider or "codex")
+                result = generate_periodic(pcfg, store, kind, args.provider)
             except Exception as exc:
                 print(f"[错误] 周期报告生成失败：{type(exc).__name__}: {exc}", file=sys.stderr)
                 sys.exit(2)
@@ -561,7 +587,7 @@ def main():
             kind = args.kind or "tech_6m"
             try:
                 result = generate_industry_report(
-                    pcfg, store, kind, args.provider or "codex",
+                    pcfg, store, kind, args.provider,
                     (profile or {}).get("name_en", ""))
             except Exception as exc:
                 print(f"[错误] 行业报告生成失败：{type(exc).__name__}: {exc}", file=sys.stderr)
@@ -573,7 +599,7 @@ def main():
             kind = args.rtype or args.kind or "quarterly"
             try:
                 result = generate_deep_report(
-                    pcfg, store, kind, args.provider or "codex",
+                    pcfg, store, kind, args.provider,
                     (profile or {}).get("name_en", ""))
             except Exception as exc:
                 print(f"[错误] 深度报告生成失败：{type(exc).__name__}: {exc}", file=sys.stderr)
@@ -586,21 +612,47 @@ def main():
                 parser.error("generate-impact 需要 --event")
             try:
                 result = generate_impact_report(
-                    pcfg, store, pcfg, args.event, args.provider or "codex")
+                    pcfg, store, pcfg, args.event, args.provider)
             except Exception as exc:
                 print(f"[错误] 事件影响报告生成失败：{type(exc).__name__}: {exc}", file=sys.stderr)
                 sys.exit(2)
             print(f"[完成] 事件影响报告：{result['path']}")
 
         elif args.command == "execute-coverage":
-            from src.coverage_execution import execute_coverage
+            from src.coverage_execution import (execute_coverage,
+                                                execute_persisted_coverage_round)
             try:
-                result = execute_coverage(
-                    pcfg, store, provider=args.provider or "codex", budget=args.budget)
+                if args.coverage_round_id:
+                    print(f"[覆盖] 恢复持久轮次 {args.coverage_round_id}")
+                    result = execute_persisted_coverage_round(
+                        pcfg, store, args.coverage_round_id,
+                        provider=args.provider)
+                else:
+                    result = execute_coverage(
+                        pcfg, store, provider=args.provider, budget=args.budget)
             except Exception as exc:
                 print(f"[错误] 覆盖搜索执行失败：{type(exc).__name__}: {exc}", file=sys.stderr)
                 sys.exit(2)
             print(f"[完成] 覆盖执行：{result}")
+
+        elif args.command == "run-source-campaign":
+            if not args.campaign_id:
+                parser.error("run-source-campaign 需要 --campaign-id")
+            from src.services.provider_factory import create_provider
+            from src.source_campaign import ProviderSearchAdapter, run_campaign_round
+            try:
+                print(f"[来源活动] 执行或恢复 {args.campaign_id}")
+                client = create_provider(
+                    pcfg, args.provider, store.root)
+                outcome = run_campaign_round(
+                    store.service.repo, args.campaign_id,
+                    search=ProviderSearchAdapter(client))
+            except Exception as exc:
+                print(f"[错误] 来源活动失败：{type(exc).__name__}: {exc}", file=sys.stderr)
+                sys.exit(2)
+            print(f"[完成] 状态={outcome.status} 候选={outcome.candidate_total} "
+                  f"合格={sum(outcome.qualified_by_category.values())} "
+                  f"原因={outcome.stopping_reason}")
 
         elif args.command == "backfill-history":
             from src.history_backfill import POLICIES, backfill_history

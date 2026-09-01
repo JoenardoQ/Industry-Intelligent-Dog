@@ -254,11 +254,20 @@ class PeriodicScheduler:
         result["status"] = ("completed" if not failed else
                             "failed" if not successful else "partial")
 
-        if result["status"] in {"completed", "partial"}:
+        # A partial crawl is visible and recoverable, but it is not a successful
+        # collection boundary. Advancing it would silently skip the missing
+        # portion on the next run.
+        if result["status"] == "completed":
             control = self.store.get_control()
             checkpoints = dict(control.get("collection_checkpoints") or {})
             checkpoints["daily"] = {**window.as_dict(), "status": result["status"]}
             self.store.update_control(collection_checkpoints=checkpoints)
+
+        try:
+            self.store.service.repo.record_sqlite_operational_metrics(
+                self.store.folder, observed_at=f"{date}T05:00:00+08:00")
+        except Exception as exc:
+            result["sqlite_observability_error"] = str(exc)
 
         counts = ", ".join(
             f"{category}={result.get(category, 0)}" for category in DAILY_CATEGORIES)

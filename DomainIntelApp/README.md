@@ -4,6 +4,10 @@
 
 `DomainIntelApp` owns source/development startup, isolated runtimes, persistent jobs, and Windows + WSL shortcuts. The product UI is the React/FastAPI workbench; the retired Tk workbench is not a second application implementation. Native Electron packaging lives in `DomainIntelDesktop`.
 
+End users should install the platform-native Beta (`.exe`, `.dmg`, or `.AppImage`).
+The source launcher below is a retained developer compatibility path and is excluded
+from release resources.
+
 ## Start
 
 From the repository root:
@@ -33,6 +37,13 @@ Only a native Windows checkout should run `run_app.bat`. The WSL launcher resolv
 4. Collect daily intelligence and generate periodic, industry, or deep reports as required.
 
 Codex subscription mode uses the login visible in the same Windows/WSL environment and does not require an API key. Task-package mode creates a prompt package, not a completed report.
+
+No-model live collection is separate from a task package and remains subject to the
+`NOM-01` external oracle. Agent/API generation is never treated as reviewed fact.
+Background scheduling is opt-in; users can revoke it from System Status. OS secure storage
+holds provider credentials; a one-shot pipe transfers them to the sidecar without
+environment disclosure. Windows, macOS, and Linux uninstallers retain the user data
+directory; disable the background service before uninstalling the current Beta.
 
 ## Workbench
 

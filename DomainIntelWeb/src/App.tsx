@@ -1,10 +1,11 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
-import { Activity, Building2, Check, ChevronDown, CircleDot, FileText, FlaskConical, FolderKanban, Globe2, LayoutDashboard, Menu, Newspaper, ServerCog, X } from 'lucide-react'
+import { Activity, BookOpen, Building2, Check, ChevronDown, CircleDot, FileText, FlaskConical, FolderKanban, Globe2, LayoutDashboard, Menu, Newspaper, ServerCog, X } from 'lucide-react'
 import { api, type Industry, type PageKey, type SetupPayload } from './api'
 import { Empty, Loading, type Toast } from './features/shared'
 
 const OverviewPage = lazy(() => import('./features/OverviewPage'))
 const DailyPage = lazy(() => import('./features/DailyPage'))
+const KnowledgePage = lazy(() => import('./features/KnowledgePage'))
 const ProductsPage = lazy(() => import('./features/ProductsPage'))
 const SourcesPage = lazy(() => import('./features/SourcesPage'))
 const ResearchPage = lazy(() => import('./features/ResearchPage'))
@@ -15,6 +16,7 @@ const SetupWizard = lazy(() => import('./features/SetupWizard'))
 const navigation: { key: PageKey; label: string; note: string; icon: typeof Activity }[] = [
   { key: 'overview', label: '行业概览', note: '知识与产业链', icon: LayoutDashboard },
   { key: 'daily', label: '每日情报', note: '持续监测', icon: Newspaper },
+  { key: 'knowledge', label: '知识结构', note: '实体与关系', icon: BookOpen },
   { key: 'products', label: '研究产物', note: '周月季与报告', icon: FileText },
   { key: 'sources', label: '信息源', note: '来源与可信度', icon: Globe2 },
   { key: 'research', label: '研究助手', note: '问题、证据与实验', icon: FlaskConical },
@@ -85,13 +87,14 @@ function App() {
       <div className="workspace">{loading ? <Loading label="正在加载行业数据库…"/> : !industry && page !== 'system' ? <Empty title="还没有行业" body="从左侧进入系统状态，新建第一个行业。"/> : <Suspense fallback={<Loading label="正在载入工作台模块…"/>}><PageRouter page={page} industry={industry} navigate={navigate} notify={notify} setup={setup}/></Suspense>}</div>
     </main>
     {toast && <div className={`toast ${toast.kind}`} role="status">{toast.kind === 'ok' ? <Check/> : <X/>}{toast.text}</div>}
-    {showSetup&&setup&&<Suspense fallback={null}><SetupWizard setup={setup} hasIndustry={Boolean(industries.length)} onRefresh={refreshSetup} onComplete={async(_provider,folder)=>{if(folder){localStorage.setItem('intdog.industry',folder);await refreshIndustries();navigate('jobs')}setShowSetup(false)}}/></Suspense>}
+    {showSetup&&setup&&<Suspense fallback={null}><SetupWizard setup={setup} hasIndustry={Boolean(industries.length)} onRefresh={refreshSetup} onComplete={async(_provider,folder)=>{if(folder){localStorage.setItem('intdog.industry',folder);await refreshIndustries();navigate('overview')}setShowSetup(false)}}/></Suspense>}
   </div>
 }
 
 function PageRouter({ page, industry, navigate, notify, setup }: { page: PageKey; industry: string; navigate: (p: PageKey) => void; notify: (t: Toast) => void; setup: SetupPayload|null }) {
   if (page === 'overview') return <OverviewPage industry={industry} navigate={navigate}/>
   if (page === 'daily') return <DailyPage industry={industry} notify={notify}/>
+  if (page === 'knowledge') return <KnowledgePage industry={industry}/>
   if (page === 'products') return <ProductsPage industry={industry} notify={notify}/>
   if (page === 'sources') return <SourcesPage industry={industry} notify={notify}/>
   if (page === 'research') return <ResearchPage industry={industry} notify={notify} setup={setup}/>

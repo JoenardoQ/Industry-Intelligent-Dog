@@ -13,6 +13,16 @@ extraResources:
       - intdog-runtime*
   - from: build/resources/intdog
     to: intdog
+    filter:
+      - "**/*"
+      - "!**/DomainIntelData/**"
+      - "!**/.venv/**"
+      - "!**/venv/**"
+      - "!**/keys/**"
+      - "!**/*.key"
+      - "!**/*.pem"
+      - "!**/*.p12"
+      - "!**/*.pfx"
 win:
   artifactName: IntDog-${version}-windows-${arch}.${ext}
   icon: ../DomainIntelApp/app/intdog.ico

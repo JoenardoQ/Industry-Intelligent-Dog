@@ -22,7 +22,12 @@ Electron
             └─ review-gated Agent Bridge
 ```
 
-Electron generates a random session capability on every launch. The renderer never receives API keys. Keys are accepted only through preload IPC, encrypted with the operating-system secure store, and injected into the sidecar environment. If secure encryption is unavailable, storage is refused.
+Electron generates a random session capability on every launch. The renderer never receives API keys. Keys are accepted only through preload IPC, encrypted with the operating-system secure store, and transferred through a bounded anonymous one-shot pipe. If secure encryption is unavailable, storage is refused.
+
+Background execution is a separate, revocable per-user permission. Platform Task
+Scheduler/LaunchAgent/systemd entries launch the same frozen Worker; they do not own
+schedules or broaden provider authorization. Mutable data lives in the OS user-data
+directory and is retained when the application is uninstalled.
 
 ## Data and evidence
 
@@ -55,3 +60,7 @@ The older v2 design is preserved as [historical material](docs/archive/DESIGN-v2
 Every native host must run the complete Python suite, Web DOM tests and production build, generated OpenAPI drift check, repository check, desktop tests, frozen-sidecar smoke, renderer first-run workflow, restart persistence, and secure-credential lifecycle where available. Unsigned test builds are Pre-releases. Windows signing and macOS signing/notarization are mandatory for stable release.
 
 Current readiness and evidence limitations are recorded in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md); evidence from an older commit never proves a changed working tree.
+
+`NOM-01`, native installation/service/uninstall lifecycle, and real logged-in Agent
+deep smoke are external gaps until their matching environment produces evidence.
+The SP4 and SP5 A local freeze reports are necessary local evidence, not substitutes.

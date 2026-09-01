@@ -1,0 +1,20 @@
+/* Readability floor for auxiliary UI that carried dense legacy typography. */
+.top-status,.metric-card>span:not(.metric-icon),.entity-row small,.confidence,
+.category-bars>div,.source-card>div,.coverage,.edge-label small,.profile-list code,
+.assertion-type,.assertion-citations a,.assertion-citations span,
+.verification-gate>header span,.verification-gate>p,.gate-failures li,
+.gate-failures code,.evidence-locators a,.evidence-locators code,
+.evidence-locators p,.evidence-locators small { font-size:14px!important; }
+
+.confirm-overlay { position:fixed;inset:0;z-index:200;display:grid;place-items:center;padding:24px;background:rgba(25,32,28,.48);backdrop-filter:blur(7px); }
+.confirm-dialog { width:min(520px,100%);padding:28px;border:1px solid rgba(255,255,255,.75);border-radius:24px;background:var(--surface);box-shadow:0 30px 90px rgba(18,27,22,.24); }
+.confirm-dialog h2 { margin:0;font-size:24px;line-height:1.35; }
+.confirm-dialog p { margin:12px 0 24px;color:var(--muted);font-size:16px;line-height:var(--space-reading); }
+.confirm-dialog footer { display:flex;justify-content:flex-end;gap:10px; }
+
+@media (max-width:760px) {
+  .confirm-overlay { padding:14px; }
+  .confirm-dialog { padding:22px;border-radius:20px; }
+  .confirm-dialog footer { display:grid; }
+  .confirm-dialog footer .button { width:100%; }
+}

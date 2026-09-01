@@ -14,8 +14,14 @@ OUTPUT = ROOT / "src" / "generated" / "openapi.ts"
 def ts_type(schema: dict) -> str:
     if "$ref" in schema:
         return schema["$ref"].rsplit("/", 1)[-1]
-    if "anyOf" in schema:
-        types = [ts_type(item) for item in schema["anyOf"]]
+    if "const" in schema:
+        return json.dumps(schema["const"], ensure_ascii=False)
+    if "enum" in schema:
+        return " | ".join(
+            dict.fromkeys(json.dumps(item, ensure_ascii=False) for item in schema["enum"]))
+    alternatives = schema.get("anyOf") or schema.get("oneOf")
+    if alternatives:
+        types = [ts_type(item) for item in alternatives]
         return " | ".join(dict.fromkeys(types))
     kind = schema.get("type")
     if kind == "array":

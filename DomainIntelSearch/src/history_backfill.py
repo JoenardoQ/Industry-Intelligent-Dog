@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import os
+import statistics
 import time
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, timedelta, timezone
@@ -24,16 +25,23 @@ class HorizonPolicy:
     target_low: int
     target_high: int
     minimum_total_ratio: float = 0.75
-    minimum_bucket_ratio: float = 0.80
+    minimum_bucket_ratio: float = 0.90
+    bucket_mode: str = "fixed"
 
 
 POLICIES = {
-    "weekly": HorizonPolicy("weekly", 7, 1, 28, 25, 50),
-    "monthly": HorizonPolicy("monthly", 30, 7, 120, 100, 180),
-    "quarterly": HorizonPolicy("quarterly", 90, 7, 360, 300, 500),
-    "semiannual": HorizonPolicy("semiannual", 183, 7, 720, 600, 1000),
-    "biennial": HorizonPolicy("biennial", 730, 7, 2800, 2400, 3200),
-    "fiveyear": HorizonPolicy("fiveyear", 1826, 30, 7200, 6000, 8000),
+    "weekly": HorizonPolicy("weekly", 7, 1, 28, 21, 35),
+    "monthly": HorizonPolicy("monthly", 30, 7, 120, 90, 150),
+    "quarterly": HorizonPolicy("quarterly", 90, 30, 360, 270, 450,
+                                bucket_mode="calendar_month"),
+    "semiannual": HorizonPolicy("semiannual", 183, 30, 720, 549, 915,
+                                 bucket_mode="calendar_month"),
+    "biennial": HorizonPolicy("biennial", 730, 30, 3000, 2400, 3600,
+                               minimum_total_ratio=.80,
+                               bucket_mode="calendar_month"),
+    "fiveyear": HorizonPolicy("fiveyear", 1826, 30, 8000, 7000, 9000,
+                               minimum_total_ratio=.875,
+                               bucket_mode="calendar_month"),
 }
 
 
@@ -43,6 +51,18 @@ class HistoryCoverageError(RuntimeError):
 
 def _buckets(policy: HorizonPolicy, end: date) -> list[tuple[date, date]]:
     start = end - timedelta(days=policy.days - 1)
+    if policy.bucket_mode == "calendar_month":
+        rows = []
+        cursor = start
+        while cursor <= end:
+            if cursor.month == 12:
+                following = date(cursor.year + 1, 1, 1)
+            else:
+                following = date(cursor.year, cursor.month + 1, 1)
+            bucket_end = min(end, following - timedelta(days=1))
+            rows.append((cursor, bucket_end))
+            cursor = bucket_end + timedelta(days=1)
+        return rows
     rows = []
     cursor = start
     while cursor <= end:
@@ -50,6 +70,131 @@ def _buckets(policy: HorizonPolicy, end: date) -> list[tuple[date, date]]:
         rows.append((cursor, bucket_end))
         cursor = bucket_end + timedelta(days=1)
     return rows
+
+
+def plan_horizon(horizon: str, *, end: date | None = None,
+                 policy: HorizonPolicy | None = None) -> dict:
+    if horizon not in POLICIES and policy is None:
+        raise ValueError(f"未知历史周期：{horizon}")
+    policy = policy or POLICIES[horizon]
+    end = end or datetime.now().date()
+    buckets = _buckets(policy, end)
+    days = [int((finish - start).days) + 1 for start, finish in buckets]
+    exact = [policy.target * count / policy.days for count in days]
+    targets = [math.floor(value) for value in exact]
+    remainder = policy.target - sum(targets)
+    order = sorted(range(len(buckets)),
+                   key=lambda index: (exact[index] - targets[index], -index),
+                   reverse=True)
+    for index in order[:remainder]:
+        targets[index] += 1
+    return {
+        "horizon": horizon, "window_start": buckets[0][0].isoformat(),
+        "window_end": end.isoformat(), "target": policy.target,
+        "target_range": [policy.target_low, policy.target_high],
+        "minimum_month_coverage": policy.minimum_bucket_ratio,
+        "buckets": [{
+            "start": start.isoformat(), "end": finish.isoformat(),
+            "days": bucket_days, "target": target,
+            "daily_density": round(target / bucket_days, 4),
+        } for (start, finish), bucket_days, target in zip(
+            buckets, days, targets, strict=True)],
+    }
+
+
+def _qualified_history_item(item: dict) -> tuple[bool, str]:
+    if item.get("duplicate") or item.get("is_duplicate"):
+        return False, "duplicate"
+    status = str(item.get("review_status") or "").casefold()
+    if status in {"rejected", "quarantined", "invalid"}:
+        return False, "low_quality"
+    raw_quality = item.get("credibility", item.get("quality", .75))
+    if isinstance(raw_quality, (int, float)) and not isinstance(raw_quality, bool):
+        if not math.isfinite(float(raw_quality)) or float(raw_quality) < .60:
+            return False, "low_quality"
+    if not _date(item.get("published_at") or item.get("date")):
+        return False, "low_quality"
+    if not str(item.get("url") or "").strip() or not str(item.get("title") or "").strip():
+        return False, "low_quality"
+    return True, ""
+
+
+def evaluate_history_items(items: list[dict], horizon: str, *,
+                           end: date | None = None,
+                           policy: HorizonPolicy | None = None,
+                           key_fn=None) -> dict:
+    policy = policy or POLICIES[horizon]
+    end = end or datetime.now().date()
+    plan = plan_horizon(horizon, end=end, policy=policy)
+    rejected_duplicates = 0
+    rejected_low_quality = 0
+    unique: dict[str, dict] = {}
+    for item in items:
+        accepted, reason = _qualified_history_item(item)
+        if not accepted:
+            if reason == "duplicate":
+                rejected_duplicates += 1
+            else:
+                rejected_low_quality += 1
+            continue
+        key = str(key_fn(item) if key_fn else item.get("canonical_url") or
+                  item.get("url") or f"{item.get('title')}:{_date(item.get('date'))}")
+        if key in unique:
+            rejected_duplicates += 1
+            continue
+        unique[key] = item
+    bucket_rows = []
+    bucket_items: list[list[dict]] = []
+    for bucket in plan["buckets"]:
+        values = [item for item in unique.values()
+                  if bucket["start"] <= _date(
+                      item.get("published_at") or item.get("date")) <= bucket["end"]]
+        minimum = max(1, math.floor(int(bucket["target"]) * .60))
+        bucket_items.append(values)
+        bucket_rows.append({**bucket, "count": len(values), "minimum": minimum,
+                            "covered": len(values) >= minimum})
+    positive_counts = [row["count"] for row in bucket_rows if row["count"] > 0]
+    median = float(statistics.median(positive_counts)) if positive_counts else 0.0
+    overflow = []
+    for row, values in zip(bucket_rows, bucket_items, strict=True):
+        if median and row["count"] > median * 3:
+            reasons = sorted({str(item.get("overflow_reason") or
+                                  item.get("event_peak_reason") or "").strip()
+                              for item in values
+                              if item.get("overflow_reason") or item.get("event_peak_reason")})
+            overflow.append({"start": row["start"], "end": row["end"],
+                             "count": row["count"], "median": median,
+                             "justified": bool(reasons), "reasons": reasons})
+    covered = sum(row["covered"] for row in bucket_rows)
+    required_buckets = math.ceil(len(bucket_rows) * policy.minimum_bucket_ratio)
+    publishers = {str(item.get("source_domain") or item.get("source") or "").casefold()
+                  for item in unique.values()
+                  if item.get("source_domain") or item.get("source")}
+    gaps = []
+    unexplained = [row for row in overflow if not row["justified"]]
+    if unexplained:
+        gaps.append({"code": "unexplained_bucket_concentration",
+                     "count": len(unexplained), "detail": unexplained})
+    if len(unique) < policy.target_low:
+        gaps.append({"code": "qualified_document_gap",
+                     "current": len(unique), "target": policy.target_low})
+    if covered < required_buckets:
+        gaps.append({"code": "month_coverage_gap", "current": covered,
+                     "target": required_buckets})
+    if len(publishers) < 5:
+        gaps.append({"code": "publisher_diversity_gap", "current": len(publishers),
+                     "target": 5})
+    return {
+        **{key: value for key, value in plan.items() if key != "buckets"},
+        "required_total": policy.target_low, "admitted_total": len(unique),
+        "buckets_total": len(bucket_rows), "buckets_covered": covered,
+        "required_buckets": required_buckets,
+        "coverage_ratio": round(covered / len(bucket_rows), 4) if bucket_rows else 0.0,
+        "publisher_count": len(publishers), "ready": not gaps,
+        "buckets": bucket_rows, "overflow_buckets": overflow, "gaps": gaps,
+        "rejected_low_quality": rejected_low_quality,
+        "rejected_duplicates": rejected_duplicates,
+    }
 
 
 def _query(config: dict) -> str:
@@ -225,36 +370,9 @@ def evaluate_history(store, horizon: str, *, end: date | None = None,
                      policy: HorizonPolicy | None = None) -> dict:
     policy = policy or POLICIES[horizon]
     end = end or datetime.now().date()
-    buckets = _buckets(policy, end)
     items = store.list_daily_range(days=policy.days, end_date=end.isoformat())
-    unique = {}
-    for item in items:
-        key = store._key(item)
-        published = _date(item.get("published_at") or item.get("date"))
-        if key and published:
-            unique[key] = item
-    per_bucket = []
-    average = policy.target / len(buckets)
-    minimum = max(1, math.floor(average * 0.60))
-    for start, finish in buckets:
-        count = sum(start.isoformat() <= _date(item.get("published_at") or item.get("date"))
-                    <= finish.isoformat() for item in unique.values())
-        per_bucket.append({"start": start.isoformat(), "end": finish.isoformat(),
-                           "count": count, "minimum": minimum,
-                           "covered": count >= minimum})
-    publishers = {str(item.get("source_domain") or item.get("source") or "").casefold()
-                  for item in unique.values() if item.get("source_domain") or item.get("source")}
-    covered = sum(row["covered"] for row in per_bucket)
-    required_total = math.ceil(policy.target * policy.minimum_total_ratio)
-    required_buckets = math.ceil(len(per_bucket) * policy.minimum_bucket_ratio)
-    ready = len(unique) >= required_total and covered >= required_buckets and len(publishers) >= 5
-    return {"horizon": horizon, "window_start": buckets[0][0].isoformat(),
-            "window_end": end.isoformat(), "target": policy.target,
-            "target_range": [policy.target_low, policy.target_high],
-            "required_total": required_total, "admitted_total": len(unique),
-            "buckets_total": len(per_bucket), "buckets_covered": covered,
-            "required_buckets": required_buckets, "publisher_count": len(publishers),
-            "ready": ready, "buckets": per_bucket}
+    return evaluate_history_items(
+        items, horizon, end=end, policy=policy, key_fn=store._key)
 
 
 def backfill_history(config: dict, store, horizon: str, *, target: int | None = None,
@@ -265,7 +383,11 @@ def backfill_history(config: dict, store, horizon: str, *, target: int | None = 
         raise ValueError(f"未知历史周期：{horizon}")
     policy = POLICIES[horizon]
     if target is not None:
-        policy = HorizonPolicy(**{**asdict(policy), "target": max(1, int(target))})
+        normalized_target = max(1, int(target))
+        policy = HorizonPolicy(**{
+            **asdict(policy), "target": normalized_target,
+            "target_low": normalized_target, "target_high": normalized_target,
+        })
     end = datetime.now().date()
     buckets = _buckets(policy, end)
     query = _query(config)

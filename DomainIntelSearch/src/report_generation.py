@@ -15,6 +15,8 @@ from pathlib import Path
 
 from intdog_core import tracked_function
 
+from .artifact_quality import evaluate_artifact
+from .portable_briefing import build_manifest, write_portable_html
 from .source_discovery import source_origin
 from .services.provider_factory import create_provider
 
@@ -47,6 +49,30 @@ def _write_text(path: Path, text: str) -> None:
     temp = path.with_suffix(path.suffix + ".tmp")
     temp.write_text(text, encoding="utf-8")
     temp.replace(path)
+
+
+def _finalize_artifact(result: dict, metadata: dict,
+                       sidecar_path: Path | None = None) -> dict:
+    """Apply the product-quality gate and emit an offline sibling artifact."""
+    markdown_path = Path(result["path"])
+    markdown = markdown_path.read_text(encoding="utf-8")
+    quality = evaluate_artifact(markdown, metadata, sidecar_path=sidecar_path)
+    quality_path = markdown_path.with_suffix(".quality.json")
+    _write_text(quality_path, json.dumps(quality, ensure_ascii=False, indent=2) + "\n")
+    merged = {**metadata, "quality": quality,
+              "artifact_status": quality["artifact_status"]}
+    manifest = build_manifest(markdown, merged)
+    manifest_path = markdown_path.with_suffix(".manifest.json")
+    _write_text(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
+    portable_path = write_portable_html(
+        markdown_path.with_suffix(".portable.html"), manifest)
+    limitations = list(metadata.get("limitations") or [])
+    limitations.extend(item["code"] for item in quality["failures"]
+                       if item["code"] not in limitations)
+    return {**result, "status": quality["artifact_status"], "quality": quality,
+            "quality_file": str(quality_path), "manifest_file": str(manifest_path),
+            "portable_file": str(portable_path),
+            "limitations": limitations}
 
 
 def _context(store, days: int = 30, limit: int = 120_000,
@@ -118,7 +144,7 @@ def _visualization(store, days: int, title: str) -> dict:
 
 
 def _directed_chain(store) -> dict:
-    """Deterministic upstream-to-downstream graph embedded in report metadata."""
+    """Render persisted relationship evidence; never infer adjacency as a fact."""
     nodes = store.service.repo.list_chain_nodes(store.folder)
     normalized = [{
         "id": item.get("id") or f"chain-{index}",
@@ -130,13 +156,23 @@ def _directed_chain(store) -> dict:
         "coverage_status": item.get("coverage_status", "empty"),
     } for index, item in enumerate(nodes)]
     normalized.sort(key=lambda item: (item["order"], item["label"]))
-    edges = [{
-        "source": normalized[index]["id"],
-        "target": normalized[index + 1]["id"],
-        "relation": "upstream_to_downstream",
-    } for index in range(len(normalized) - 1)]
-    return {"type": "directed_chain", "direction": "LR",
-            "nodes": normalized, "edges": edges}
+    edges = []
+    for item in store.service.repo.list_chain_edges(store.folder):
+        evidence = item.get("evidence") or []
+        evidence_count = int(item.get("evidence_count", len(evidence)) or 0)
+        if evidence_count <= 0 or not evidence:
+            continue
+        edges.append({
+            "source": item["src_node_id"], "target": item["dst_node_id"],
+            "relation": item["relation"], "status": item.get("status", "collected"),
+            "evidence_count": evidence_count,
+            "evidence": evidence,
+        })
+    graph = {"type": "directed_chain", "direction": "LR",
+             "nodes": normalized, "edges": edges}
+    if not edges:
+        graph["gap"] = "no_persisted_evidence_edges"
+    return graph
 
 
 def _provenance(result: dict) -> dict:
@@ -333,6 +369,8 @@ def generate_periodic(config: dict, store, kind: str,
     payload["report_file"] = result["path"]
     payload["summary"] = f"{store.name} {kind} 报告已直接生成；状态为待人工复核。"
     payload["visualization"] = _visualization(store, days, "本期情报类别分布")
+    result = _finalize_artifact(result, payload)
+    payload.update(result)
     store._write_json(json_path, payload)
     return {**result, "metadata": str(json_path),
             "visualization": payload["visualization"]}
@@ -356,6 +394,9 @@ def generate_industry_report(config: dict, store, report_id: str,
     visualization["directed_graph"] = _directed_chain(store)
     visualization.update(_provenance(result))
     store._write_json(viz_path, visualization)
+    result = _finalize_artifact(result, {**visualization, "title": task["title"]}, viz_path)
+    visualization.update({key: result[key] for key in ("status", "quality", "quality_file", "manifest_file", "portable_file", "limitations")})
+    store._write_json(viz_path, visualization)
     return {**result, "visualization_file": str(viz_path)}
 
 
@@ -373,6 +414,9 @@ def generate_deep_report(config: dict, store, report_type: str,
     visualization = _visualization(store, 90, "深度报告证据分布")
     visualization.update(provenance)
     store._write_json(viz_path, visualization)
+    result = _finalize_artifact(result, {**visualization, "title": task.get("title", report_type)}, viz_path)
+    visualization.update({key: result[key] for key in ("status", "quality", "quality_file", "manifest_file", "portable_file", "limitations")})
+    store._write_json(viz_path, visualization)
     return {**result, "visualization_file": str(viz_path)}
 
 
@@ -386,6 +430,10 @@ def generate_impact_report(config: dict, store, profile_config: dict, event: str
     metadata_path = Path(skeleton["path"])
     markdown = Path(result["path"]).read_text(encoding="utf-8")
     _merge_impact_metadata(store, metadata_path, markdown, _provenance(result))
+    metadata = store._read_json(metadata_path, {})
+    result = _finalize_artifact(result, metadata, metadata_path)
+    metadata.update({key: result[key] for key in ("status", "quality", "quality_file", "manifest_file", "portable_file", "limitations")})
+    store._write_json(metadata_path, metadata)
     return {**result, "metadata": str(metadata_path)}
 
 

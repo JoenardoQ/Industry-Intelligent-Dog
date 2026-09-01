@@ -22,7 +22,10 @@ Electron
             └─ 受复核约束的 Agent Bridge
 ```
 
-Electron 每次启动生成随机会话能力。Renderer 永远拿不到 API Key。Key 只通过 preload IPC 接收，由操作系统安全存储加密，再注入 sidecar 环境；系统无法提供安全加密时拒绝保存。
+Electron 每次启动生成随机会话能力。Renderer 永远拿不到 API Key。Key 只通过 preload IPC 接收，由操作系统安全存储加密，再经有界的一次性匿名管道传给 sidecar；系统无法提供安全加密时拒绝保存。
+
+后台执行是独立、可撤销的当前用户权限。平台任务计划/LaunchAgent/systemd 入口启动同一个冻结
+Worker，不拥有计划权威，也不扩大 Provider 授权。可变数据位于操作系统用户数据目录，卸载应用时默认保留。
 
 ## 数据与证据
 
@@ -55,3 +58,6 @@ SQLite 与 `intdog_core` 是唯一业务写入权威。兼容 JSON/Markdown 继�
 每个平台都必须运行完整 Python 套件、Web DOM 测试与生产构建、OpenAPI 漂移检查、仓库检查、桌面测试、冻结 sidecar 烟雾、renderer 首次工作流、重开持久化，以及安全存储可用时的凭据生命周期。未签名测试包只能作为 Pre-release。Windows 稳定版必须签名，macOS 稳定版必须签名并公证。
 
 当前就绪结论和证据限制记录在 [IMPLEMENTATION_STATUS.zh-CN.md](IMPLEMENTATION_STATUS.zh-CN.md)；旧提交的通过记录不能证明已变化的工作树。
+
+`NOM-01`、原生安装/服务/卸载生命周期与真实已登录 Agent 深度 smoke 在对应环境产生证据前
+均为外部缺口。SP4 与 SP5 A 本地冻结报告是必要证据，但不能替代这些外部门槛。

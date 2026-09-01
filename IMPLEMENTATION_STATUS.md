@@ -2,8 +2,8 @@
 
 [中文](IMPLEMENTATION_STATUS.zh-CN.md) · [Architecture](DESIGN.md) · [Installation](README.md)
 
-- Updated: 2026-09-01
-- Source version: 4.0 working tree after the Agent/onboarding Round 1 implementation
+- Updated: 2026-09-02
+- Source version: 4.0 working tree after SP4 freeze and SP5 A tasks 1–2
 - Release conclusion: `NOT_READY_PENDING_NATIVE_GATES`
 - Publication state: no commit, push, CI dispatch, or release was authorized in this round
 
@@ -20,11 +20,22 @@
 
 ## Current verification
 
+SP4 froze the unified user workflows, deterministic artifact quality gate, and
+portable offline HTML. SP5 A froze the serve/CLI/Worker sidecar, explicit hashed
+resources, and the fail-stop native lifecycle harness. See
+[`SP4 freeze`](docs/superpowers/2026-09-02-sp4-freeze-report.md) and
+[`SP5 A report`](docs/superpowers/2026-09-02-sp5-a-task1-2-report.md).
+
 Local verification is closed under the risk model in `docs/iterations/2026-08-31-agent-onboarding-round-1-contract.md`: 168 Python tests, seven Web DOM workflows, two Desktop tests, TypeScript/Vite production build, idempotent generated OpenAPI, compileall, a 108-file repository check, and `git diff --check` pass. A newly rebuilt frozen Linux sidecar completed an isolated first-industry/bootstrap/overview/shutdown workflow.
 
 The reusable native workflow now requires the full Python suite, Web DOM/build, generated OpenAPI drift check, repository check, Desktop tests, frozen-sidecar smoke, renderer-operated first run, restart persistence, and secure-storage lifecycle where available.
 
 ## Release blockers
+
+- `NOM-01` live public credential-free collection remains an external gap; local
+  task packages and seed fixtures do not satisfy it.
+- Native background-service install/revoke, uninstall/data retention, and a real
+  logged-in Agent deep smoke remain external gaps.
 
 - The current working tree has not passed matching native Windows, macOS, and Linux runners.
 - No newly built current installer has completed a packaged GUI lifecycle on all three hosts.

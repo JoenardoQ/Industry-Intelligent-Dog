@@ -141,6 +141,8 @@ def build_deep_reports(store, industry_name: str, industry_en: str = "",
         tasks.append({
             "id": f"deep_{rid}",
             "type": "deep_report",
+            "status": "waiting_for_agent",
+            "execution_mode": "taskpack",
             "title": title,
             "topic": tp,
             "prompt": prompt,
@@ -151,6 +153,8 @@ def build_deep_reports(store, industry_name: str, industry_en: str = "",
 
     out = {
         "industry": industry_name,
+        "status": "waiting_for_agent",
+        "execution_mode": "taskpack",
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "instruction": "把每个 task 的 prompt 交给任意 LLM/agent 执行：先读 prompt 中列出的"
                        "本地数据文件，引用编号成文，Markdown 写入 output_file，"

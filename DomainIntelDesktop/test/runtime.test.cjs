@@ -20,14 +20,34 @@ test('runtime environment keeps mutable data outside application resources', () 
   assert.equal(env.INTDOG_DISABLE_EMAIL, '1')
 })
 
-test('runtime injects a configured provider only into the child process', () => {
+test('runtime never injects a configured provider credential into child environment', () => {
   const env = runtimeEnvironment({ resourcesPath: '/app/resources', userData: '/user/intdog',
     token: 'secret', executable: '/app/backend', providerConfig: {
       provider: 'deepseek', model: 'deepseek-chat', apiKey: 'runtime-only',
-      apiBase: 'https://api.deepseek.com' } })
-  assert.equal(env.INTDOG_LLM_PROVIDER, 'deepseek')
-  assert.equal(env.INTDOG_LLM_MODEL, 'deepseek-chat')
-  assert.equal(env.INTDOG_LLM_API_KEY, 'runtime-only')
+      apiBase: 'https://api.deepseek.com', authType: 'bearer' } })
+  assert.equal(JSON.stringify(env).includes('runtime-only'), false)
+  assert.equal(env.INTDOG_LLM_PROVIDER, undefined)
+  assert.equal(env.INTDOG_LLM_API_KEY, undefined)
+})
+
+test('runtime environment drops unrelated host credentials and the API session capability', () => {
+  const previous = {DATABASE_URL:process.env.DATABASE_URL,GITHUB_PAT:process.env.GITHUB_PAT,
+    INTDOG_SESSION_TOKEN:process.env.INTDOG_SESSION_TOKEN}
+  process.env.DATABASE_URL = 'postgres://private'
+  process.env.GITHUB_PAT = 'pat-canary'
+  process.env.INTDOG_SESSION_TOKEN = 'old-session'
+  try {
+    const env = runtimeEnvironment({ resourcesPath:'/app/resources', userData:'/user/intdog',
+      token:'new-session', executable:'/app/backend' })
+    assert.equal(env.DATABASE_URL, undefined)
+    assert.equal(env.GITHUB_PAT, undefined)
+    assert.equal(env.INTDOG_SESSION_TOKEN, 'new-session')
+  } finally {
+    for (const [key,value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
+  }
 })
 
 test('only HTTPS external links can leave the workbench', () => {

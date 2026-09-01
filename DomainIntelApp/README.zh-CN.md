@@ -7,6 +7,9 @@
 
 IntDog 的本地桌面工作台，用于管理行业、启动采集和研究、浏览数据、批量操作并生成周期产物。界面本身可离线浏览已有数据；联网研究由 `DomainIntelSearch`、Codex 登录或 API 配置提供。
 
+普通用户应安装 Windows `.exe`、macOS `.dmg` 或 Linux `.AppImage` 原生 Beta。
+下面的源码启动器仅作为开发兼容路径保留，明确不进入发行资源。
+
 ## 启动
 
 生产环境在 WSL home 中从仓库根目录运行：
@@ -42,6 +45,11 @@ powershell -ExecutionPolicy Bypass -File .\create_shortcut.ps1
 4. 在每日情报运行采集，再到知识结构、定期产物和行业报告查看结果。
 
 Codex 套餐模式使用本机 ChatGPT/Codex 登录，无需 API Key。任务包模式只产生 prompt，不会直接出现完整报告。
+
+无模型公开免凭据采集与任务包不是同一结果；前者必须通过 `NOM-01` 外部 oracle。Agent/API 生成内容
+不会自动成为已审核事实。后台计划只在用户主动授权后启用，可在系统状态中撤销。Provider Key
+由操作系统安全存储保存，并经一次性管道传入 sidecar，不通过环境变量泄露。Windows、macOS、
+Linux 卸载程序默认保留用户数据；当前 Beta 卸载前应先停用后台服务。
 
 ## 工作台导航
 

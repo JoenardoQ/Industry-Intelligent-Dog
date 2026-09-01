@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timedelta, timezone
 
-from .models import json_text, json_value, stable_id, utc_now
+from .models import json_text, json_value, normalized_name, stable_id, utc_now
 
 
 class WorkbenchRepositoryMixin:
@@ -72,6 +73,7 @@ class WorkbenchRepositoryMixin:
                 weekday=excluded.weekday,monthday=excluded.monthday,
                 timezone=excluded.timezone,catch_up=excluded.catch_up,
                 pipeline_mode=excluded.pipeline_mode,provider=excluded.provider,
+                runtime_status='idle',pause_reason='',
                 updated_at=excluded.updated_at""",
                 (iid, action, int(enabled), f"{hour:02d}:{minute:02d}", int(weekday),
                  int(monthday), timezone_name, int(catch_up), pipeline_mode,
@@ -79,16 +81,22 @@ class WorkbenchRepositoryMixin:
         return self.get_schedule(folder, action)
 
     def claim_schedule(self, folder: str, action: str, period_key: str,
-                       owner: str, *, lease_seconds: int = 3600) -> bool:
+                       owner: str, *, lease_seconds: int = 3600,
+                       period_identity: str | None = None,
+                       origin: str = "app") -> bool:
         """Atomically reserve one period before a job is enqueued."""
         iid = self.industry_id(folder)
         now = datetime.now(timezone.utc)
         expires = now + timedelta(seconds=max(30, lease_seconds))
         with self.transaction() as con:
-            row = con.execute("""SELECT enabled,last_period_key,attempted_period_key,
+            row = con.execute("""SELECT enabled,last_period_key,last_period_identity,
+                attempted_period_key,attempted_period_identity,runtime_status,
                 lease_owner,lease_expires_at,retry_after FROM automation_schedules
                 WHERE industry_id=? AND action=?""", (iid, action)).fetchone()
-            if row is None or not row["enabled"] or row["last_period_key"] == period_key:
+            identity = str(period_identity or period_key)
+            if (row is None or not row["enabled"] or
+                    row["runtime_status"] == "paused" or
+                    (row["last_period_identity"] or row["last_period_key"]) == identity):
                 return False
             lease = row["lease_expires_at"]
             if lease:
@@ -105,9 +113,11 @@ class WorkbenchRepositoryMixin:
                 except ValueError:
                     pass
             con.execute("""UPDATE automation_schedules SET attempted_period_key=?,
-                last_attempt_at=?,last_error=NULL,lease_owner=?,lease_expires_at=?,retry_after=NULL,
-                updated_at=? WHERE industry_id=? AND action=?""",
-                (period_key, now.isoformat(timespec="seconds"), owner,
+                attempted_period_identity=?,last_attempt_at=?,last_error=NULL,
+                runtime_status='running',pause_reason='',last_origin=?,lease_owner=?,
+                lease_expires_at=?,retry_after=NULL,updated_at=?
+                WHERE industry_id=? AND action=?""",
+                (period_key, identity, now.isoformat(timespec="seconds"), origin, owner,
                  expires.isoformat(timespec="seconds"), now.isoformat(timespec="seconds"),
                  iid, action))
         return True
@@ -129,30 +139,87 @@ class WorkbenchRepositoryMixin:
                 (run_id, utc_now(), iid, action, owner))
 
     def finish_schedule(self, folder: str, action: str, owner: str, *,
-                        success: bool, error: str = "", artifact_path: str = "") -> None:
+                        success: bool, error: str = "", artifact_path: str = "",
+                        outcome: str | None = None, error_category: str = "",
+                        successful_boundary: str | None = None,
+                        time_window: dict | None = None) -> None:
         iid = self.industry_id(folder)
         timestamp = datetime.now(timezone.utc)
         now = timestamp.isoformat(timespec="seconds")
         with self.transaction() as con:
-            row = con.execute("""SELECT attempted_period_key,retry_count
+            row = con.execute("""SELECT attempted_period_key,attempted_period_identity,
+                retry_count,max_retries
                 FROM automation_schedules WHERE industry_id=? AND action=?
                 AND lease_owner=?""", (iid, action, owner)).fetchone()
             if row is None:
                 return
-            retries = 0 if success else int(row["retry_count"] or 0) + 1
-            retry_after = None if success else (
+            outcome = str(outcome or ("completed" if success else "failed")).casefold()
+            if outcome not in {"completed", "partial", "failed", "paused",
+                                "cancelled", "interrupted"}:
+                raise ValueError("invalid schedule outcome")
+            advance = outcome == "completed" and bool(success)
+            paused = outcome == "paused"
+            retries = (0 if advance else int(row["retry_count"] or 0)
+                       if paused else int(row["retry_count"] or 0) + 1)
+            exhausted = not advance and not paused and retries >= int(
+                row["max_retries"] or 5)
+            runtime_status = "paused" if paused or exhausted else outcome
+            pause_reason = (str(error)[:1000] if paused else
+                            f"retry_exhausted: {str(error)[:950]}" if exhausted else "")
+            retry_after = None if advance or paused or exhausted else (
                 timestamp + timedelta(minutes=min(60, 2 ** min(retries, 5)))
             ).isoformat(timespec="seconds")
+            window = time_window or {}
             con.execute("""UPDATE automation_schedules SET
                 last_period_key=CASE WHEN ? THEN attempted_period_key ELSE last_period_key END,
+                last_period_identity=CASE WHEN ? THEN attempted_period_identity
+                    ELSE last_period_identity END,
                 last_success_at=CASE WHEN ? THEN ? ELSE last_success_at END,
-                last_error=?,retry_count=?,retry_after=?,
+                last_success_boundary=CASE WHEN ? THEN ? ELSE last_success_boundary END,
+                last_error=?,retry_count=?,retry_after=?,runtime_status=?,pause_reason=?,
+                last_window_start=COALESCE(?,last_window_start),
+                last_window_end=COALESCE(?,last_window_end),
+                last_window_timezone=COALESCE(?,last_window_timezone),
                 last_artifact_path=CASE WHEN ?!='' THEN ? ELSE last_artifact_path END,
                 lease_owner=NULL,lease_expires_at=NULL,updated_at=?
                 WHERE industry_id=? AND action=? AND lease_owner=?""",
-                (int(success), int(success), now, "" if success else str(error)[:1000],
-                 retries, retry_after, artifact_path, artifact_path, now,
+                (int(advance), int(advance), int(advance), now,
+                 int(advance), successful_boundary or window.get("end") or now,
+                 "" if advance else f"{error_category}: {error}".strip(": ")[:1000],
+                 retries, retry_after, runtime_status, pause_reason,
+                 window.get("start"), window.get("end"), window.get("timezone"),
+                 artifact_path, artifact_path, now,
                  iid, action, owner))
+
+    def begin_worker_wakeup(self, owner: str, *, origin: str) -> str:
+        wake_id, now = f"wake_{uuid.uuid4().hex}", utc_now()
+        with self.transaction() as con:
+            con.execute("""INSERT INTO worker_wakeups
+                (id,owner,origin,started_at,status,summary_json,error_json)
+                VALUES(?,?,?,?,'running','{}','{}')""",
+                (wake_id, owner, origin, now))
+        return wake_id
+
+    def finish_worker_wakeup(self, wake_id: str, *, status: str,
+                             summary: dict, error: dict | None = None) -> None:
+        with self.transaction() as con:
+            changed = con.execute("""UPDATE worker_wakeups SET status=?,summary_json=?,
+                error_json=?,finished_at=? WHERE id=? AND status='running'""",
+                (status, json_text(summary), json_text(error or {}), utc_now(),
+                 wake_id)).rowcount
+            if changed != 1:
+                raise RuntimeError("worker wakeup is not running")
+
+    def latest_worker_wakeup(self) -> dict | None:
+        with self.connection() as con:
+            row = con.execute("""SELECT * FROM worker_wakeups
+                ORDER BY started_at DESC,id DESC LIMIT 1""").fetchone()
+        if row is None:
+            return None
+        item = dict(row)
+        item["summary"] = json_value(item.pop("summary_json"), {})
+        item["error"] = json_value(item.pop("error_json"), {})
+        return item
 
     def upsert_coverage_cell(self, folder: str, dimensions: dict, *,
                              priority: int = 50, status: str = "gap",
@@ -227,6 +294,334 @@ class WorkbenchRepositoryMixin:
             result.append(item)
         return result
 
+    @staticmethod
+    def _coverage_round_dict(row) -> dict:
+        item = dict(row)
+        item["frontier"] = json_value(item.pop("frontier_json"), [])
+        item["outcome"] = json_value(item.pop("outcome_json"), {})
+        item["log"] = json_value(item.pop("log_json"), [])
+        return item
+
+    def create_coverage_round(self, folder: str, frontier) -> dict:
+        """Persist a server-generated, full-dimensional entity/relation frontier."""
+        iid = self.industry_id(folder)
+        cells = [dict(item) for item in getattr(frontier, "cells", [])]
+        entity_queries = [dict(item) for item in getattr(frontier, "entity_queries", [])]
+        relation_queries = [dict(item) for item in getattr(frontier, "relation_queries", [])]
+        now = utc_now()
+        with self.transaction() as con:
+            round_no = int(con.execute("""SELECT COALESCE(MAX(round_no),0)+1
+                FROM coverage_rounds WHERE industry_id=?""", (iid,)).fetchone()[0])
+            round_id = stable_id("cvr", iid, round_no)
+            con.execute("""INSERT INTO coverage_rounds
+                (id,industry_id,round_no,status,frontier_json,outcome_json,log_json,
+                 stopping_reason,created_at,updated_at)
+                VALUES(?,?,?,'planned',?,'{}','[]','',?,?)""",
+                (round_id, iid, round_no, json_text(cells), now, now))
+            for kind, queries in (("entity", entity_queries),
+                                  ("relation", relation_queries)):
+                for query in queries:
+                    cell_id = str(query.get("cell_id") or "").strip()
+                    text = str(query.get("query") or "").strip()
+                    if not cell_id or not text:
+                        continue
+                    cell = con.execute("""SELECT dimensions_json FROM coverage_cells
+                        WHERE id=? AND industry_id=?""", (cell_id, iid)).fetchone()
+                    if not cell:
+                        raise ValueError("coverage frontier contains a non-persistent cell")
+                    dimensions = json_value(cell["dimensions_json"], {})
+                    query_id = stable_id("cvq", round_id, kind, cell_id,
+                                         text.casefold())
+                    con.execute("""INSERT INTO coverage_round_queries
+                        (id,round_id,cell_id,kind,language,family,dimensions_json,
+                         query,status,outcome_json,created_at,updated_at)
+                        VALUES(?,?,?,?,?,?,?,?,?,'{}',?,?)""",
+                        (query_id, round_id, cell_id, kind,
+                         str(query.get("language") or ""),
+                         str(query.get("family") or ""), json_text(dimensions),
+                         text, "planned", now, now))
+            row = con.execute("SELECT * FROM coverage_rounds WHERE id=?",
+                              (round_id,)).fetchone()
+            return self._coverage_round_dict(row)
+
+    def start_coverage_round(self, folder: str, round_id: str) -> dict:
+        iid = self.industry_id(folder)
+        token, now = uuid.uuid4().hex, utc_now()
+        with self.transaction() as con:
+            row = con.execute("""SELECT status FROM coverage_rounds
+                WHERE id=? AND industry_id=?""", (round_id, iid)).fetchone()
+            if not row:
+                raise FileNotFoundError("coverage round not found")
+            if row["status"] == "running":
+                raise RuntimeError("coverage round is already running")
+            if row["status"] not in {"planned", "paused", "failed"}:
+                raise ValueError(f"coverage round cannot start from {row['status']}")
+            con.execute("""UPDATE coverage_rounds SET status='running',lease_token=?,
+                stopping_reason='',updated_at=? WHERE id=? AND status=?""",
+                (token, now, round_id, row["status"]))
+            started = con.execute("SELECT * FROM coverage_rounds WHERE id=?",
+                                  (round_id,)).fetchone()
+            return self._coverage_round_dict(started)
+
+    def list_coverage_rounds(self, folder: str) -> list[dict]:
+        iid = self.industry_id(folder)
+        with self.connection() as con:
+            rounds = con.execute("""SELECT * FROM coverage_rounds
+                WHERE industry_id=? ORDER BY round_no DESC""", (iid,)).fetchall()
+            result = []
+            for row in rounds:
+                item = self._coverage_round_dict(row)
+                item.pop("lease_token", None)
+                query_rows = con.execute("""SELECT * FROM coverage_round_queries
+                    WHERE round_id=? ORDER BY kind,id""", (row["id"],)).fetchall()
+                item["queries"] = []
+                for query_row in query_rows:
+                    query = dict(query_row)
+                    query["dimensions"] = json_value(query.pop("dimensions_json"), {})
+                    query["outcome"] = json_value(query.pop("outcome_json"), {})
+                    item["queries"].append(query)
+                result.append(item)
+            return result
+
+    def record_coverage_round_query(self, round_id: str, lease_token: str,
+                                    query_id: str, *, status: str,
+                                    outcome: dict) -> dict:
+        if status not in {"running", "completed", "paused", "failed"}:
+            raise ValueError("invalid coverage query status")
+        if not isinstance(outcome, dict):
+            raise ValueError("coverage query outcome must be an object")
+        now = utc_now()
+        with self.transaction() as con:
+            if not con.execute("""SELECT 1 FROM coverage_rounds
+                    WHERE id=? AND status='running' AND lease_token=?""",
+                    (round_id, lease_token)).fetchone():
+                raise RuntimeError("coverage round lease was lost")
+            changed = con.execute("""UPDATE coverage_round_queries
+                SET status=?,outcome_json=?,updated_at=? WHERE id=? AND round_id=?""",
+                (status, json_text(outcome), now, query_id, round_id)).rowcount
+            if changed != 1:
+                raise FileNotFoundError("coverage query not found")
+            row = con.execute("SELECT * FROM coverage_round_queries WHERE id=?",
+                              (query_id,)).fetchone()
+        item = dict(row)
+        item["dimensions"] = json_value(item.pop("dimensions_json"), {})
+        item["outcome"] = json_value(item.pop("outcome_json"), {})
+        return item
+
+    def append_coverage_round_log(self, round_id: str, lease_token: str,
+                                  message: str, *, level: str = "info") -> None:
+        text = " ".join(str(message or "").split()).strip()
+        if not text:
+            return
+        with self.transaction() as con:
+            row = con.execute("""SELECT log_json FROM coverage_rounds
+                WHERE id=? AND status='running' AND lease_token=?""",
+                (round_id, lease_token)).fetchone()
+            if not row:
+                raise RuntimeError("coverage round lease was lost")
+            log = json_value(row["log_json"], [])
+            log.append({"at": utc_now(), "level": level, "message": text})
+            con.execute("UPDATE coverage_rounds SET log_json=?,updated_at=? WHERE id=?",
+                        (json_text(log[-500:]), utc_now(), round_id))
+
+    def upsert_coverage_candidate(self, folder: str, round_id: str,
+                                  query_id: str, cell_id: str, *, kind: str,
+                                  payload: dict) -> dict:
+        if kind not in {"entity", "relation"} or not isinstance(payload, dict):
+            raise ValueError("invalid coverage candidate")
+        iid, now = self.industry_id(folder), utc_now()
+        if kind == "entity":
+            name = normalized_name(payload.get("name"))
+            entity_type = str(payload.get("type") or payload.get("kind") or "").casefold()
+            if not name or not entity_type:
+                raise ValueError("entity candidate requires name and type")
+            canonical_key = stable_id(
+                "entity-candidate-key", entity_type, name,
+                str(payload.get("country") or "").casefold(),
+                json_text(payload.get("external_ids") or {}))
+            table, prefix = "entity_candidates", "enc"
+        else:
+            relation = str(payload.get("relation") or "").casefold()
+            src = str(payload.get("src_node_id") or payload.get("source") or "").strip()
+            dst = str(payload.get("dst_node_id") or payload.get("target") or "").strip()
+            if not relation or not src or not dst:
+                raise ValueError("relation candidate requires source, target and relation")
+            canonical_key = stable_id("relation-candidate-key", src, relation, dst)
+            table, prefix = "relation_candidates", "rlc"
+        candidate_id = stable_id(prefix, iid, canonical_key, cell_id)
+        with self.transaction() as con:
+            query = con.execute("""SELECT q.kind,r.industry_id FROM coverage_round_queries q
+                JOIN coverage_rounds r ON r.id=q.round_id
+                WHERE q.id=? AND q.round_id=? AND q.cell_id=?""",
+                (query_id, round_id, cell_id)).fetchone()
+            if not query or query["industry_id"] != iid or query["kind"] != kind:
+                raise ValueError("coverage candidate provenance is invalid")
+            if kind == "entity":
+                con.execute("""INSERT INTO entity_candidates
+                    (id,industry_id,round_id,query_id,cell_id,canonical_key,payload_json,
+                     status,status_reason,created_at,updated_at)
+                    VALUES(?,?,?,?,?,?,?,'candidate','',?,?)
+                    ON CONFLICT(industry_id,canonical_key,cell_id) DO UPDATE SET
+                    query_id=excluded.query_id,round_id=excluded.round_id,
+                    payload_json=CASE WHEN entity_candidates.status='candidate'
+                        THEN excluded.payload_json ELSE entity_candidates.payload_json END,
+                    updated_at=excluded.updated_at""",
+                    (candidate_id, iid, round_id, query_id, cell_id, canonical_key,
+                     json_text(payload), now, now))
+            else:
+                con.execute("""INSERT INTO relation_candidates
+                    (id,industry_id,round_id,query_id,cell_id,canonical_key,payload_json,
+                     document_id,assertion_id,status,status_reason,created_at,updated_at)
+                    VALUES(?,?,?,?,?,?,?,?,?,'candidate','',?,?)
+                    ON CONFLICT(industry_id,canonical_key,cell_id) DO UPDATE SET
+                    query_id=excluded.query_id,round_id=excluded.round_id,
+                    payload_json=CASE WHEN relation_candidates.status='candidate'
+                        THEN excluded.payload_json ELSE relation_candidates.payload_json END,
+                    document_id=COALESCE(excluded.document_id,relation_candidates.document_id),
+                    assertion_id=COALESCE(excluded.assertion_id,relation_candidates.assertion_id),
+                    updated_at=excluded.updated_at""",
+                    (candidate_id, iid, round_id, query_id, cell_id, canonical_key,
+                     json_text(payload), payload.get("document_id"),
+                     payload.get("assertion_id"), now, now))
+            row = con.execute(f"SELECT * FROM {table} WHERE id=?", (candidate_id,)).fetchone()
+        result = dict(row); result["payload"] = json_value(result.pop("payload_json"), {})
+        return result
+
+    def finish_coverage_round(self, round_id: str, lease_token: str,
+                              outcome: dict, *, status: str = "completed",
+                              stopping_reason: str = "") -> dict:
+        if status not in {"completed", "paused", "converged", "failed"}:
+            raise ValueError("invalid coverage round terminal status")
+        now = utc_now()
+        with self.transaction() as con:
+            changed = con.execute("""UPDATE coverage_rounds SET status=?,outcome_json=?,
+                stopping_reason=?,updated_at=?
+                WHERE id=? AND status='running' AND lease_token=?""",
+                (status, json_text(outcome), stopping_reason, now,
+                 round_id, lease_token)).rowcount
+            if changed != 1:
+                raise RuntimeError("coverage round lease was lost")
+            row = con.execute("SELECT * FROM coverage_rounds WHERE id=?", (round_id,)).fetchone()
+            self._insert_quality_observation(con, row["industry_id"], {
+                "observed_at": now, "metric": "chain_node_coverage_change",
+                "numerator": float(outcome.get("qualified_gain") or 0),
+                "denominator": max(1, int(outcome.get("coverage_units") or 0)),
+                "algorithm_version": "entity-coverage-v1",
+                "dimensions": {"round_id": round_id, "status": status},
+            })
+            return self._coverage_round_dict(row)
+
+    def list_coverage_review_queue(self, folder: str) -> dict:
+        iid = self.industry_id(folder)
+        with self.connection() as con:
+            entity_rows = con.execute("""SELECT * FROM entity_candidates
+                WHERE industry_id=? AND status IN ('candidate','manual_review')
+                ORDER BY updated_at DESC""", (iid,)).fetchall()
+            relation_rows = con.execute("""SELECT * FROM relation_candidates
+                WHERE industry_id=? AND status IN ('candidate','manual_review')
+                ORDER BY updated_at DESC""", (iid,)).fetchall()
+        def decode(rows):
+            output = []
+            for row in rows:
+                item = dict(row); item["payload"] = json_value(item.pop("payload_json"), {})
+                output.append(item)
+            return output
+        return {"entities": decode(entity_rows), "relations": decode(relation_rows)}
+
+    def get_coverage_candidate(self, folder: str, candidate_id: str, *,
+                               kind: str) -> dict:
+        if kind not in {"entity", "relation"}:
+            raise ValueError("invalid coverage candidate kind")
+        iid = self.industry_id(folder)
+        table = "entity_candidates" if kind == "entity" else "relation_candidates"
+        with self.connection() as con:
+            row = con.execute(f"SELECT * FROM {table} WHERE id=? AND industry_id=?",
+                              (candidate_id, iid)).fetchone()
+        if not row:
+            raise FileNotFoundError("coverage candidate not found")
+        item = dict(row); item["payload"] = json_value(item.pop("payload_json"), {})
+        return item
+
+    def review_coverage_candidate(self, folder: str, candidate_id: str, *, kind: str,
+                                  decision: str, actor: str, reason: str,
+                                  entity_id: str | None = None) -> dict:
+        if kind not in {"entity", "relation"}:
+            raise ValueError("invalid coverage candidate kind")
+        target = {"approve": "accepted", "accepted": "accepted",
+                  "manual_review": "manual_review", "rejected": "rejected"}.get(
+                      str(decision or "").casefold())
+        if not target:
+            raise ValueError("invalid coverage candidate decision")
+        normalized_actor = " ".join(str(actor or "").split()).strip()
+        normalized_reason = " ".join(str(reason or "").split()).strip()
+        if not normalized_actor or not normalized_reason:
+            raise ValueError("coverage review actor and reason are required")
+        iid, now = self.industry_id(folder), utc_now()
+        table = "entity_candidates" if kind == "entity" else "relation_candidates"
+        with self.transaction() as con:
+            row = con.execute(f"SELECT * FROM {table} WHERE id=? AND industry_id=?",
+                              (candidate_id, iid)).fetchone()
+            if not row:
+                raise FileNotFoundError("coverage candidate not found")
+            current = row["status"]
+            if current in {"accepted", "rejected"}:
+                raise ValueError("coverage candidate review is terminal")
+            if kind == "entity" and target == "accepted" and not entity_id:
+                raise ValueError("accepted entity candidate requires materialized entity")
+            if kind == "relation" and target == "accepted":
+                valid_document = bool(row["document_id"] and con.execute("""
+                    SELECT 1 FROM industry_documents WHERE industry_id=?
+                    AND document_id=? AND deleted_at IS NULL""",
+                    (iid, row["document_id"])).fetchone())
+                valid_assertion = bool(row["assertion_id"] and con.execute("""
+                    SELECT 1 FROM agent_assertions a JOIN agent_results r ON r.id=a.result_id
+                    JOIN claims c ON c.id=a.claim_id WHERE a.id=? AND r.industry_id=?
+                    AND a.status='accepted' AND c.industry_id=? AND c.status='accepted'""",
+                    (row["assertion_id"], iid, iid)).fetchone())
+                if not valid_document and not valid_assertion:
+                    raise ValueError("accepted relation candidate requires current-industry evidence")
+            snapshot = dict(row)
+            changed = con.execute(f"""UPDATE {table} SET status=?,status_reason=?,
+                {"entity_id=? ," if kind == "entity" else ""} updated_at=?
+                WHERE id=? AND status=?""",
+                ((target, normalized_reason, entity_id, now, candidate_id, current)
+                 if kind == "entity" else
+                 (target, normalized_reason, now, candidate_id, current))).rowcount
+            if changed != 1:
+                raise RuntimeError("coverage candidate changed concurrently")
+            con.execute("""INSERT INTO coverage_candidate_reviews
+                (candidate_kind,candidate_id,from_status,to_status,actor,reason,
+                 snapshot_json,occurred_at) VALUES(?,?,?,?,?,?,?,?)""",
+                (kind, candidate_id, current, target, normalized_actor,
+                 normalized_reason, json_text(snapshot), now))
+            if kind == "relation" and target == "accepted":
+                payload = json_value(row["payload_json"], {})
+                src = str(payload.get("source") or payload.get("src_entity_id") or "")
+                dst = str(payload.get("target") or payload.get("dst_entity_id") or "")
+                predicate = str(payload.get("relation") or payload.get("predicate") or "")
+                membership_count = con.execute("""SELECT COUNT(DISTINCT entity_id)
+                    FROM industry_entities WHERE industry_id=? AND entity_id IN (?,?)""",
+                    (iid, src, dst)).fetchone()[0]
+                if membership_count != 2 or not predicate:
+                    raise ValueError("accepted relation endpoints are not current-industry entities")
+                relation_id = stable_id(
+                    "rel", iid, src, predicate, dst, payload.get("valid_from") or "")
+                evidence = ({"kind": "document", "id": row["document_id"]}
+                            if valid_document else
+                            {"kind": "assertion", "id": row["assertion_id"]})
+                con.execute("""INSERT INTO relations
+                    (id,src_entity_id,predicate,dst_entity_id,industry_id,valid_from,valid_to,
+                     confidence,metadata_json) VALUES(?,?,?,?,?,?,?,?,?)
+                    ON CONFLICT(id) DO UPDATE SET valid_to=excluded.valid_to,
+                    confidence=excluded.confidence,metadata_json=excluded.metadata_json""",
+                    (relation_id, src, predicate, dst, iid,
+                     payload.get("valid_from") or None, payload.get("valid_to") or None,
+                     payload.get("confidence"), json_text({
+                         "review_candidate_id": candidate_id, "evidence": [evidence],
+                         "derived_evidence_count": 1,
+                     })))
+        return self.get_coverage_candidate(folder, candidate_id, kind=kind)
+
     def story_detail(self, folder: str, story_id: str) -> dict:
         iid = self.industry_id(folder)
         with self.connection() as con:
@@ -292,6 +687,12 @@ class WorkbenchRepositoryMixin:
                 (story_id,action,actor,details_json,occurred_at) VALUES(?,?,?,?,?)""",
                 (story_id, "unlock", actor,
                  json_text({"document_ids": document_ids, "removed": cur.rowcount}), now))
+            self._insert_quality_observation(con, iid, {
+                "observed_at": now, "metric": "manual_correction_rate",
+                "numerator": 1, "denominator": 1,
+                "algorithm_version": "story-editorial-v1",
+                "dimensions": {"action": "unlock"},
+            })
         return cur.rowcount
 
     def restore_industry_record(self, folder: str, name: str = "") -> None:

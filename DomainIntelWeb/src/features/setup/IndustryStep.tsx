@@ -1,0 +1,12 @@
+import { useEffect, useState } from 'react'
+import { api, type Industry } from '../../api'
+
+export default function IndustryStep({onBack,onStart}:{onBack:()=>void;onStart:(folder:string)=>Promise<void>}) {
+  const [industries,setIndustries]=useState<Industry[]>([]);const [mode,setMode]=useState<'existing'|'create'>('create');const [selected,setSelected]=useState(localStorage.getItem('intdog.industry')||'');const [busy,setBusy]=useState(false);const [error,setError]=useState('')
+  useEffect(()=>{api<Industry[]>('/industries').then(rows=>{setIndustries(rows);if(rows.length){setMode('existing');setSelected(value=>value||rows[0].folder)}}).catch(reason=>setError(String(reason)))},[])
+  const submit=async(event:React.FormEvent<HTMLFormElement>)=>{event.preventDefault();setBusy(true);setError('');const values=Object.fromEntries(new FormData(event.currentTarget)) as Record<string,string>;try{let folder=selected;if(mode==='create'){folder=values.folder;await api('/industries',{method:'POST',body:JSON.stringify({folder,name:values.name})})}if(!folder)throw new Error('请选择或创建行业');await onStart(folder)}catch(reason){setError(String(reason))}finally{setBusy(false)}}
+  return <section className="setup-step" aria-labelledby="industry-title"><div><span className="eyebrow">STEP 3 / 4</span><h2 id="industry-title">选择行业</h2><p>首次任务按信息源、产业链、实体三道门槛建立可继续扩展的知识底座。</p></div>
+    {industries.length>0&&<div className="segmented"><button type="button" className={mode==='existing'?'active':''} onClick={()=>setMode('existing')}>已有行业</button><button type="button" className={mode==='create'?'active':''} onClick={()=>setMode('create')}>新建行业</button></div>}
+    <form className="first-industry-form" onSubmit={submit}>{mode==='existing'?<label><span>行业</span><select aria-label="行业" value={selected} onChange={event=>setSelected(event.target.value)}>{industries.map(item=><option key={item.folder} value={item.folder}>{item.name} · {item.folder}</option>)}</select></label>:<><label><span>行业名称</span><input name="name" required placeholder="例如：人工智能"/></label><label><span>数据文件夹</span><input name="folder" required pattern="[^/\\]+" placeholder="例如：AI"/></label></>}{error&&<p className="field-error" role="alert">{error}</p>}<footer><button type="button" className="button secondary" onClick={onBack}>返回连接</button><button className="button primary" disabled={busy}>{busy?'正在创建任务…':'创建并开始研究'}</button></footer></form>
+  </section>
+}

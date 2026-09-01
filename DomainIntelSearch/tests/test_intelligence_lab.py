@@ -42,7 +42,7 @@ class IntelligenceLabTests(unittest.TestCase):
                 "name": "SEC", "url": "https://www.sec.gov/", "added_manually": True})
             result = lab.observe_sources(stale_days=30)
             self.assertEqual(result["metrics"]["source_links"], 1)
-            self.assertEqual(result["sources"][0]["health_status"], "unused")
+            self.assertEqual(result["sources"][0]["health_status"], "manual_watch")
             self.assertIn("news", result["missing_categories"])
             self.assertIn("本地已观察", result["limitation"])
 
@@ -122,8 +122,12 @@ class IntelligenceLabTests(unittest.TestCase):
             edge_id = service.repo.upsert_chain_edge("AI", {
                 "src_node_id": node_ids[0], "dst_node_id": node_ids[2],
                 "relation": "supplies", "confidence": 0.9, "evidence_count": 2})
+            document_id = service.repo.upsert_document("AI", "official", "2026-09-01", {
+                "title": "Current-industry chain proof",
+                "url": "https://example.com/chain-proof",
+            })
             service.repo.add_chain_edge_evidence(
-                edge_id, "supports", url="https://example.com/chain-proof")
+                edge_id, "supports", document_id=document_id, excerpt="supplies")
             result = lab.simulate_chain("设计受限", chain=names[0], max_hops=1)
             self.assertEqual(result["topology"], "evidence_edges")
             self.assertEqual({item["node"] for item in result["impacts"]},
@@ -247,9 +251,14 @@ class IntelligenceLabTests(unittest.TestCase):
             first = lab.plan_boundaries()["active_items"][0]
             service.update_research_agenda_status("AI", first["id"], "in_progress")
             for index in range(3):
+                document_id = service.repo.upsert_document("AI", "official", "2026-09-01", {
+                    "title": f"Company {index} official profile",
+                    "url": f"https://example.com/{index}",
+                })
                 service.repo.upsert_entity("AI", {
                     "name": f"Company {index}", "type": "company", "chain": "模型",
-                    "references": [f"https://example.com/{index}"]}, "模型")
+                    "references": [{"document_id": document_id,
+                                    "relation": "supports"}]}, "模型")
             lab.plan_boundaries()
             rows = service.repo.list_research_agenda("AI", include_closed=True)
             preserved = next(row for row in rows if row["id"] == first["id"])

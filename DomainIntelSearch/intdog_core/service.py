@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import hmac
 import shutil
 import re
+import tempfile
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime
@@ -16,6 +19,13 @@ from .repository import IntelligenceRepository
 
 SOURCE_CATEGORIES = ("official", "associations", "blogs", "platforms",
                      "self_media", "news", "journals", "financials", "finance")
+INDUSTRY_BUNDLE_MAX_BYTES = 64 * 1024 * 1024
+INDUSTRY_BUNDLE_MAX_RECORD_BYTES = 256 * 1024
+INDUSTRY_BUNDLE_LIMITS = {
+    "sources": 5_000, "documents": 100_000, "chain": 5_000,
+    "chain_edges": 20_000, "entities": 100_000, "relations": 200_000,
+    "claims": 100_000,
+}
 
 _ACTIVE_RUN: ContextVar[tuple[str, str, str] | None] = ContextVar("intdog_active_run", default=None)
 
@@ -116,6 +126,295 @@ class IntDogService:
                 shutil.move(str(target), str(source))
                 raise
         return target
+
+    @staticmethod
+    def _portable_record(item: dict) -> dict:
+        """Remove runtime paths and other local-only compatibility fields."""
+        return {key: value for key, value in item.items()
+                if not str(key).startswith("_") and key not in {
+                    "raw_path", "artifact_path", "original_file"}}
+
+    @staticmethod
+    def _bundle_bytes(bundle: dict, *, include_checksum: bool = False) -> bytes:
+        payload = dict(bundle)
+        if not include_checksum:
+            payload.pop("checksum_sha256", None)
+        try:
+            return json.dumps(payload, ensure_ascii=False, sort_keys=True,
+                              separators=(",", ":"), default=str).encode("utf-8")
+        except (TypeError, ValueError, RecursionError) as exc:
+            raise ValueError("行业包不是可移植的 JSON 数据") from exc
+
+    @classmethod
+    def _bundle_checksum(cls, bundle: dict) -> str:
+        return hashlib.sha256(cls._bundle_bytes(bundle)).hexdigest()
+
+    @classmethod
+    def _validate_industry_bundle(cls, bundle: dict) -> None:
+        if not isinstance(bundle, dict) or int(bundle.get("schema_version", 0) or 0) != 1:
+            raise ValueError("不支持的行业包版本")
+        checksum = str(bundle.get("checksum_sha256") or "").casefold()
+        if not re.fullmatch(r"[0-9a-f]{64}", checksum):
+            raise ValueError("行业包缺少有效校验和")
+        if len(cls._bundle_bytes(bundle, include_checksum=True)) > INDUSTRY_BUNDLE_MAX_BYTES:
+            raise ValueError("行业包超过 64 MiB 上限")
+        expected = cls._bundle_checksum(bundle)
+        if not hmac.compare_digest(checksum, expected):
+            raise ValueError("行业包校验和不匹配")
+        if not isinstance(bundle.get("industry"), dict):
+            raise ValueError("行业包缺少行业元数据")
+        for key, limit in INDUSTRY_BUNDLE_LIMITS.items():
+            rows = bundle.get(key, [])
+            if not isinstance(rows, list) or len(rows) > limit:
+                raise ValueError(f"行业包 {key} 记录数超过上限")
+            for row in rows:
+                if (not isinstance(row, dict)
+                        or len(cls._bundle_bytes({"record": row})) >
+                        INDUSTRY_BUNDLE_MAX_RECORD_BYTES):
+                    raise ValueError(f"行业包 {key} 包含无效或过大的记录")
+        for row in bundle.get("sources", []):
+            if (str(row.get("category") or "") not in SOURCE_CATEGORIES
+                    or not canonical_url(row.get("url", ""))):
+                raise ValueError("行业包包含无效来源")
+        for row in bundle.get("documents", []):
+            if (not canonical_url(row.get("url", ""))
+                    or not str(row.get("title") or "").strip()
+                    or not str(row.get("category") or "").strip()
+                    or not str(row.get("date") or row.get("observed_date") or "").strip()):
+                raise ValueError("行业包包含无效文档")
+        node_keys = {str(row.get("id") or row.get("name") or "")
+                     for row in bundle.get("chain", [])}
+        entity_keys = {str(row.get("id") or "") for row in bundle.get("entities", [])}
+        if any(not str(row.get("name") or "").strip() for row in bundle.get("chain", [])):
+            raise ValueError("行业包包含无效产业链节点")
+        if any(not str(row.get("name") or row.get("canonical_name") or "").strip()
+               for row in bundle.get("entities", [])):
+            raise ValueError("行业包包含无效实体")
+        for row in bundle.get("chain_edges", []):
+            if (str(row.get("src_node_id") or row.get("src_name") or "") not in node_keys
+                    or str(row.get("dst_node_id") or row.get("dst_name") or "") not in node_keys):
+                raise ValueError("行业包产业链边引用未知节点")
+        for row in bundle.get("relations", []):
+            if (str(row.get("src_entity_id") or "") not in entity_keys
+                    or str(row.get("dst_entity_id") or "") not in entity_keys):
+                raise ValueError("行业包关系引用未知实体")
+
+    def export_industry_bundle(self, folder: str) -> dict:
+        """Export one industry without credentials, local paths, or shared DB state."""
+        folder = validate_folder(folder)
+        if not (self.root / folder).is_dir():
+            raise FileNotFoundError(f"行业不存在：{folder}")
+        industry = self.read_json(
+            self.root / folder / "one_time/knowledge/industry.json", {})
+        claims = []
+        for claim in self.repo.list_claim_evidence(folder):
+            portable = self._portable_record(claim)
+            portable["evidence"] = [self._portable_record(row)
+                                    for row in claim.get("evidence", [])]
+            claims.append(portable)
+        bundle = {
+            "schema_version": 1,
+            "exported_at": utc_now(),
+            "industry": self._portable_record(industry),
+            "sources": [self._portable_record(row)
+                        for row in self.repo.list_sources(folder)],
+            "documents": [self._portable_record(row)
+                          for row in self.repo.list_documents(folder, limit=1_000_000)],
+            "chain": [self._portable_record(row)
+                      for row in self.repo.list_chain_nodes(folder)],
+            "chain_edges": [self._portable_record(row)
+                            for row in self.repo.list_chain_edges(folder, active_only=False)],
+            "entities": [self._portable_record(row)
+                         for row in self.repo.list_compat_entities(folder)],
+            "relations": [self._portable_record(row)
+                          for row in self.repo.graph(folder, limit=1_000_000)["edges"]],
+            "claims": claims,
+        }
+        for key, limit in INDUSTRY_BUNDLE_LIMITS.items():
+            if len(bundle[key]) > limit:
+                raise ValueError(f"行业数据超过可移植包 {key} 上限")
+        bundle["checksum_sha256"] = self._bundle_checksum(bundle)
+        if len(self._bundle_bytes(bundle, include_checksum=True)) > INDUSTRY_BUNDLE_MAX_BYTES:
+            raise ValueError("行业数据超过 64 MiB 可移植包上限")
+        return bundle
+
+    def import_industry_bundle(self, folder: str, name: str, bundle: dict) -> dict:
+        """Stage, validate and atomically merge an untrusted portable bundle."""
+        folder = validate_folder(folder)
+        self._validate_industry_bundle(bundle)
+        industry = bundle.get("industry") or {}
+        display_name = str(name or industry.get("name") or folder).strip()
+        target = self.root / folder
+        if target.exists():
+            raise FileExistsError(f"行业已存在：{folder}")
+        with self.repo.connection() as con:
+            if con.execute("SELECT 1 FROM industries WHERE folder=?", (folder,)).fetchone():
+                raise FileExistsError(f"行业记录已存在：{folder}")
+        staging_parent = self.root / "_import_staging"
+        staging_parent.mkdir(parents=True, exist_ok=True)
+        staging_root = Path(tempfile.mkdtemp(prefix="bundle-", dir=staging_parent))
+        try:
+            staged = IntDogService(staging_root)
+            counts = staged._populate_import_staging(folder, display_name, bundle)
+            self._merge_staged_import(staged, folder)
+        finally:
+            shutil.rmtree(staging_root, ignore_errors=True)
+        return {"folder": folder, "name": display_name, "imported": counts}
+
+    def _populate_import_staging(self, folder: str, display_name: str,
+                                 bundle: dict) -> dict:
+        """Populate an isolated database; imported trust decisions are never retained."""
+        self.create_industry(folder, display_name)
+        counts = {key: 0 for key in INDUSTRY_BUNDLE_LIMITS}
+        grouped: dict[tuple[str, str], list[dict]] = {}
+        document_map: dict[str, str] = {}
+        for row in bundle.get("documents", []):
+            date = str(row.get("date") or row.get("observed_date"))
+            category = str(row.get("category"))
+            clean = {**row, "review_status": "unreviewed",
+                     "evidence_status": "collected", "verified": False}
+            grouped.setdefault((date, category), []).append(clean)
+        for (date, category), rows in grouped.items():
+            ids = self.repo.upsert_documents(folder, category, date, rows, strict=True)
+            counts["documents"] += len(ids)
+            for row, document_id in zip(rows, ids, strict=True):
+                document_map[str(row.get("id") or document_id)] = document_id
+        for row in bundle.get("sources", []):
+            clean = {**row, "monitoring_status": "recommended_manual",
+                     "added_manually": True,
+                     "governance_reason": "portable_bundle_requires_review"}
+            self.repo.upsert_source(folder, str(row["category"]), clean)
+            counts["sources"] += 1
+        node_map: dict[str, str] = {}
+        for row in bundle.get("chain", []):
+            clean = {**row, "parent_id": None, "status": "candidate",
+                     "coverage_status": "empty", "evidence_count": 0}
+            node_id = self.repo.upsert_chain_node(folder, clean)
+            node_map[str(row.get("id") or row.get("name"))] = node_id
+            node_map[str(row.get("name"))] = node_id
+            counts["chain"] += 1
+        for row in bundle.get("chain", []):
+            parent = node_map.get(str(row.get("parent_id") or ""))
+            if parent:
+                self.repo.upsert_chain_node(folder, {
+                    **row, "parent_id": parent, "status": "candidate",
+                    "coverage_status": "empty", "evidence_count": 0})
+        for row in bundle.get("chain_edges", []):
+            self.repo.upsert_chain_edge(folder, {
+                **row,
+                "src_node_id": node_map[str(row.get("src_node_id") or row.get("src_name"))],
+                "dst_node_id": node_map[str(row.get("dst_node_id") or row.get("dst_name"))],
+                "status": "candidate", "evidence_count": 0})
+            counts["chain_edges"] += 1
+        entity_map: dict[str, str] = {}
+        for row in bundle.get("entities", []):
+            clean = {**row, "name": row.get("name") or row.get("canonical_name"),
+                     "references": [], "status": "candidate", "evidence_count": 0}
+            entity_id = self.repo.upsert_entity(folder, clean)
+            entity_map[str(row.get("id") or entity_id)] = entity_id
+            counts["entities"] += 1
+        iid, now = self.repo.industry_id(folder), utc_now()
+        relations = bundle.get("relations", [])
+        if relations:
+            round_id = stable_id("cvr", iid, 1)
+            with self.repo.transaction() as con:
+                con.execute("""INSERT INTO coverage_rounds
+                    (id,industry_id,round_no,status,frontier_json,outcome_json,log_json,
+                     stopping_reason,created_at,updated_at)
+                    VALUES(?,?,1,'planned','[]','{}','[]','portable import review',?,?)""",
+                    (round_id, iid, now, now))
+                for index, row in enumerate(relations):
+                    src = entity_map[str(row.get("src_entity_id"))]
+                    dst = entity_map[str(row.get("dst_entity_id"))]
+                    predicate = str(row.get("predicate") or "related_to")
+                    payload = {**row, "source": src, "target": dst,
+                               "relation": predicate, "imported_from_bundle": True}
+                    canonical_key = stable_id("relation-candidate-key", src, predicate, dst)
+                    candidate_id = stable_id("rlc", iid, canonical_key, "portable-import")
+                    con.execute("""INSERT INTO relation_candidates
+                        (id,industry_id,round_id,query_id,cell_id,canonical_key,payload_json,
+                         document_id,assertion_id,status,status_reason,created_at,updated_at)
+                        VALUES(?,?,?,?,?,?,?,NULL,NULL,'manual_review',?,?,?)""",
+                        (candidate_id, iid, round_id, None, "portable-import", canonical_key,
+                         json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+                         "portable bundle relationships require evidence review", now, now))
+                    counts["relations"] += 1
+        for row in bundle.get("claims", []):
+            evidence = []
+            for item in row.get("evidence", []) or []:
+                document_id = document_map.get(str(item.get("document_id") or ""))
+                if not document_id:
+                    continue
+                evidence.append({
+                    "document_id": document_id,
+                    "relation": item.get("relation", "supports"),
+                    "excerpt": item.get("excerpt", ""),
+                    "publisher_cluster": item.get("publisher_cluster", ""),
+                    "extraction_method": "portable_bundle_import_untrusted",
+                    "confidence": item.get("confidence"),
+                })
+            self.repo.save_claim_bundles(folder, [{
+                "subject_id": entity_map.get(str(row.get("subject_id") or "")),
+                "predicate": row.get("predicate", "states"),
+                "object": row.get("object"), "qualifiers": row.get("qualifiers", {}),
+                "valid_from": row.get("valid_from") or "",
+                "valid_to": row.get("valid_to") or "", "status": "candidate",
+                "evidence": evidence,
+            }])
+            counts["claims"] += 1
+        result = self.reconcile_compat([folder])
+        if result["failed"]:
+            raise OSError(result["errors"][0]["error"])
+        return counts
+
+    @staticmethod
+    def _read_table(con, table: str) -> list[dict]:
+        return [dict(row) for row in con.execute(f'SELECT * FROM "{table}"')]
+
+    def _merge_staged_import(self, staged: "IntDogService", folder: str) -> None:
+        """Merge a fully validated staging DB and filesystem as one recoverable unit."""
+        global_tables = ("publishers", "sources", "entities", "publisher_domains",
+                         "source_publishers", "documents", "entity_aliases",
+                         "entity_names", "entity_identifiers")
+        industry_tables = ("industries", "industry_sources", "industry_documents",
+                           "value_chain_nodes", "value_chain_edges", "industry_entities",
+                           "entity_chain_roles", "claims", "evidence", "coverage_rounds",
+                           "coverage_round_queries", "relation_candidates",
+                           "compatibility_views")
+        rows: dict[str, list[dict]] = {}
+        with staged.repo.connection() as source:
+            for table in (*global_tables, *industry_tables):
+                rows[table] = self._read_table(source, table)
+        target = self.root / folder
+        moved = False
+        try:
+            with self.repo.transaction() as con:
+                for table in global_tables:
+                    for row in rows[table]:
+                        columns = tuple(row)
+                        sql = (f'INSERT OR IGNORE INTO "{table}" '
+                               f'({",".join(columns)}) VALUES '
+                               f'({",".join("?" for _ in columns)})')
+                        con.execute(sql, tuple(row[key] for key in columns))
+                for table in industry_tables:
+                    table_rows = rows[table]
+                    if table == "value_chain_nodes":
+                        table_rows = [{**row, "parent_id": None} for row in table_rows]
+                    for row in table_rows:
+                        columns = tuple(row)
+                        sql = (f'INSERT INTO "{table}" ({",".join(columns)}) VALUES '
+                               f'({",".join("?" for _ in columns)})')
+                        con.execute(sql, tuple(row[key] for key in columns))
+                for row in rows["value_chain_nodes"]:
+                    if row.get("parent_id"):
+                        con.execute("UPDATE value_chain_nodes SET parent_id=? WHERE id=?",
+                                    (row["parent_id"], row["id"]))
+                (staged.root / folder).rename(target)
+                moved = True
+        except Exception:
+            if moved and target.exists():
+                shutil.rmtree(target, ignore_errors=True)
+            raise
 
     def list_trash(self) -> list[dict]:
         """Return recoverable records without following paths outside `_trash`."""

@@ -77,6 +77,8 @@ def build_report_tasks(store, industry_name: str, industry_en: str = "") -> list
     # 写入任务清单
     out = {
         "industry": industry_name,
+        "status": "waiting_for_agent",
+        "execution_mode": "taskpack",
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "instruction": "把每个 task 的 prompt 交给任意 LLM/agent 执行，"
                        "将 Markdown 结果写入对应 output_file。",

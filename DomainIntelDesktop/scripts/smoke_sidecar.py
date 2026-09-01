@@ -10,6 +10,7 @@ import socket
 import subprocess
 import tempfile
 import time
+import hashlib
 from pathlib import Path
 from urllib.request import Request, urlopen
 
@@ -31,6 +32,20 @@ def request_json(url: str, *, token: str, method: str = "GET",
         return json.load(response)
 
 
+def verify_resources(resources: Path) -> None:
+    manifest_path = resources / "resource-manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest.get("schema") != "intdog-resource-manifest-v1":
+        raise SystemExit("invalid frozen resource manifest")
+    for row in manifest.get("files", []):
+        target = resources / row["path"]
+        if not target.is_file() or target.stat().st_size != row["size"]:
+            raise SystemExit(f"frozen resource missing or truncated: {row['path']}")
+        digest = hashlib.sha256(target.read_bytes()).hexdigest()
+        if digest != row["sha256"]:
+            raise SystemExit(f"frozen resource digest mismatch: {row['path']}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--executable", type=Path, required=True)
@@ -40,6 +55,7 @@ def main() -> None:
         raise SystemExit(f"sidecar missing: {executable}")
     root = Path(__file__).resolve().parents[2]
     resources = root / "DomainIntelDesktop" / "build" / "resources" / "intdog"
+    verify_resources(resources)
     token = secrets.token_urlsafe(32)
     port = available_port()
     with tempfile.TemporaryDirectory(prefix="intdog-package-smoke-") as temporary:
@@ -57,6 +73,17 @@ def main() -> None:
                              capture_output=True, text=True, timeout=30)
         if cli.returncode:
             raise SystemExit(f"sidecar CLI failed ({cli.returncode}): {cli.stderr}")
+        worker = subprocess.run([str(executable), "worker", "--once"], env=env,
+                                capture_output=True, text=True, timeout=30)
+        if worker.returncode:
+            raise SystemExit(
+                f"sidecar Worker failed ({worker.returncode}): {worker.stderr[-4000:]}")
+        try:
+            worker_result = json.loads(worker.stdout.strip().splitlines()[-1])
+        except (IndexError, json.JSONDecodeError) as exc:
+            raise SystemExit("sidecar Worker did not return structured diagnostics") from exc
+        if not isinstance(worker_result.get("claimed"), int):
+            raise SystemExit(f"invalid sidecar Worker result: {worker_result!r}")
         process = subprocess.Popen([str(executable), "serve", "--port", str(port)],
                                    env=env, stdout=subprocess.PIPE,
                                    stderr=subprocess.STDOUT, text=True)

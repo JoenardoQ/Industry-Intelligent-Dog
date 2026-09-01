@@ -4,6 +4,9 @@
 
 > Version 4.0 Preview. Model output is review-required draft material, not confirmed fact or investment advice.
 
+Beta status: the current working tree is not ready for public distribution until
+the same-revision native and external gates pass.
+
 IntDog is a local-first industry-intelligence workbench. It maps sources and value chains, continuously collects news, papers, GitHub activity, funding, hiring, and leadership posts, and produces cited periodic and industry research.
 
 ## System goal
@@ -44,7 +47,10 @@ SQLite is the canonical store for entities, documents, Stories, relations, claim
 | Provider API | OpenAI, DeepSeek, Qwen, or Azure OpenAI key; API charges may apply | Draft output |
 | Task package | No model call | JSON prompt/task, not a report |
 
-Secrets must be supplied through environment variables or system credential storage. They must not be committed to YAML or the data directory. Remote model endpoints must use HTTPS.
+The desktop accepts secrets only through system credential storage and transfers
+them to the sidecar through an anonymous pipe. Developer CLI runs may use explicit
+process environment variables. Secrets must not be committed to YAML or the data
+directory. Remote model endpoints must use HTTPS.
 
 ## User installation and first run
 
@@ -55,6 +61,11 @@ Secrets must be supplied through environment variables or system credential stor
 The IntDog installer contains the app and local backend, but **no model account or
 quota**. Existing-data browsing, industry management, and task packages need no
 model. Research generation requires one separately configured provider.
+
+No-model has two distinct meanings: task-package handoff creates no finished
+research, while the `NOM-01` public credential-free collector must meet its live
+source/document/entity/value-chain oracle before it is called useful. The current
+working tree has not closed that external network gate.
 
 ### Windows 10/11 x64
 
@@ -80,6 +91,14 @@ publicly upload logs containing API keys, tokens, or personal paths.
 - On Linux x64, make the AppImage executable: `chmod +x IntDog-*.AppImage`.
 - Local-agent mode still requires the corresponding CLI and its public sign-in flow.
   API and task-package modes are alternatives.
+
+The optional background schedule is installed only after the user enables it in
+System Status. It uses Task Scheduler on Windows, a user LaunchAgent on macOS, or a
+user systemd timer on Linux. Disable/revoke it before uninstalling. Closing the
+window does not grant new network or model permissions. Provider keys use OS secure
+storage and an anonymous one-shot pipe; they are never placed in child-process
+environment variables. Uninstall removes the application but retains user data by
+design; delete that data directory only after making a backup.
 
 See the complete [installation and agent-connection guide](docs/onboarding-and-installation.md).
 
@@ -145,6 +164,14 @@ The Web scheduler is the only schedule owner. It persists daily/weekly/monthly/q
 - A competition landscape is an evidence skeleton; weakly supported entities remain on a Watchlist.
 - “Not observed” never means “does not exist.” Report coverage gaps and failed sources.
 - The project does not claim commercial-database coverage for global funding, customs, hiring, real-time markets, or social platforms.
+
+## Evolution priorities
+
+1. Strengthen the trusted data kernel, migration audit, schema validation, and recovery tools.
+2. Improve entity resolution, republication detection, event clustering, claim/evidence links, and coverage matrices.
+3. Expand temporal value chains, cross-industry entities, long-tail research groups and companies, learning dependencies, and impact propagation.
+
+New reports and connectors must build on these foundations instead of using more model text to hide evidence or coverage gaps.
 
 ## Documentation
 

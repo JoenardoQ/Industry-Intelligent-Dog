@@ -158,7 +158,7 @@ entity_type × source_type × event_type × time_horizon 的覆盖单元，优�
 不能把外国网站的中文翻译页算中文源。每个源额外给出
 tier(primary/authoritative/secondary/signal)、coverage（覆盖主题数组）、
 publisher_country、language(zh/en)、origin(china/international)、
-access（rss/api/web）、selection_reason、monitoring_status(active/recommended_manual)、access_note；
+	access（rss/api/web）、selection_reason、monitoring_status(candidate)、access_note；
 若存在稳定 RSS/Atom，必须额外填写 rss_url，
 且 rss_url 必须是实际订阅地址而不是栏目首页。不要虚构网址。
 优质但因登录、付费墙、反爬或没有 RSS 而无法自动抓取的来源仍应推荐，标为
@@ -170,11 +170,14 @@ query_ledger、stopping_reason；coverage/query 只是待验证发现记录，�
   "news":[...], "journals":[...], "financials":[...], "finance":[...],
   "coverage_ledger":[{{"dimensions":{{"region","subdomain","chain_stage","entity_type","source_type","event_type","time_horizon"}},"status":"gap|thin|candidate","rationale"}}],
   "query_ledger":[{{"dimensions":{{...}},"query","rationale","discovered_urls":[],"stopping_reason"}}],
-  "stopping_reason":"本轮停止原因"}}
-"""
+	  "stopping_reason":"本轮停止原因"}}
+	所有发现项只能是待审查 candidate；URL 可访问、模型评分或搜索排名都不能直接产生 active/trusted。
+	"""
     return {
         "type": "source_discovery",
         "industry": industry_name,
+        "admission": "candidate_only",
+        "allowed_statuses": ["candidate"],
         "prompt": prompt,
         "output_file": "sources.json",
         "instruction": "执行 prompt，把返回的 JSON 合并写入 DomainIntelData/<行业>/sources.json",

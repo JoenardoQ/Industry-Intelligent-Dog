@@ -103,8 +103,7 @@ class IntelligenceCoreTests(unittest.TestCase):
             IntelligenceRepository(temp)
             with IntelligenceRepository(temp).connection() as con:
                 versions = con.execute("SELECT version FROM schema_migrations").fetchall()
-            self.assertEqual([row["version"] for row in versions],
-                             [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
+            self.assertEqual([row["version"] for row in versions], list(range(1, 22)))
 
     def test_schema_v10_recovers_when_columns_exist_before_marker(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -188,10 +187,14 @@ class IntelligenceCoreTests(unittest.TestCase):
             service.create_industry("AI")
             service.repo.upsert_source("AI", "news", {
                 "name": "Reuters AI", "url": "https://reuters.com/technology"})
+            document_id = service.repo.upsert_document("AI", "news", "2026-08-29", {
+                "title": "NVIDIA company profile",
+                "url": "https://reuters.com/technology/nvidia-profile",
+            })
             first = service.repo.upsert_entity("AI", {
                 "name": "英伟达", "name_en": "NVIDIA", "type": "company",
                 "country": "US", "external_ids": {"lei": "549300S4KLFTLO7GSQ80"},
-                "chain": "Compute", "references": [{"url": "https://example.com"}]})
+                "chain": "Compute", "references": [{"document_id": document_id}]})
             second = service.repo.upsert_entity("AI", {
                 "name": "NVIDIA Corporation", "type": "company", "country": "US",
                 "external_ids": {"lei": "549300S4KLFTLO7GSQ80"}, "chain": "Applications"})

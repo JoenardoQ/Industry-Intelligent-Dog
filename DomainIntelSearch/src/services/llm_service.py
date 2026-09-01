@@ -14,6 +14,7 @@ from urllib.parse import urlsplit
 import requests
 
 from .capability_manifest import API_SPECS
+from .runtime_credentials import credential_for
 
 
 class LLMConfigurationError(ValueError):
@@ -32,26 +33,47 @@ class LLMResult:
 class LLMService:
     """Small provider adapter; OpenAI uses Responses, others are compatible chat APIs."""
 
-    DEFAULT_BASES = {item.id: item.default_api_base for item in API_SPECS
+    DIRECT_APIS = tuple(item for item in API_SPECS if item.execution_level == "direct")
+    DEFAULT_BASES = {item.id: item.default_api_base for item in DIRECT_APIS
                      if item.default_api_base}
-    KEY_ENV = {item.id: item.key_env for item in API_SPECS if item.key_env}
+    DEFAULT_MODELS = {item.id: item.default_model for item in DIRECT_APIS
+                      if item.default_model}
+    KEY_ENV = {item.id: item.key_env for item in DIRECT_APIS if item.key_env}
+    AUTH_TYPES = {item.id: item.auth for item in DIRECT_APIS}
 
     def __init__(self, config: dict, provider: str = None):
         cfg = config.get("llm", {}) or {}
         self.provider = (provider or cfg.get("provider") or "none").lower()
         configured_provider = str(cfg.get("provider") or "none").lower()
-        selected_env = os.environ.get("INTDOG_LLM_PROVIDER", "").strip().lower()
+        runtime = credential_for(self.provider)
+        selected_env = (runtime.get("provider") or
+                        os.environ.get("INTDOG_LLM_PROVIDER", "")).strip().lower()
         env_matches = not selected_env or selected_env == self.provider
-        env_model = os.environ.get("INTDOG_LLM_MODEL", "") if env_matches else ""
-        self.model = str(env_model or (cfg.get("model") if configured_provider == self.provider else "") or "").strip()
+        env_model = (runtime.get("model") or os.environ.get("INTDOG_LLM_MODEL", "")) \
+            if env_matches else ""
+        self.model = str(env_model or
+                         (cfg.get("model") if configured_provider == self.provider else "") or
+                         self.DEFAULT_MODELS.get(self.provider, "")).strip()
         configured_base = str(cfg.get("api_base") or "").strip()
-        env_base = os.environ.get("INTDOG_LLM_API_BASE", "").strip() if env_matches else ""
+        env_base = (runtime.get("apiBase") or os.environ.get(
+            "INTDOG_LLM_API_BASE", "")).strip() if env_matches else ""
         self.base = (env_base or
                      (configured_base if configured_provider == self.provider else "") or
                      self.DEFAULT_BASES.get(self.provider, "")).rstrip("/")
-        generic_key = os.environ.get("INTDOG_LLM_API_KEY") if env_matches else ""
-        provider_key = os.environ.get(self.KEY_ENV.get(self.provider, ""), "")
+        generic_key = (runtime.get("apiKey") or os.environ.get(
+            "INTDOG_LLM_API_KEY")) if env_matches else ""
+        key_env = self.KEY_ENV.get(self.provider, "")
+        provider_key = (os.environ.get(key_env, "")
+                        if key_env and (key_env != "INTDOG_LLM_API_KEY" or env_matches)
+                        else "")
         self.api_key = generic_key or provider_key
+        env_auth = (runtime.get("authType") or os.environ.get(
+            "INTDOG_LLM_AUTH_TYPE", "")).strip().lower() \
+            if env_matches else ""
+        configured_auth = str(cfg.get("auth_type") or "").strip().lower()
+        default_auth = self.AUTH_TYPES.get(self.provider, "")
+        self.auth_type = env_auth or configured_auth or (
+            "" if default_auth == "explicit" else default_auth)
         self.timeout = int(cfg.get("timeout_seconds", 180))
         self.web_search = bool(cfg.get("web_search", True))
         self.reasoning_effort = str(cfg.get("reasoning_effort") or "").strip().lower()
@@ -71,6 +93,12 @@ class LLMService:
         local = parsed.hostname in {"localhost", "127.0.0.1", "::1"}
         if parsed.scheme != "https" and not (parsed.scheme == "http" and local):
             raise LLMConfigurationError("非本机 API Base 必须使用 HTTPS")
+        if self.auth_type not in {"bearer", "api_key_header"}:
+            raise LLMConfigurationError("API 模式必须显式选择 bearer 或 api_key_header 认证")
+        manifest_auth = self.AUTH_TYPES.get(self.provider, "")
+        if manifest_auth != "explicit" and self.auth_type != manifest_auth:
+            raise LLMConfigurationError(
+                f"{self.provider} 认证方式必须使用能力目录声明的 {manifest_auth}")
 
     def complete(self, prompt: str) -> LLMResult:
         if self.provider == "openai":
@@ -104,11 +132,13 @@ class LLMService:
 
     def _compatible_chat(self, prompt: str) -> LLMResult:
         headers = {"Content-Type": "application/json"}
-        if self.provider == "azure":
+        if self.auth_type == "api_key_header":
             headers["api-key"] = self.api_key
-            url = self.base
         else:
             headers["Authorization"] = f"Bearer {self.api_key}"
+        if self.provider == "azure":
+            url = self.base
+        else:
             url = f"{self.base}/chat/completions"
         response = requests.post(
             url, json={"model": self.model,

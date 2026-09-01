@@ -143,9 +143,20 @@ class CoreContractTests(unittest.TestCase):
                  "rss_url": "https://manual.example/feed",
                  "monitoring_status": "recommended_manual"},
                 {"name": "active", "url": "https://active.example/",
-                 "rss_url": "https://active.example/feed", "origin": "china"},
+                 "rss_url": "https://active.example/feed", "origin": "china",
+                 "monitoring_status": "active"},
             ]})
-            cfg = PeriodicScheduler._with_discovered_feeds({"news": {}}, store)
+            # This unit isolates scheduler admission from source-governance review:
+            # only an explicitly active catalog row may enter collection.
+            with patch.object(store, "get_sources", return_value={"news": [
+                {"name": "manual", "url": "https://manual.example/feed",
+                 "rss_url": "https://manual.example/feed",
+                 "monitoring_status": "recommended_manual"},
+                {"name": "active", "url": "https://active.example/",
+                 "rss_url": "https://active.example/feed", "origin": "china",
+                 "monitoring_status": "active"},
+            ]}):
+                cfg = PeriodicScheduler._with_discovered_feeds({"news": {}}, store)
             urls = [feed["url"] for feed in cfg["news"]["rss_feeds"]["general"]]
             self.assertIn("https://active.example/feed", urls)
             self.assertNotIn("https://manual.example/feed", urls)
@@ -402,7 +413,9 @@ class CoreContractTests(unittest.TestCase):
                                            store, "weekly", "codex")
             self.assertTrue(Path(result["path"]).exists())
             metadata = json.loads(Path(result["metadata"]).read_text(encoding="utf-8"))
-            self.assertEqual(metadata["status"], "draft_review_required")
+            self.assertEqual(metadata["status"], "partial")
+            self.assertIn("artifact_too_short", {
+                failure["code"] for failure in metadata["quality"]["failures"]})
             self.assertEqual(metadata["visualization"]["type"], "bar")
 
     def test_feed_link_parser_finds_declared_rss(self):

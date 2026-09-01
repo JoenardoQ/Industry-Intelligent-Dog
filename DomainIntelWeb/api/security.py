@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 ALLOWED_HOSTS = {"127.0.0.1", "localhost", "testserver"}
 CAPABILITY_HEADER = "X-IntDog-Session"
+MAX_REQUEST_BODY_BYTES = 64 * 1024 * 1024
 
 
 def _local_origin(value: str) -> bool:
@@ -55,6 +56,14 @@ def install_security(app, capability: str) -> None:
             capability=capability if required else "")
         if denial:
             return JSONResponse({"detail": denial[1]}, status_code=denial[0])
+        content_length = request.headers.get("content-length", "")
+        if request.method.upper() not in SAFE_METHODS and content_length:
+            try:
+                if int(content_length) > MAX_REQUEST_BODY_BYTES:
+                    return JSONResponse(
+                        {"detail": "请求正文超过 64 MiB 上限"}, status_code=413)
+            except ValueError:
+                return JSONResponse({"detail": "Content-Length 无效"}, status_code=400)
         response = await call_next(request)
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "

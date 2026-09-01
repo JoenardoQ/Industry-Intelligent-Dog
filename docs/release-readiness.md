@@ -41,7 +41,15 @@ Platform delivery is tracked by [Windows Issue #1](https://github.com/JoenardoQ/
 - Linux x64 sidecar: 17 MB; the same frozen executable passed `cli industries`, FastAPI health, session enforcement, and graceful shutdown.
 - Linux x64 AppImage: 142,063,476 bytes (about 135.5 MiB), SHA-256 `863844d3f8c1a26c598199c4113796587b87f9fc7bca8c1361a39d7ed0e777d2`; under WSLg and isolated data/config roots, it completed two consecutive UI/backend start, ready, graceful close, and reopen cycles.
 - Each installer carries only its native sidecar. Electron/Chromium is the dominant size component; the Python sidecar is not the main contributor.
-- Current conclusion: `READY_FOR_PUBLIC_TESTING`, not ready for a stable production release. The three packages are intentionally unsigned; Windows signing and macOS signing/notarization remain stable-release requirements.
+- Historical conclusion for commit `7709e88`: `READY_FOR_PUBLIC_TESTING`, not ready for a stable production release. It is not the current working-tree conclusion.
+
+## Current external gaps
+
+The current conclusion remains `NOT_READY_PENDING_NATIVE_GATES`. `NOM-01` live
+credential-free public collection, the same-revision Windows/macOS/Linux native
+lifecycle, background service install/revoke, uninstall with retained data, and a
+real logged-in Agent deep smoke are external gaps. SP4 and SP5 A focused reports
+prove local contracts only; they do not reactivate historical artifacts.
 
 ## Risk Coverage Matrix
 

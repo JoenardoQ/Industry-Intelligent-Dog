@@ -30,6 +30,7 @@ from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from intdog_core import IntDogService, stable_id
+from intdog_core.source_trust import publisher_key
 from .deduplication import (collapse_batch, content_fingerprint, plan_history,
                             suppress_replays)
 from .source_governance import govern_sources
@@ -163,6 +164,26 @@ class IndustryStore:
         self._write_json(audit_path, audit)
         self.service.repo.mark_compat_clean(
             self.folder, f"daily:{date}:{category}")
+        input_count = int(batch_audit.get("input") or 0)
+        duplicate_count = int(batch_audit.get("duplicates") or 0) + int(
+            replay_audit.get("suppressed_replays") or 0)
+        observed_at = f"{date}T05:00:00+08:00"
+        dimensions = {"category": category, "pipeline_stage": "deduplication"}
+        self.service.repo.record_quality_observations(self.folder, [{
+            "observed_at": observed_at, "metric": "duplicate_rate",
+            "numerator": duplicate_count, "denominator": input_count,
+            "algorithm_version": str(batch_audit.get("algorithm") or "document-dedup-v1"),
+            "dimensions": dimensions,
+        }, {
+            "observed_at": observed_at, "metric": "independent_publisher_rate",
+            "numerator": len({publisher_key(item) for item in out}),
+            "denominator": len(out), "algorithm_version": "publisher-identity-v1",
+            "dimensions": dimensions,
+        }, {
+            "observed_at": observed_at, "metric": "valid_yield",
+            "numerator": len(out), "denominator": input_count,
+            "algorithm_version": "collection-yield-v1", "dimensions": dimensions,
+        }])
         return fpath
 
     def save_period(self, kind: str, payload: dict, key: str = None) -> Path:

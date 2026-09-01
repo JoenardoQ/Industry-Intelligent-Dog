@@ -39,7 +39,13 @@ Windows 和 macOS 稳定版 Release 必须签名，macOS 还必须完成公证�
 - Linux x64 sidecar：17 MB；同一冻结文件同时通过 `cli industries`、FastAPI 健康检查、会话保护和正常关机。
 - Linux x64 AppImage：142,063,476 字节（约 135.5 MiB），SHA-256 为 `863844d3f8c1a26c598199c4113796587b87f9fc7bca8c1361a39d7ed0e777d2`；在 WSLg 中以隔离数据与配置目录连续完成两次 UI/后端启动、就绪、正常关闭与重开。
 - 安装包只包含当前平台 sidecar。Electron/Chromium 是主要体积来源；Python sidecar 不是体积主因。
-- 当前结论：`READY_FOR_PUBLIC_TESTING`，但尚未达到稳定生产版门槛。三个包按计划不签名；Windows 签名、macOS 签名与公证仍是稳定版要求。
+- 提交 `7709e88` 的历史结论：`READY_FOR_PUBLIC_TESTING`，但尚未达到稳定生产版门槛；它不是当前工作树结论。
+
+## 当前外部缺口
+
+当前结论仍是 `NOT_READY_PENDING_NATIVE_GATES`。`NOM-01` 真实公开免凭据采集、相同 revision
+的 Windows/macOS/Linux 原生生命周期、后台服务安装/撤销、卸载后数据保留，以及真实已登录
+Agent 深度 smoke 均是外部缺口。SP4 与 SP5 A focused 报告只证明本地合同，不能重新激活历史制品。
 
 ## 风险覆盖矩阵
 

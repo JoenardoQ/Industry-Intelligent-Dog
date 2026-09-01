@@ -16,14 +16,14 @@ domain:
     - "LLM"
     - "大模型"
 
-# ---------- 邮件推送设置 ----------
+# ---------- 已退役邮件字段（仅供旧配置迁移） ----------
 email:
-  enabled: false                    # 配好真实地址与环境变量 INTDOG_SMTP_PASSWORD 后再开启
+  enabled: false                    # 产品级硬禁用；配置或环境变量均不能开启
   smtp_server: "smtp.qq.com"     # QQ邮箱: smtp.qq.com | 163: smtp.163.com | Gmail: smtp.gmail.com | Outlook: smtp-mail.outlook.com
   smtp_port: 465                 # SSL端口: QQ/163=465, Gmail=465, Outlook=587
   use_ssl: true
   sender: "your_email@qq.com"    # 发件人邮箱
-  # 邮箱授权码只从环境变量 INTDOG_SMTP_PASSWORD 读取
+  # 旧授权码变量不会被运行时读取
   recipients:                    # 收件人列表
     - "recipient@example.com"
   daily_time: "08:00"            # 每日推送时间

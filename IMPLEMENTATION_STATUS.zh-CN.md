@@ -2,8 +2,8 @@
 
 [English](IMPLEMENTATION_STATUS.md) · [当前架构](DESIGN.zh-CN.md) · [安装指南](README.zh-CN.md)
 
-- 更新日期：2026-09-01
-- 源码版本：完成 Agent/首次使用第一轮实施后的 4.0 工作树
+- 更新日期：2026-09-02
+- 源码版本：完成 SP4 冻结与 SP5 A 任务 1–2 后的 4.0 工作树
 - 发行结论：`NOT_READY_PENDING_NATIVE_GATES`
 - 发布状态：本轮没有获得 commit、push、CI 触发或发布授权
 
@@ -20,11 +20,19 @@
 
 ## 当前验证
 
+SP4 已冻结统一用户工作流、确定性成品质量门和离线单文件 HTML；SP5 A 已冻结
+serve/CLI/Worker sidecar、显式哈希资源与失败即停的原生生命周期 harness。见
+[`SP4 冻结报告`](docs/superpowers/2026-09-02-sp4-freeze-report.zh-CN.md)与
+[`SP5 A 报告`](docs/superpowers/2026-09-02-sp5-a-task1-2-report.zh-CN.md)。
+
 本地验证已按 `docs/iterations/2026-08-31-agent-onboarding-round-1-contract.zh-CN.md` 的风险模型关闭：168 项 Python、7 项 Web DOM、2 项 Desktop、TypeScript/Vite 生产构建、幂等生成 OpenAPI、compileall、108 文件仓库检查和 `git diff --check` 全部通过。当前源码新构建的 Linux 冻结 sidecar 在隔离数据根完成首行业/bootstrap/概览/关闭工作流。
 
 可复用原生工作流现在强制执行完整 Python 套件、Web DOM/构建、OpenAPI 漂移、仓库检查、Desktop 测试、冻结 sidecar 烟雾、renderer 实际操作首次流程、重开持久化，以及安全存储可用时的凭据生命周期。
 
 ## 发行阻断项
+
+- `NOM-01` 真实公开免凭据采集仍是外部缺口；本地任务包和 seed fixture 不能替代。
+- 原生后台服务安装/撤销、卸载/数据保留和真实已登录 Agent 深度 smoke 仍是外部缺口。
 
 - 当前工作树尚未通过相同 revision 的 Windows、macOS、Linux 原生 runner。
 - 当前源码尚无三个宿主全部通过的新安装包 GUI 生命周期证据。

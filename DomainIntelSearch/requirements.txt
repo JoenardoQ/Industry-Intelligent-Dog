@@ -13,5 +13,8 @@ PyYAML>=6.0.1
 # 日期处理
 python-dateutil>=2.8.2
 
+# PDF page locator replay
+pypdf>=5,<7
+
 # 可选金融行情依赖见 requirements-finance.txt，或：
 # python -m pip install -e ".[finance]"

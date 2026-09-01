@@ -1,4 +1,4 @@
-"""One-click bootstrapper: show loading UI, create runtime, then launch IntDog."""
+"""Developer-only source bootstrapper; excluded from native release resources."""
 
 from __future__ import annotations
 

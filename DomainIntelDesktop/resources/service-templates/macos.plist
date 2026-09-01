@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict><key>Label</key><string>com.intdog.background</string><key>ProgramArguments</key><array><string>{{EXECUTABLE}}</string><string>--background-worker</string></array><key>StartInterval</key><integer>{{INTERVAL_SECONDS}}</integer></dict></plist>

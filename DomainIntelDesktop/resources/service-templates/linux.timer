@@ -1,0 +1,10 @@
+[Unit]
+Description=Wake IntDog background worker
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec={{INTERVAL_MINUTES}}min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

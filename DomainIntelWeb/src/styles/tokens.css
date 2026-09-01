@@ -1,0 +1,22 @@
+:root {
+  font-family: Inter, "Noto Sans SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
+  --ink:#1f2925;
+  --muted:#596761;
+  --faint:#738079;
+  --line:#d8dfda;
+  --surface:#fff;
+  --canvas:#f3f5f2;
+  --soft:#edf1ee;
+  --accent:#315f50;
+  --accent-soft:#e1ebe6;
+  --danger:#99463f;
+  --mono:"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+  --radius-control:13px;
+  --radius-card:22px;
+  --space-reading:1.7;
+}
+
+html { color-scheme:light;scroll-behavior:smooth; }
+body { background:var(--canvas);color:var(--ink);font-size:16px;line-height:1.65;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased; }
+button,input,select,textarea { font-family:inherit;font-size:16px; }
+small { font-size:14px;line-height:1.6; }

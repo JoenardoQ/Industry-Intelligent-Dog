@@ -11,6 +11,9 @@ PERIOD_LENGTHS = {
     "weekly": timedelta(days=7),
     "monthly": timedelta(days=30),
     "quarterly": timedelta(days=90),
+    "semiannual": timedelta(days=183),
+    "biennial": timedelta(days=730),
+    "fiveyear": timedelta(days=1826),
 }
 
 

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from collections import Counter
+from datetime import datetime, time, timedelta
 from pathlib import Path
 from typing import Annotated, Callable, Literal
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -15,7 +17,7 @@ def build_daily_router(*, data_root: Path, dataio, resolve_folder: Callable[[str
 
     @router.get("/daily", response_model=DailyState)
     def daily(folder: str, date: str | None = None, category: str | None = None,
-              sort: Literal["title", "category", "source"] = "title",
+              sort: Literal["title", "category", "source", "published_at"] = "title",
               query: Annotated[str, Query(max_length=200)] = "",
               cursor: Annotated[str, Query(max_length=500)] = "",
               limit: Annotated[int, Query(ge=1, le=100)] = 50) -> dict:
@@ -34,14 +36,25 @@ def build_daily_router(*, data_root: Path, dataio, resolve_folder: Callable[[str
             "source": lambda item: (
                 str(item.get("display_source") or "N/A").casefold(),
                 str(item.get("title") or "").casefold()),
+            "published_at": lambda item: (
+                str(item.get("published_at") or item.get("date") or ""),
+                str(item.get("title") or "").casefold()),
         }[sort]
         rows.sort(key=sort_key)
+        timezone = ZoneInfo("Asia/Shanghai")
+        now = datetime.now(timezone)
+        start = datetime.combine(
+            now.date() - timedelta(days=1), time(hour=4), tzinfo=timezone)
         return {
             "items": rows, "total": page["total"],
             "next_cursor": page["next_cursor"], "selection_scope": "current_page",
             "dates": dataio.list_daily_dates(data_root, folder),
             "counts": dict(Counter(str(item.get("category") or "unknown") for item in rows)),
             "origins": dict(Counter(str(item.get("origin") or "unknown") for item in rows)),
+            "window_start": start.isoformat(timespec="seconds"),
+            "window_end": now.isoformat(timespec="seconds"),
+            "timezone": "Asia/Shanghai",
+            "window_reason": "previous_local_day_04_to_now",
         }
 
     @router.delete("/daily", response_model=CountState)

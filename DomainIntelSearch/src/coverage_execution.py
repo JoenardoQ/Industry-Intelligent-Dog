@@ -3,21 +3,25 @@
 from __future__ import annotations
 
 import json
+from time import monotonic
 from dataclasses import dataclass
-from datetime import datetime
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 import requests
 
-from intdog_core.models import canonical_url
+from intdog_core.models import canonical_url, json_text, utc_now
+from .agent_evidence import _peer_address, _public_addresses
 from .research_bootstrap import _extract_json
 from .services.provider_factory import create_provider
 from .source_discovery import SOURCE_CATEGORIES
 
 
 CATEGORIES = {key for key, _ in SOURCE_CATEGORIES}
-ENTITY_TYPES = {"company", "research_group", "regulator", "association",
-                "person", "technology", "product", "facility"}
+ENTITY_TYPES = {
+    "company", "research_group", "government_institution", "association",
+    "investment_institution", "person", "product", "technology", "standard",
+    "policy",
+}
 
 
 @dataclass(frozen=True)
@@ -29,23 +33,59 @@ class Probe:
 
 
 def probe_url(url: str, timeout: int = 10) -> Probe:
-    """Validate a candidate URL without interpreting an error page as evidence."""
+    """Probe a URL with fail-closed DNS, peer-IP and per-hop redirect checks."""
+    current = canonical_url(url)
+    if not current:
+        return Probe(False, "", None, "blocked_invalid_http_url")
+    deadline = monotonic() + max(1, int(timeout))
+    session = requests.Session()
+    session.trust_env = False
     try:
-        response = requests.head(
-            url, allow_redirects=True, timeout=timeout,
-            headers={"User-Agent": "IntDog/4.0 coverage-validator"})
-        if response.status_code in {405, 501}:
+        for redirect_no in range(6):
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                return Probe(False, current, None, "deadline_exceeded")
+            try:
+                resolved = _public_addresses(current)
+            except ValueError as exc:
+                return Probe(False, current, None, str(exc))
+            response = session.request(
+                "HEAD", current, allow_redirects=False, timeout=min(remaining, 5),
+                stream=True, headers={"User-Agent": "IntDog/4.0 coverage-validator"})
+            if response.status_code in {405, 501}:
+                response.close()
+                remaining = deadline - monotonic()
+                if remaining <= 0:
+                    return Probe(False, current, None, "deadline_exceeded")
+                response = session.request(
+                    "GET", current, allow_redirects=False,
+                    timeout=min(remaining, 5), stream=True,
+                    headers={"User-Agent": "IntDog/4.0 coverage-validator"})
+            peer = _peer_address(response)
+            if not peer or peer not in resolved:
+                status = response.status_code
+                response.close()
+                return Probe(False, current, status, "blocked_peer_address_mismatch")
+            status = response.status_code
+            response_url = canonical_url(response.url) or current
+            location = response.headers.get("location", "")
             response.close()
-            response = requests.get(
-                url, allow_redirects=True, timeout=timeout, stream=True,
-                headers={"User-Agent": "IntDog/4.0 coverage-validator"})
-        status, final_url = response.status_code, canonical_url(response.url)
-        response.close()
-        reachable = 200 <= status < 400
-        return Probe(reachable, final_url or canonical_url(url), status,
-                     "" if reachable else f"HTTP {status}")
+            if status in {301, 302, 303, 307, 308} and location:
+                if redirect_no >= 5:
+                    return Probe(False, response_url, status, "too_many_redirects")
+                current = canonical_url(urljoin(response_url, location))
+                if not current:
+                    return Probe(False, response_url, status,
+                                 "blocked_invalid_redirect_url")
+                continue
+            reachable = 200 <= status < 400
+            return Probe(reachable, response_url, status,
+                         "" if reachable else f"HTTP {status}")
+        return Probe(False, current, None, "too_many_redirects")
     except requests.RequestException as exc:
-        return Probe(False, canonical_url(url), None, type(exc).__name__)
+        return Probe(False, current, None, type(exc).__name__)
+    finally:
+        session.close()
 
 
 def _query(cell: dict) -> str:
@@ -71,14 +111,14 @@ def _prompt(cells: list[dict], max_candidates: int) -> str:
 {{"candidates":[{{"cell_id":"...","name":"发布者/实体名称","url":"https://...",
 "category":"official|associations|blogs|platforms|self_media|news|journals|financials|finance",
 "publisher_country":"...","note":"为何补足该单元","entity":{{"name":"可选实体",
-"type":"company|research_group|regulator|association|person|technology|product|facility",
+"type":"company|research_group|government_institution|association|investment_institution|person|product|technology|standard|policy",
 "country":"...","chain":"..."}}}}],"stopping_reason":"本轮停止原因"}}
 """
 
 
 def execute_coverage(config: dict, store, *, provider: str = "codex", budget: int = 12,
                      provider_client=None, probe=probe_url) -> dict:
-    """Search, validate and admit canonical sources/entities; return measured yield."""
+    """Search and persist reviewable candidates without activating sources/entities."""
     budget = max(1, min(50, int(budget)))
     repo = store.service.repo
     cells = [cell for cell in repo.list_coverage(store.folder)
@@ -91,24 +131,37 @@ def execute_coverage(config: dict, store, *, provider: str = "codex", budget: in
     payload = _extract_json(client.complete(_prompt(cells, budget * 3)).text)
     candidates = payload.get("candidates", []) if isinstance(payload, dict) else []
     by_cell = {cell["id"]: cell for cell in cells}
-    existing_sources = {canonical_url(item.get("url", ""))
-                        for item in repo.list_sources(store.folder)}
-    existing_entities = {(str(item.get("type") or "company"),
-                          str(item.get("name") or "").casefold(),
-                          str(item.get("country") or "").casefold())
-                         for item in repo.list_compat_entities(store.folder)}
     grouped = {cell_id: [] for cell_id in by_cell}
     for candidate in candidates[:budget * 3]:
         if isinstance(candidate, dict) and candidate.get("cell_id") in grouped:
             grouped[candidate["cell_id"]].append(candidate)
 
-    total_sources = total_entities = total_rejected = 0
+    target_categories = sorted({
+        str(candidate.get("category") or "").strip()
+        for candidate in candidates if isinstance(candidate, dict)
+        and str(candidate.get("category") or "").strip() in CATEGORIES
+    } | {
+        str(cell["dimensions"].get("source_type") or "").strip()
+        for cell in cells
+        if str(cell["dimensions"].get("source_type") or "").strip() in CATEGORIES
+    })
+    campaign = repo.create_source_campaign(
+        store.folder, target_categories or ["official"], max(budget, len(cells)))
+    repo.transition_source_campaign(campaign["id"], "running")
+
+    total_rejected = 0
+    candidate_ids: set[str] = set()
     for cell_id, cell in by_cell.items():
         query = _query(cell)
-        evidence, source_yield, entity_yield = [], 0, 0
+        evidence = []
         repo.record_coverage_attempt(
             store.folder, cell_id, query=query, rationale="服务器正在验证搜索候选",
             status="running")
+        language = "zh" if cell["dimensions"].get("region") == "china" else "en"
+        query_record = repo.record_source_query(
+            campaign["id"], round_no=1, language=language,
+            family="gap_expansion", dimensions=cell["dimensions"], query=query,
+            outcome={"status": "completed", "returned_count": len(grouped[cell_id])})
         for candidate in grouped[cell_id]:
             raw_url = canonical_url(candidate.get("url", ""))
             category = str(candidate.get("category") or "").strip()
@@ -117,50 +170,139 @@ def execute_coverage(config: dict, store, *, provider: str = "codex", budget: in
                                  "reason": "invalid_url"}); total_rejected += 1
                 continue
             checked = probe(raw_url)
-            if not checked.reachable:
-                evidence.append({"url": raw_url, "status": "rejected",
-                                 "reason": checked.reason,
-                                 "status_code": checked.status_code})
-                total_rejected += 1; continue
             if category not in CATEGORIES:
                 evidence.append({"url": checked.final_url, "status": "rejected",
                                  "reason": "invalid_category"})
                 total_rejected += 1; continue
-            final_url = canonical_url(checked.final_url)
-            if final_url not in existing_sources:
-                created = store.service.add_source(store.folder, category, {
-                    "name": str(candidate.get("name") or urlsplit(final_url).netloc),
-                    "url": final_url, "note": str(candidate.get("note") or ""),
-                    "publisher_country": str(candidate.get("publisher_country") or ""),
-                    "tier": "candidate_validated_url", "monitoring_status": "active",
-                    "discovery_provenance": {"cell_id": cell_id, "query": query,
-                                             "provider": provider,
-                                             "validated_at": datetime.now().isoformat()},
-                })
-                if created:
-                    source_yield += 1; total_sources += 1; existing_sources.add(final_url)
-            entity = candidate.get("entity") or {}
-            if isinstance(entity, dict) and entity.get("name") and entity.get("type") in ENTITY_TYPES:
-                key = (str(entity["type"]), str(entity["name"]).casefold(),
-                       str(entity.get("country") or "").casefold())
-                if key not in existing_entities:
-                    store.service.repo.upsert_entity(store.folder, {
-                        **entity, "status": "candidate", "confidence": 0.55,
-                        "references": [{"url": final_url, "title": candidate.get("name", "")}],
-                        "discovery_provenance": {"cell_id": cell_id, "query": query}},
-                        chain_name=str(entity.get("chain") or
-                                       cell["dimensions"].get("chain_stage") or ""))
-                    entity_yield += 1; total_entities += 1; existing_entities.add(key)
-            evidence.append({"url": final_url, "status": "validated",
+            final_url = canonical_url(checked.final_url) or raw_url
+            saved = repo.upsert_source_candidate(campaign["id"], {
+                **candidate,
+                "name": str(candidate.get("name") or urlsplit(final_url).netloc),
+                "url": final_url,
+                "category": category,
+                "status": "candidate",
+                "monitoring_status": "candidate",
+                "score": 0.5 if checked.reachable else 0.25,
+                "selection_reason": str(candidate.get("note") or
+                                        "coverage search candidate; review required"),
+                "query_id": query_record["id"],
+                "access_check": {
+                    "reachable": checked.reachable,
+                    "status_code": checked.status_code,
+                    "reason": checked.reason,
+                },
+                "discovery_provenance": {"cell_id": cell_id, "query": query,
+                                         "provider": provider},
+            })
+            candidate_ids.add(saved["id"])
+            evidence.append({"url": final_url,
+                             "status": ("candidate_reachable" if checked.reachable
+                                        else "candidate_unreachable"),
                              "status_code": checked.status_code,
+                             "reason": checked.reason,
                              "publisher": candidate.get("name", "")})
         reason = str(payload.get("stopping_reason") or "候选已验证")
         repo.record_coverage_attempt(
             store.folder, cell_id, query=query, rationale="搜索候选已经服务器验证",
-            status="completed", source_yield=source_yield, entity_yield=entity_yield,
+            status="completed", source_yield=0, entity_yield=0,
             evidence=evidence, stopping_reason=reason)
-    store.service.reconcile_compat([store.folder])
+    now = utc_now()
+    with repo.transaction() as con:
+        con.execute("""UPDATE source_campaigns SET rounds=1,updated_at=?
+            WHERE id=? AND status='running'""", (now, campaign["id"]))
+        con.execute("""INSERT INTO audit_log
+            (occurred_at,actor,action,object_type,object_id,details_json)
+            VALUES(?,'coverage-executor','source_campaign_round','source_campaign',?,?)""",
+                    (now, campaign["id"], json_text({
+                        "round_no": 1,
+                        "new_qualified": len(candidate_ids),
+                        "candidate_total": len(candidate_ids),
+                        "query_count": len(cells),
+                    })))
     return {"status": "completed", "cells": len(cells),
-            "source_yield": total_sources, "entity_yield": total_entities,
+            "campaign_id": campaign["id"], "candidate_yield": len(candidate_ids),
+            "source_yield": 0, "entity_yield": 0,
             "rejected": total_rejected,
             "stopping_reason": str(payload.get("stopping_reason") or "候选已验证")}
+
+
+def execute_persisted_coverage_round(config: dict, store, round_id: str, *,
+                                     provider: str = "codex",
+                                     provider_client=None) -> dict:
+    """Execute and resume a server-persisted entity/relation frontier."""
+    repo = store.service.repo
+    round_state = repo.start_coverage_round(store.folder, round_id)
+    token = round_state["lease_token"]
+    rounds = repo.list_coverage_rounds(store.folder)
+    current = next(item for item in rounds if item["id"] == round_id)
+    repo.append_coverage_round_log(
+        round_id, token,
+        f"round {current['round_no']}: {len(current['queries'])} persisted queries")
+    entity_ids: set[str] = set()
+    relation_ids: set[str] = set()
+    try:
+        client = provider_client or create_provider(config, provider, store.root)
+        for query in current["queries"]:
+            if query["status"] == "completed":
+                continue
+            kind = query["kind"]
+            schema = ({"name": "entity name", "type": "company",
+                       "country": "...", "chain": "...", "aliases": []}
+                      if kind == "entity" else
+                      {"source": "upstream node", "target": "downstream node",
+                       "relation": "supplies", "document_id": None,
+                       "assertion_id": None, "evidence_url": "https://..."})
+            prompt = f"""Execute this persisted industry coverage query. Return JSON only.
+Query: {query['query']}
+Dimensions: {json.dumps(query['dimensions'], ensure_ascii=False, sort_keys=True)}
+Candidate kind: {kind}
+Return only identities/relationships actually found. All output remains candidate-only.
+Schema: {{"candidates":[{json.dumps(schema, ensure_ascii=False)}]}}
+Never claim accepted status and never invent a URL, document id, or assertion id."""
+            repo.record_coverage_round_query(
+                round_id, token, query["id"], status="running", outcome={})
+            payload = _extract_json(client.complete(prompt).text)
+            candidates = (payload.get("candidates", [])
+                          if isinstance(payload, dict) else [])
+            saved = 0
+            for candidate in candidates:
+                if not isinstance(candidate, dict):
+                    continue
+                try:
+                    row = repo.upsert_coverage_candidate(
+                        store.folder, round_id, query["id"], query["cell_id"],
+                        kind=kind, payload=candidate)
+                except ValueError:
+                    continue
+                (entity_ids if kind == "entity" else relation_ids).add(row["id"])
+                saved += 1
+            repo.record_coverage_round_query(
+                round_id, token, query["id"], status="completed",
+                outcome={"returned_count": len(candidates), "candidate_count": saved})
+            repo.append_coverage_round_log(
+                round_id, token, f"{kind} {query['cell_id']}: {saved} candidates")
+    except Exception as exc:
+        reason = f"provider_unavailable:{type(exc).__name__}"
+        repo.append_coverage_round_log(round_id, token, reason, level="warning")
+        return repo.finish_coverage_round(
+            round_id, token, {"entities": len(entity_ids),
+                              "relationships": len(relation_ids),
+                              "qualified_gain": 0},
+            status="paused", stopping_reason=reason)
+
+    pending = len(entity_ids) + len(relation_ids)
+    prior = [item for item in rounds if item["id"] != round_id]
+    previous_zero = bool(prior and
+                         int(prior[0]["outcome"].get("qualified_gain", -1)) == 0)
+    converged = pending == 0 and previous_zero
+    outcome = {
+        "entities": len(entity_ids), "relationships": len(relation_ids),
+        "coverage_units": len({query["cell_id"] for query in current["queries"]}),
+        "qualified_gain": 0, "pending_review": pending,
+    }
+    status = "converged" if converged else "completed"
+    reason = ("two_consecutive_zero_qualified_gain_rounds" if converged
+              else "candidate_review_required" if pending
+              else "one_zero_qualified_gain_round")
+    return repo.finish_coverage_round(
+        round_id, token, outcome, status=status, stopping_reason=reason)

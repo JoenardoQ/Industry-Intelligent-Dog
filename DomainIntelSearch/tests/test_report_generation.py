@@ -162,7 +162,9 @@ class ReportGenerationContractTests(unittest.TestCase):
             metadata = json.loads(Path(result["visualization_file"]).read_text())
             self.assertEqual(metadata.get("provider"), "codex_subscription")
             self.assertEqual(metadata.get("model"), "subscription_default")
-            self.assertEqual(metadata.get("status"), "draft_review_required")
+            self.assertEqual(metadata.get("status"), "partial")
+            self.assertFalse(metadata["quality"]["passed"])
+            self.assertTrue(Path(metadata["portable_file"]).is_file())
 
     def test_deep_report_writes_declared_claim_and_reference_sidecars(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -210,7 +212,9 @@ class ReportGenerationContractTests(unittest.TestCase):
             self.assertEqual(metadata["impact_rating"]["短期：3个月"]["rating"], "高")
             self.assertEqual(metadata.get("provider"), "codex_subscription")
             self.assertEqual(metadata.get("model"), "subscription_default")
-            self.assertEqual(metadata.get("status"), "draft_review_required")
+            self.assertEqual(metadata.get("status"), "partial")
+            self.assertFalse(metadata["quality"]["passed"])
+            self.assertTrue(Path(metadata["portable_file"]).is_file())
             self.assertEqual(result["metadata"], str(store.one_time / "impact" /
                                                      "算力供应受限" / "impact.json"))
 

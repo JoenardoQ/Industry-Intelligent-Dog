@@ -7,10 +7,56 @@ from fastapi import APIRouter, HTTPException, Query
 
 from ..schemas import (CoverageAttemptCreate, CoverageCellCreate,
                        CoverageAttemptState, CoverageCellState, CoverageState,
+                       CoverageCandidateState,
+                       CoverageExpansionExecutionRequest, CoverageExpansionRequest,
+                       CoverageFrontierState, CoverageReviewQueueState,
+                       CoverageRoundState, JobAccepted,
+                       EntityCandidateReview, EntityCandidateReviewState,
+                       EntityCoverageMatrixState,
                        HistoryCoverageState,
                        KnowledgeEntityDetail, KnowledgeEntityPage,
+                       QualityDriftState, StoryMomentumBatchState, StoryMomentumState,
                        StoryDetailState, StoryListState, StoryMergeRequest,
-                       StorySplitRequest, StoryUnlockRequest)
+                       StoryIgnoreRequest, StorySplitRequest, StoryUnlockRequest)
+from ..commands import search_command, search_cwd
+
+
+def _child_environment(data_root: Path, project_root: Path) -> dict[str, str]:
+    from src.background_worker import _safe_environment
+
+    return _safe_environment(data_root, project_root)
+
+
+def _entity_coverage_view(repo, folder: str) -> dict:
+    from src.entity_coverage import build_coverage_matrix
+
+    matrix = build_coverage_matrix(repo, folder)
+    edges = repo.list_chain_edges(folder)
+    for cell in matrix["cells"]:
+        current = int(cell.pop("qualified_count", 0))
+        target = int(cell["target"])
+        relations = [{
+            "edge_id": edge["id"], "relation": edge["relation"],
+            "source_stage": edge["src_name"], "target_stage": edge["dst_name"],
+            "evidence_count": edge["evidence_count"], "evidence": edge["evidence"],
+        } for edge in edges if cell["chain_stage"] in {
+            edge["src_name"], edge["dst_name"]}]
+        cell.update({
+            "current": current,
+            "gap": max(0, target - current),
+            "explanation": (
+                f"当前 {current}，目标 {target}，缺口 {max(0, target-current)}；"
+                "完整性未证明，数量达标只表示已知证据覆盖达到本单元阈值。"),
+            "relation_evidence": relations,
+        })
+        cell["id"] = repo.upsert_coverage_cell(folder, {
+            "region": cell["region"], "subdomain": cell["subdomain"],
+            "chain_stage": cell["chain_stage"], "entity_type": cell["entity_type"],
+            "source_type": cell["source_type"], "event_type": "entity_identity",
+            "time_horizon": "current",
+        }, priority=cell["priority"], status=cell["status"],
+            rationale=cell["explanation"])
+    return matrix
 
 
 def _query_for(cell: dict) -> str:
@@ -27,8 +73,135 @@ def _query_for(cell: dict) -> str:
 
 
 def build_intelligence_router(*, data_root: Path, service,
-                              resolve_folder: Callable[[str], str], dataio) -> APIRouter:
+                              resolve_folder: Callable[[str], str], dataio,
+                              jobs=None, search_root: Path | None = None,
+                              project_root: Path | None = None) -> APIRouter:
     router = APIRouter(prefix="/api/industries/{folder}", tags=["intelligence"])
+
+    @router.get("/coverage-matrix", response_model=EntityCoverageMatrixState)
+    def entity_coverage_matrix(folder: str) -> dict:
+        return _entity_coverage_view(service.repo, resolve_folder(folder))
+
+    @router.post("/coverage-expansions", response_model=CoverageFrontierState)
+    def expand_entity_coverage(folder: str,
+                               request: CoverageExpansionRequest) -> dict:
+        from dataclasses import asdict
+        from src.entity_coverage import plan_entity_frontier
+
+        folder = resolve_folder(folder)
+        matrix = _entity_coverage_view(service.repo, folder)
+        history = service.repo.list_coverage_rounds(folder)
+        matrix["round_history"] = [item["outcome"] for item in reversed(history)]
+        frontier = plan_entity_frontier(matrix, round_no=len(history) + 1)
+        persisted = service.repo.create_coverage_round(folder, frontier)
+        return {**asdict(frontier), "round_id": persisted["id"],
+                "round_no": persisted["round_no"], "status": persisted["status"]}
+
+    @router.get("/coverage-expansions", response_model=list[CoverageRoundState])
+    def coverage_expansion_history(folder: str) -> list[dict]:
+        return service.repo.list_coverage_rounds(resolve_folder(folder))
+
+    @router.post("/coverage-expansions/{round_id}/execute", status_code=202,
+                 response_model=JobAccepted)
+    def execute_coverage_expansion(folder: str, round_id: str,
+                                   request: CoverageExpansionExecutionRequest) -> dict:
+        folder = resolve_folder(folder)
+        rounds = service.repo.list_coverage_rounds(folder)
+        if not any(item["id"] == round_id for item in rounds):
+            raise HTTPException(404, "coverage round not found")
+        if jobs is None or search_root is None or project_root is None:
+            raise HTTPException(503, "本地任务运行时未配置")
+        from src.services.provider_readiness import provider_readiness
+        readiness = provider_readiness(request.provider, data_root / folder)
+        if not readiness.get("ready"):
+            raise HTTPException(
+                409, f"Provider {request.provider} 未就绪：{readiness.get('detail', '请检查连接设置')}")
+        args = ["execute-coverage", "--folder", folder,
+                "--coverage-round-id", round_id, "--provider", request.provider]
+        job = jobs.start(
+            search_command(args), cwd=search_cwd(search_root),
+            title=f"实体与关系覆盖扩展 · {folder}", timeout=3600,
+            env=_child_environment(data_root, project_root),
+            metadata={"operation": "coverage_expansion",
+                      "operation_payload": {"folder": folder,
+                                            "round_id": round_id,
+                                            "provider": request.provider}})
+        return {"run_id": job.run_id, "status": "queued", "title": job.title,
+                "action": "coverage_expansion"}
+
+    @router.get("/coverage-review-queue", response_model=CoverageReviewQueueState)
+    def coverage_review_queue(folder: str) -> dict:
+        return service.repo.list_coverage_review_queue(resolve_folder(folder))
+
+    @router.post("/entity-candidates/{candidate_id}/review",
+                 response_model=EntityCandidateReviewState)
+    def review_entity_candidate(folder: str, candidate_id: str,
+                                request: EntityCandidateReview) -> dict:
+        from src.entity_coverage import resolve_entity_candidate
+
+        folder = resolve_folder(folder)
+        persistent = None
+        try:
+            persistent = service.repo.get_coverage_candidate(
+                folder, candidate_id, kind="entity")
+        except FileNotFoundError:
+            pass
+        try:
+            source_candidate = (None if persistent else
+                                service.repo.get_source_candidate(folder, candidate_id))
+        except FileNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        candidate = (persistent["payload"] if persistent
+                     else source_candidate.get("entity"))
+        if not isinstance(candidate, dict):
+            raise HTTPException(409, "source candidate has no entity identity payload")
+        if request.decision == "approve":
+            try:
+                result = resolve_entity_candidate(service.repo, folder, candidate)
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from exc
+        elif request.decision == "manual_review":
+            result = {"decision": "manual_review", "reason": request.reason,
+                      "entity_id": None}
+        else:
+            result = {"decision": "rejected", "reason": request.reason,
+                      "entity_id": None}
+        review = request.model_dump()
+        if persistent:
+            target = request.decision
+            if target == "approve":
+                with service.repo.connection() as con:
+                    materialized = con.execute("""SELECT 1 FROM industry_entities
+                        WHERE industry_id=? AND entity_id=? AND status='accepted'""",
+                        (service.repo.industry_id(folder), result.get("entity_id"))).fetchone()
+                if not materialized:
+                    target = "manual_review"
+                    result = {"decision": "manual_review",
+                              "reason": "current_industry_evidence_required",
+                              "entity_id": result.get("entity_id")}
+            service.repo.review_coverage_candidate(
+                folder, candidate_id, kind="entity", decision=target,
+                actor=request.actor, reason=result["reason"],
+                entity_id=result.get("entity_id") if target == "approve" else None)
+        else:
+            service.repo.audit("entity_candidate_review", "source_candidate",
+                               object_id=candidate_id, actor=request.actor,
+                               details={**review, "result": result})
+        return {"candidate_id": candidate_id, **result, "review": review}
+
+    @router.post("/relation-candidates/{candidate_id}/review",
+                 response_model=CoverageCandidateState)
+    def review_relation_candidate(folder: str, candidate_id: str,
+                                  request: EntityCandidateReview) -> dict:
+        folder = resolve_folder(folder)
+        try:
+            return service.repo.review_coverage_candidate(
+                folder, candidate_id, kind="relation", decision=request.decision,
+                actor=request.actor, reason=request.reason)
+        except FileNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
 
     @router.get("/history", response_model=HistoryCoverageState)
     def history(folder: str) -> dict:
@@ -92,12 +265,83 @@ def build_intelligence_router(*, data_root: Path, service,
         rows = service.repo.list_stories(folder, limit=limit)
         return {"items": rows, "total": len(rows)}
 
+    @router.get("/stories-momentum", response_model=StoryMomentumBatchState)
+    def stories_momentum(folder: str,
+                         story_ids: str = Query(default="", max_length=20_000)) -> dict:
+        from src.signal_momentum import compute_story_momentum
+
+        folder = resolve_folder(folder)
+        ids = list(dict.fromkeys(value.strip() for value in story_ids.split(",")
+                                 if value.strip()))[:500]
+        observations = service.repo.list_story_observations_batch(folder, ids)
+        items = []
+        for story_id in ids:
+            result = compute_story_momentum(observations.get(story_id, []))
+            timeline = result.get("timeline", [])
+            items.append({"story_id": story_id,
+                          "first_appearance": (timeline[0]["intelligence_date"] if timeline else None),
+                          "last_observation": (timeline[-1]["intelligence_date"] if timeline else None),
+                          **result})
+        return {"items": items, "total": len(items)}
+
     @router.get("/stories/{story_id}", response_model=StoryDetailState)
     def story(folder: str, story_id: str) -> dict:
         try:
             return service.repo.story_detail(resolve_folder(folder), story_id)
         except FileNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
+
+    @router.get("/stories/{story_id}/momentum", response_model=StoryMomentumState)
+    def story_momentum(folder: str, story_id: str) -> dict:
+        from src.signal_momentum import compute_story_momentum
+
+        folder = resolve_folder(folder)
+        try:
+            service.repo.story_detail(folder, story_id)
+        except FileNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        result = compute_story_momentum(
+            service.repo.list_story_observations(folder, story_id))
+        return {"story_id": story_id, "first_appearance": None,
+                "last_observation": None, **result}
+
+    @router.get("/quality-drift", response_model=QualityDriftState)
+    def quality_drift(folder: str,
+                      as_of: str = Query(default="", max_length=10)) -> dict:
+        from datetime import datetime
+        from math import ceil
+        from zoneinfo import ZoneInfo
+        from src.quality_drift import analyze_quality_drift, evaluate_columnar_triggers
+
+        folder = resolve_folder(folder)
+        observations = service.repo.list_quality_observations(folder)
+        if not as_of:
+            as_of = datetime.now(ZoneInfo("Asia/Shanghai")).date().isoformat()
+        try:
+            result = analyze_quality_drift(observations, as_of=as_of)
+        except ValueError as exc:
+            raise HTTPException(422, "as_of must be an ISO calendar date") from exc
+        with service.repo.connection() as con:
+            document_count = int(con.execute("""SELECT COUNT(*) FROM industry_documents
+                WHERE industry_id=? AND deleted_at IS NULL""",
+                (service.repo.industry_id(folder),)).fetchone()[0])
+        latency = sorted(float(item["numerator"]) / float(item["denominator"])
+                         for item in observations
+                         if item["metric"] == "long_query_latency_seconds" and
+                         float(item["denominator"]) > 0)
+        p95 = latency[max(0, ceil(len(latency) * .95) - 1)] if latency else 0.0
+        write_blocked = any(item["metric"] == "sqlite_write_blocked" and
+                            float(item["numerator"]) > 0 for item in observations)
+        backup_rows = [item for item in observations
+                       if item["metric"] == "backup_size_bytes"]
+        backup_size = int(backup_rows[-1]["numerator"]) if backup_rows else 0
+        backup_limit = int(backup_rows[-1]["dimensions"].get(
+            "max_backup_size_bytes", 4 * 1024**3)) if backup_rows else 4 * 1024**3
+        result["columnar_prototype"] = evaluate_columnar_triggers(
+            document_count=document_count, long_query_p95_seconds=p95,
+            sqlite_write_blocked=write_blocked, backup_size_bytes=backup_size,
+            max_backup_size_bytes=backup_limit)
+        return result
 
     @router.post("/stories/{story_id}/merge", response_model=StoryDetailState)
     def merge_story(folder: str, story_id: str, request: StoryMergeRequest) -> dict:
@@ -128,6 +372,18 @@ def build_intelligence_router(*, data_root: Path, service,
         try:
             service.repo.unlock_story_documents(
                 folder, story_id, request.document_ids, actor="web")
+            return service.repo.story_detail(folder, story_id)
+        except FileNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @router.post("/stories/{story_id}/ignore", response_model=StoryDetailState)
+    def ignore_story(folder: str, story_id: str, request: StoryIgnoreRequest) -> dict:
+        folder = resolve_folder(folder)
+        try:
+            service.repo.ignore_story(
+                folder, story_id, actor="web", reason=request.reason)
             return service.repo.story_detail(folder, story_id)
         except FileNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc

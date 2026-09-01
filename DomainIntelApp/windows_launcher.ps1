@@ -1,3 +1,4 @@
+# Developer-only WSL compatibility launcher; excluded from native release resources.
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing

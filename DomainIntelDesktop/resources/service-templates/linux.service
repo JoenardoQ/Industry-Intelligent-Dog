@@ -1,0 +1,6 @@
+[Unit]
+Description=IntDog background worker
+
+[Service]
+Type=oneshot
+ExecStart={{EXECUTABLE}} --background-worker

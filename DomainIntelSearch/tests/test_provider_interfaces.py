@@ -2,23 +2,34 @@ from pathlib import Path
 from unittest.mock import patch
 import subprocess
 
+import pytest
+
 from src.services.agent_registry import discover_agents
 from src.services.claude_cli_service import ClaudeCLIService
 from src.services.provider_readiness import provider_readiness
 from src.services.llm_service import LLMConfigurationError, LLMService
+from src.services import capability_manifest
 from src.services.capability_manifest import AGENT_SPECS, API_SPECS, DIRECT_PROVIDER_IDS
-from src.services.provider_factory import CAPABILITIES
+from src.services.provider_factory import CAPABILITIES, create_provider
 
 
 def test_registry_distinguishes_native_execution_from_handoff():
     def found(command):
         return f"/tools/{command}" if command in {"codex", "claude", "dsh", "gemini"} else None
+    def diagnosed(profile, **_kwargs):
+        return {
+            "id": profile["id"], "connection": "native_cli",
+            "execution_level": "direct", "installed": True,
+            "authenticated": True, "version_verified": True, "ready": True,
+            "executable": profile["executable"], "status": "ready",
+            "failure_code": None, "version": "1.2.3", "detail": "ready",
+        }
     with patch("src.services.agent_registry.shutil.which", side_effect=found), \
-         patch("src.services.agent_registry._run_status", return_value=subprocess.CompletedProcess([], 0, "signed in", "")):
+         patch("src.services.agent_registry.diagnose_agent", side_effect=diagnosed):
         rows = {row["id"]: row for row in discover_agents()}
     assert rows["codex"]["ready"] and rows["codex"]["execution"] == "native"
     assert rows["claude"]["ready"] and rows["claude"]["execution"] == "native"
-    assert rows["deepseek_harness"]["ready"] and rows["deepseek_harness"]["execution"] == "experimental"
+    assert rows["deepseek_harness"]["ready"] and rows["deepseek_harness"]["execution"] == "handoff"
     assert rows["gemini"]["ready"] and rows["gemini"]["execution"] == "handoff"
     assert not rows["workbuddy"]["installed"]
 
@@ -46,12 +57,48 @@ def test_claude_print_adapter_is_bounded_and_noninteractive():
     assert result.text == "research result"
 
 
+def test_provider_factory_passes_diagnosed_executable_binding_without_rewhich(tmp_path):
+    binding = {
+        "provider": "claude", "ready": True, "resolved_executable": "/tools/claude",
+        "executable_fingerprint": {"source_path": "/tools/claude",
+            "canonical_path": "/tools/claude", "device": 1, "inode": 2,
+            "size": 3, "mtime_ns": 4, "sha256": "a" * 64},
+    }
+    with patch("src.services.provider_readiness.provider_readiness",
+               return_value=binding) as readiness, \
+         patch("src.services.claude_cli_service.ClaudeCLIService") as service:
+        create_provider({}, "claude", tmp_path)
+    readiness.assert_called_once_with("claude", tmp_path)
+    service.assert_called_once_with({}, tmp_path, executable_binding=binding)
+
+
 def test_api_readiness_is_secret_presence_only_and_redaction_safe(monkeypatch, tmp_path):
     monkeypatch.setenv("INTDOG_LLM_API_KEY", "secret-value")
     monkeypatch.setenv("INTDOG_LLM_PROVIDER", "deepseek")
     result = provider_readiness("deepseek", tmp_path)
     assert result["ready"] is True
     assert "secret-value" not in str(result)
+
+
+@pytest.mark.parametrize(("provider", "invalid_auth"), [
+    ("openai", "api_key_header"), ("deepseek", "api_key_header"),
+    ("qwen", "api_key_header"), ("azure", "bearer"),
+])
+def test_fixed_provider_rejects_auth_type_outside_manifest(
+        monkeypatch, tmp_path, provider, invalid_auth):
+    spec = capability_manifest.capability(provider)
+    monkeypatch.setenv("INTDOG_LLM_PROVIDER", provider)
+    monkeypatch.setenv("INTDOG_LLM_API_KEY", "secret-value")
+    monkeypatch.setenv(spec.key_env, "secret-value")
+    monkeypatch.setenv("INTDOG_LLM_MODEL", spec.default_model or "deployment")
+    monkeypatch.setenv("INTDOG_LLM_API_BASE", spec.default_api_base or
+                       "https://azure.example/openai/deployments/test/chat/completions")
+    monkeypatch.setenv("INTDOG_LLM_AUTH_TYPE", invalid_auth)
+    readiness = provider_readiness(provider, tmp_path)
+    assert readiness["ready"] is False
+    assert readiness["failure_code"] == "invalid_auth_type"
+    with pytest.raises(LLMConfigurationError, match="认证方式"):
+        LLMService({"llm": {}}, provider=provider)
 
 
 def test_generic_desktop_key_is_scoped_to_its_selected_provider(monkeypatch, tmp_path):
@@ -80,8 +127,101 @@ def test_handoff_agent_is_not_misrepresented_as_direct_provider(tmp_path):
 
 def test_capability_manifest_is_the_provider_factory_source_of_truth():
     manifest_direct = {item.id for item in (*AGENT_SPECS, *API_SPECS)
-                       if item.execution == "native"}
+                       if item.execution_level == "direct"}
     assert manifest_direct == DIRECT_PROVIDER_IDS == set(CAPABILITIES)
     assert {item.id for item in AGENT_SPECS} >= {
         "codex", "claude", "deepseek_harness", "workbuddy", "qwen_code",
         "codebuddy", "kimi", "gemini", "opencode"}
+
+
+def test_manifest_declares_exact_connection_and_execution_tiers():
+    expected = {
+        "codex": ("native_cli", "direct"),
+        "claude": ("native_cli", "direct"),
+        "openai": ("api", "direct"),
+        "anthropic": ("api", "import_only"),
+        "deepseek": ("api", "direct"),
+        "qwen": ("api", "direct"),
+        "compatible_api": ("api", "direct"),
+        "mcp": ("mcp", "handoff"),
+        "taskpack": ("taskpack", "import_only"),
+        "workbuddy": ("restricted_cli", "handoff"),
+    }
+    assert {
+        item_id: (
+            capability_manifest.capability(item_id).connection,
+            capability_manifest.capability(item_id).execution_level,
+        )
+        for item_id in expected
+    } == expected
+    unknown = capability_manifest.capability_or_unknown("unlisted-agent")
+    assert unknown.id == "unlisted-agent"
+    assert unknown.connection == "restricted_cli"
+    assert unknown.execution_level == "import_only"
+
+
+def test_compatible_api_requires_explicit_https_base_auth_type_model_and_secret(
+        monkeypatch, tmp_path):
+    monkeypatch.setenv("INTDOG_LLM_PROVIDER", "compatible_api")
+    monkeypatch.setenv("INTDOG_LLM_API_KEY", "secret-value")
+    monkeypatch.setenv("INTDOG_LLM_MODEL", "custom-model")
+    monkeypatch.setenv("INTDOG_LLM_AUTH_TYPE", "bearer")
+
+    missing_base = provider_readiness("compatible_api", tmp_path)
+    assert missing_base["ready"] is False
+    assert missing_base["failure_code"] == "missing_api_base"
+
+    monkeypatch.setenv("INTDOG_LLM_API_BASE", "https://models.example/v1")
+    ready = provider_readiness("compatible_api", tmp_path)
+    assert ready["ready"] is True
+    assert "secret-value" not in str(ready)
+    service = LLMService({"llm": {}}, provider="compatible_api")
+    assert service.base == "https://models.example/v1"
+    assert service.model == "custom-model"
+
+
+def test_non_allowlisted_api_is_catalogued_without_becoming_direct_provider():
+    anthropic = capability_manifest.capability("anthropic")
+    assert anthropic is not None
+    assert anthropic.execution_level == "import_only"
+    assert "anthropic" not in DIRECT_PROVIDER_IDS
+    assert "anthropic" not in CAPABILITIES
+
+
+def test_generic_compatible_api_cannot_consume_a_different_selected_provider_secret(
+        monkeypatch, tmp_path):
+    monkeypatch.setenv("INTDOG_LLM_PROVIDER", "deepseek")
+    monkeypatch.setenv("INTDOG_LLM_API_KEY", "deepseek-only-secret")
+    config = {"llm": {
+        "provider": "compatible_api", "model": "custom-model",
+        "api_base": "https://models.example/v1", "auth_type": "bearer",
+    }}
+    assert provider_readiness("compatible_api", tmp_path)["ready"] is False
+    try:
+        LLMService(config, provider="compatible_api")
+    except LLMConfigurationError as exc:
+        assert "密钥" in str(exc)
+    else:
+        raise AssertionError("generic API must not consume another provider's desktop key")
+
+
+def test_generic_api_key_header_keeps_compatible_chat_path(monkeypatch):
+    monkeypatch.setenv("INTDOG_LLM_PROVIDER", "compatible_api")
+    monkeypatch.setenv("INTDOG_LLM_API_KEY", "configured-secret")
+    monkeypatch.setenv("INTDOG_LLM_MODEL", "custom-model")
+    monkeypatch.setenv("INTDOG_LLM_API_BASE", "https://models.example/v1")
+    monkeypatch.setenv("INTDOG_LLM_AUTH_TYPE", "api_key_header")
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"id": "result-1", "choices": [{"message": {"content": "ok"}}]}
+
+    with patch("src.services.llm_service.requests.post", return_value=Response()) as post:
+        result = LLMService({"llm": {}}, provider="compatible_api").complete("prompt")
+    assert result.text == "ok"
+    assert post.call_args.args[0] == "https://models.example/v1/chat/completions"
+    assert post.call_args.kwargs["headers"]["api-key"] == "configured-secret"
+    assert "Authorization" not in post.call_args.kwargs["headers"]

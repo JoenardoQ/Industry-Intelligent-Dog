@@ -1,47 +1,41 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Bot, CheckCircle2, Copy, Database, ExternalLink, KeyRound, Laptop, RefreshCw } from 'lucide-react'
-import { api, type AgentProfile, type GenerateResult, type Industry, type SetupPayload } from '../api'
+import { useState } from 'react'
+import { api, type GenerateResult, type SetupPayload } from '../api'
+import BootstrapStep, { type ActiveBootstrap } from './setup/BootstrapStep'
+import ConnectionStep from './setup/ConnectionStep'
+import DiagnosticsStep from './setup/DiagnosticsStep'
+import IndustryStep from './setup/IndustryStep'
 
-type CredentialStatus={secureStorage:boolean;configured:boolean;provider:string;model:string;apiBase:string}
-type DesktopBridge = { credentialStatus:()=>Promise<CredentialStatus>;saveProvider:(value:{provider:string;model:string;apiKey:string;apiBase:string})=>Promise<unknown>; clearProvider:()=>Promise<unknown>; relaunch:()=>Promise<boolean> }
+const ACTIVE_KEY='intdog.onboarding.active'
 
-export default function SetupWizard({ setup, onRefresh, onComplete, hasIndustry=true }:{setup:SetupPayload;onRefresh:()=>Promise<void>;onComplete:(provider:string,folder?:string)=>void|Promise<void>;hasIndustry?:boolean}) {
+function savedBootstrap():ActiveBootstrap|null {
+  try {
+    const value=JSON.parse(localStorage.getItem(ACTIVE_KEY)||'null') as ActiveBootstrap|null
+    return value?.folder&&value?.runId&&value?.provider?value:null
+  } catch { return null }
+}
+
+export default function SetupWizard({setup,onRefresh,onComplete,hasIndustry=true}:{
+  setup:SetupPayload;onRefresh:()=>Promise<void>;
+  onComplete:(provider:string,folder?:string)=>void|Promise<void>;hasIndustry?:boolean
+}) {
+  const resumed=savedBootstrap()
   const readyAgent=setup.agents.find(item=>item.ready&&item.execution==='native')
+  const [step,setStep]=useState<1|2|3|4>(resumed?4:1)
   const [selected,setSelected]=useState(localStorage.getItem('intdog.provider')||readyAgent?.id||'taskpack')
-  const [saving,setSaving]=useState(false);const [error,setError]=useState('')
-  const [copied,setCopied]=useState('')
-  const bridge=(window as Window&{intdogDesktop?:DesktopBridge}).intdogDesktop
-  const [credential,setCredential]=useState<CredentialStatus|null>(null)
-  useEffect(()=>{if(bridge)void bridge.credentialStatus().then(setCredential).catch(()=>setCredential(null))},[bridge])
-  const [profiles,setProfiles]=useState<AgentProfile[]>(setup.agent_profiles||[])
-  const chosen=useMemo(()=>setup.agents.find(item=>item.id===selected),[setup,selected])
-  const ready=selected==='taskpack'||Boolean(chosen?.ready)||Boolean(setup.api_providers.find(item=>item.id===selected)?.ready)
-  const effectiveProvider=()=>selected==='taskpack'||chosen?.execution==='native'||setup.api_providers.some(item=>item.id===selected)?selected:'taskpack'
-  const remember=(provider:string)=>{localStorage.setItem('intdog.provider',provider);localStorage.setItem('intdog.agent',selected);localStorage.setItem('intdog.onboarding.v1','complete')}
-  const finish=()=>{const provider=effectiveProvider();remember(provider);void onComplete(provider)}
-  const createFirstIndustry=async(event:React.FormEvent<HTMLFormElement>)=>{event.preventDefault();setError('');setSaving(true);const values=Object.fromEntries(new FormData(event.currentTarget)) as Record<string,string>;const provider=effectiveProvider();try{const existing=await api<Industry[]>('/industries');if(!existing.some(item=>item.folder===values.folder))await api('/industries',{method:'POST',body:JSON.stringify({name:values.name,folder:values.folder})});await api<GenerateResult>(`/industries/${encodeURIComponent(values.folder)}/generate`,{method:'POST',body:JSON.stringify({action:'bootstrap',kind:'',event:'',provider:provider==='taskpack'?'':provider,pipeline_mode:'generate'})});remember(provider);await onComplete(provider,values.folder)}catch(e){setError(String(e))}finally{setSaving(false)}}
-  const saveApi=async(event:React.FormEvent<HTMLFormElement>)=>{event.preventDefault();setError('');setSaving(true);const values=Object.fromEntries(new FormData(event.currentTarget)) as Record<string,string>;try{if(!bridge)throw new Error('浏览器开发模式不能保存密钥；请使用桌面应用或设置环境变量');await bridge.saveProvider({provider:selected,model:values.model,apiKey:values.apiKey,apiBase:values.apiBase});await bridge.relaunch()}catch(e){setError(String(e))}finally{setSaving(false)}}
-  const clearApi=async()=>{setError('');try{if(!bridge)throw new Error('请在桌面应用中清除安全存储');await bridge.clearProvider();localStorage.setItem('intdog.provider','taskpack');await bridge.relaunch()}catch(e){setError(String(e))}}
-  const config=setup.mcp_configs.find(item=>item.id===selected)||setup.mcp_configs.find(item=>item.id==='generic')
-  const configText=config?(typeof config.value==='string'?config.value:JSON.stringify(config.value,null,2)):''
-  const copyConfig=async()=>{try{await navigator.clipboard.writeText(configText);setCopied(config?.id||'');setTimeout(()=>setCopied(''),1800)}catch{setError('无法访问剪贴板，请手动复制配置')}}
-  const saveProfile=async(event:React.FormEvent<HTMLFormElement>)=>{event.preventDefault();setError('');const values=Object.fromEntries(new FormData(event.currentTarget)) as Record<string,string>;try{const row=await api<AgentProfile>('/agent-bridge/profiles',{method:'POST',body:JSON.stringify({id:values.id,name:values.name,command:values.command,args:values.args.trim()?values.args.trim().split(/\s+/):[]})});setProfiles(current=>[...current.filter(item=>item.id!==row.id),row]);setCopied('profile');setTimeout(()=>setCopied(''),1800)}catch(e){setError(String(e))}}
-  const deleteProfile=async(id:string)=>{try{await api(`/agent-bridge/profiles/${encodeURIComponent(id)}`,{method:'DELETE'});setProfiles(current=>current.filter(item=>item.id!==id))}catch(e){setError(String(e))}}
+  const [active,setActive]=useState<ActiveBootstrap|null>(resumed)
+
+  const provider=()=>selected==='taskpack'||setup.agents.some(item=>item.id===selected&&item.execution==='native')||setup.api_providers.some(item=>item.id===selected)?selected:'taskpack'
+  const remember=(value:string)=>{localStorage.setItem('intdog.provider',value);localStorage.setItem('intdog.agent',selected)}
+  const returnToWorkbench=()=>{const value=provider();remember(value);localStorage.setItem('intdog.onboarding.v1','complete');void onComplete(value)}
+  const begin=async(folder:string)=>{const value=provider();remember(value);const taskpack=value==='taskpack';const result=await api<GenerateResult>(`/industries/${encodeURIComponent(folder)}/generate`,{method:'POST',body:JSON.stringify({action:'bootstrap',kind:'',event:'',provider:taskpack?'':value,execution_mode:taskpack?'taskpack':'direct',pipeline_mode:'generate'})});const next={folder,runId:result.run_id,provider:value};localStorage.setItem(ACTIVE_KEY,JSON.stringify(next));setActive(next);setStep(4)}
+  const finish=()=>{if(!active)return;localStorage.removeItem(ACTIVE_KEY);localStorage.setItem('intdog.industry',active.folder);localStorage.setItem('intdog.onboarding.v1','complete');void onComplete(active.provider,active.folder)}
+
   return <div className="setup-overlay"><section className="setup-dialog" role="dialog" aria-modal="true" aria-labelledby="setup-title">
-    <header><div className="eyebrow">FIRST RUN · 首次启动</div><h1 id="setup-title">连接你的研究环境</h1><p>IntDog 已经运行；智能体需要单独检测。我们不会读取任何桌面应用的私有登录数据。</p></header>
-    <div className="setup-health"><div><Laptop/><span>本地运行组件</span><strong>已就绪</strong></div><div><Database/><span>数据目录</span><strong title={setup.data_root}>已创建</strong></div><div><Bot/><span>智能体接口</span><strong>{setup.agents.filter(a=>a.installed).length} 个已检测</strong></div></div>
-    <div className="setup-title-row"><div><h2>选择连接方式</h2><p>{setup.privacy_note}</p></div><button className="button secondary" onClick={()=>void onRefresh()}><RefreshCw/>重新检测</button></div>
-    <div className="agent-options">
-      <label className={selected==='taskpack'?'selected':''}><input type="radio" name="provider" checked={selected==='taskpack'} onChange={()=>setSelected('taskpack')}/><span><b>通用任务包 / MCP</b><small>无需账户。任意 Agent 可读取任务，或通过 MCP 反向调用 IntDog。</small></span><em className="ready">始终可用</em></label>
-      {setup.agents.map(agent=><label key={agent.id} className={selected===agent.id?'selected':''}><input type="radio" name="provider" checked={selected===agent.id} onChange={()=>setSelected(agent.id)}/><span><b>{agent.name}<i>{agent.region==='china'?'国内':'海外'}</i></b><small>{agent.note}</small><code>{agent.executable||agent.commands.join(' / ')}</code></span><em className={agent.ready?'ready':'missing'}>{agent.ready?'可连接':agent.installed?'需登录':'未安装'}</em>{agent.docs_url&&<a href={agent.docs_url} target="_blank" rel="noreferrer" aria-label={`${agent.name} 文档`}><ExternalLink/></a>}</label>)}
-      {setup.api_providers.map(provider=><label key={provider.id} className={selected===provider.id?'selected':''}><input type="radio" name="provider" checked={selected===provider.id} onChange={()=>setSelected(provider.id)}/><span><b>{provider.name}<i>{provider.region==='china'?'国内':'海外'}</i></b><small>显式 API 模式；Key 仅进入操作系统安全存储和后端进程环境。</small></span><em className={provider.ready?'ready':'missing'}>{provider.ready?'已配置':'待配置'}</em></label>)}
-    </div>
-    {(selected==='taskpack'||chosen?.execution!=='native')&&config&&<section className="mcp-config"><div><h2>{config.name} 连接配置</h2><p>MCP 保持只读；需要写回时使用下方任务包导入并人工复核。</p></div><pre>{configText}</pre><button className="button secondary" onClick={()=>void copyConfig()}><Copy/>{copied===config.id?'已复制':'复制配置'}</button></section>}
-    {selected==='taskpack'&&<form className="custom-agent-form" onSubmit={saveProfile}><div><h2>自定义 CLI Profile</h2><p>仅保存 PATH 命令名和 argv 模板；不保存 Key，也不经过 shell。</p></div><label><span>ID</span><input name="id" required pattern="[A-Za-z0-9._-]+" placeholder="my-agent"/></label><label><span>显示名称</span><input name="name" required placeholder="My Agent"/></label><label><span>命令</span><input name="command" required pattern="[A-Za-z0-9._-]+" placeholder="my-agent"/></label><label><span>参数模板</span><input name="args" placeholder="run {task_file} {result_file}"/></label><button className="button secondary">{copied==='profile'?'已保存':'保存 Profile'}</button></form>}
-    {selected==='taskpack'&&profiles.length>0&&<div className="profile-list">{profiles.map(item=><span key={item.id}><b>{item.name}</b><code>{item.command} {item.args.join(' ')}</code><button aria-label={`删除 ${item.name}`} onClick={()=>void deleteProfile(item.id)}>×</button></span>)}</div>}
-    {setup.api_providers.some(item=>item.id===selected&&!item.ready)&&<form className="api-key-form" onSubmit={saveApi}><label><span>模型</span><input name="model" required placeholder={setup.api_providers.find(item=>item.id===selected)?.default_model||'输入模型 ID'}/></label><label><span>API Base（可选）</span><input name="apiBase" type="url" placeholder={setup.api_providers.find(item=>item.id===selected)?.api_base}/></label><label><span>API Key</span><input name="apiKey" type="password" required autoComplete="off"/></label><button className="button primary" disabled={saving}><KeyRound/>{saving?'正在安全保存…':'安全保存并重启'}</button>{!bridge&&<p className="field-error">当前是浏览器开发模式，密钥保存只在 Electron 桌面应用中可用。</p>}{error&&<p className="field-error">{error}</p>}</form>}
-    {credential?.configured&&credential.provider===selected&&<div className="configured-api"><span>该 API 已保存在操作系统安全存储中。</span><button className="button secondary" onClick={()=>void clearApi()}>清除凭据并重启</button></div>}
-    {!hasIndustry&&<form className="first-industry-form" onSubmit={createFirstIndustry}><div><h2>创建第一个行业</h2><p>将立即生成来源地图与研究任务；连接直执行/API 时会继续运行模型研究。</p></div><label><span>行业名称</span><input name="name" required placeholder="例如：人工智能"/></label><label><span>数据文件夹</span><input name="folder" required pattern="[^/\\]+" placeholder="例如：AI"/></label><button className="button primary" disabled={!ready||saving}><CheckCircle2/>{saving?'正在创建…':'创建并开始研究'}</button>{error&&<p className="field-error">{error}</p>}</form>}
-    <footer><p>{selected==='taskpack'?'无需模型即可先建立来源与研究任务包。':ready?'此连接方式已就绪。':'安装或登录后点击“重新检测”。'}</p>{hasIndustry&&<button className="button primary" disabled={!ready} onClick={finish}><CheckCircle2/>进入工作台</button>}</footer>
+    <header><div className="eyebrow">FIRST RUN · 首次启动</div><h1 id="setup-title">建立可恢复的研究工作区</h1><p>四步完成环境诊断、连接、行业和首轮知识门槛；任何一步都不会读取其他桌面应用的私有登录数据。</p></header>
+    <ol className="setup-progress" aria-label="首次引导进度">{['环境诊断','研究连接','行业','首轮结果'].map((label,index)=><li key={label} className={step===index+1?'active':step>index+1?'complete':''}><span>{index+1}</span>{label}</li>)}</ol>
+    {step===1&&<DiagnosticsStep setup={setup} onRefresh={onRefresh} onNext={()=>setStep(2)} onReturn={hasIndustry?returnToWorkbench:undefined}/>}
+    {step===2&&<ConnectionStep setup={setup} selected={selected} setSelected={setSelected} onBack={()=>setStep(1)} onNext={()=>setStep(3)}/>}
+    {step===3&&<IndustryStep onBack={()=>setStep(2)} onStart={begin}/>}
+    {step===4&&active&&<BootstrapStep active={active} onChange={setActive} onComplete={finish}/>}
   </section></div>
 }

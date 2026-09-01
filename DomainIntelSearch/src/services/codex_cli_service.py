@@ -36,17 +36,27 @@ def windows_to_wsl(path: str | Path) -> str:
 class CodexCLIService:
     """Run ephemeral, read-only Codex tasks using the user's ChatGPT login."""
 
-    def __init__(self, config: dict, workspace: str | Path):
+    def __init__(self, config: dict, workspace: str | Path,
+                 *, executable_binding: dict | None = None):
         cfg = config.get("codex", {}) or {}
         self.workspace = Path(workspace).resolve()
         self.timeout = int(cfg.get("timeout_seconds", 1800))
         self.model = str(cfg.get("model") or "").strip()
         self._windows = os.name == "nt"
+        self._executable_binding = executable_binding
         self.mode = "native"
-        self.executable = shutil.which("codex") or ""
+        if executable_binding is not None:
+            from .agent_registry import (ExecutableBindingError,
+                                         validate_executable_binding)
+            try:
+                self.executable = validate_executable_binding(executable_binding)
+            except ExecutableBindingError as exc:
+                raise CodexCLIError(str(exc)) from exc
+        else:
+            self.executable = shutil.which("codex") or ""
         self.codex_command = "codex"
         self.codex_home = ""
-        if self._windows and not self.executable:
+        if executable_binding is None and self._windows and not self.executable:
             windows_codex_home = Path.home() / ".codex"
             candidates = list((windows_codex_home / "bin" / "wsl").glob("*/codex"))
             wsl = shutil.which("wsl.exe") or shutil.which("wsl") or ""
@@ -130,6 +140,14 @@ class CodexCLIService:
                 "detail": detail[-800:] or ("已登录" if authenticated else "未登录")}
 
     def complete(self, prompt: str) -> CodexResult:
+        binding = getattr(self, "_executable_binding", None)
+        if binding is not None:
+            from .agent_registry import (ExecutableBindingError,
+                                         validate_executable_binding)
+            try:
+                self.executable = validate_executable_binding(binding)
+            except ExecutableBindingError as exc:
+                raise CodexCLIError(str(exc)) from exc
         run_dir = self.workspace / "one_time" / "research" / "bootstrap" / "codex_runs"
         run_dir.mkdir(parents=True, exist_ok=True)
         output = run_dir / f"last_message_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.txt"

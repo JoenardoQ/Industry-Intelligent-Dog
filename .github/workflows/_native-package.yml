@@ -10,6 +10,9 @@ on:
         required: false
         type: string
         default: 4.0.0
+      revision:
+        required: true
+        type: string
       issue_number:
         required: false
         type: string
@@ -37,6 +40,11 @@ jobs:
     runs-on: ${{ inputs.platform == 'windows' && 'windows-2025' || inputs.platform == 'macos' && 'macos-14' || 'ubuntu-24.04' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.revision }}
+      - name: Verify the requested release revision
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "${{ inputs.revision }}"
       - name: Require a green shared three-platform architecture gate
         if: inputs.formal_release || inputs.publish_prerelease
         shell: bash
@@ -91,23 +99,30 @@ jobs:
           git diff --exit-code -- DomainIntelWeb/openapi.json DomainIntelWeb/src/generated/openapi.ts
       - name: Run complete Python product suite
         shell: bash
-        run: python -m pytest -q DomainIntelSearch/tests DomainIntelApp/tests DomainIntelWeb/tests
+        run: |
+          mkdir -p test-results
+          python -m pytest -q DomainIntelSearch/tests DomainIntelApp/tests DomainIntelWeb/tests --junitxml=test-results/python.xml
       - name: Check Python repository structure
         shell: bash
         run: python DomainIntelSearch/scripts/check_repo.py
       - name: Test and build Web workbench
         shell: bash
-        run: npm test --prefix DomainIntelWeb && npm run build --prefix DomainIntelWeb
+        run: |
+          set -o pipefail
+          npm test --prefix DomainIntelWeb 2>&1 | tee test-results/web.log
+          npm run build --prefix DomainIntelWeb
       - name: Test desktop shell
         shell: bash
-        run: npm test --prefix DomainIntelDesktop
+        run: |
+          set -o pipefail
+          npm test --prefix DomainIntelDesktop 2>&1 | tee test-results/desktop.log
       - name: Stage platform-neutral resources
         shell: bash
         run: python DomainIntelDesktop/scripts/prepare_resources.py
       - name: Build native sidecar
         shell: bash
         run: python DomainIntelApp/packaging/build_sidecar.py
-      - name: Smoke-test native sidecar
+      - name: Smoke-test native sidecar (CLI, API, Worker --once)
         shell: bash
         run: python DomainIntelDesktop/scripts/smoke_sidecar.py --executable DomainIntelDesktop/build/backend/intdog-runtime${{ inputs.platform == 'windows' && '.exe' || '' }}
       - name: Build unsigned Windows test installer
@@ -126,7 +141,10 @@ jobs:
       - name: Install, launch, close, and reopen Windows installer
         if: inputs.platform == 'windows'
         shell: bash
-        run: python DomainIntelDesktop/scripts/smoke_desktop.py --artifact DomainIntelDesktop/dist/IntDog-${{ inputs.version }}-windows-x86_64.exe --kind windows-nsis
+        run: |
+          lifecycle=(--allow-native-service-mutation)
+          if [ "${{ inputs.formal_release || inputs.publish_prerelease }}" != "true" ]; then lifecycle=(--allow-external-gaps); fi
+          python DomainIntelDesktop/scripts/smoke_desktop.py --artifact DomainIntelDesktop/dist/IntDog-${{ inputs.version }}-windows-x64.exe --kind windows-nsis --sidecar DomainIntelDesktop/build/backend/intdog-runtime.exe "${lifecycle[@]}"
       - name: Build unsigned macOS test installer
         if: inputs.platform == 'macos' && !inputs.formal_release
         shell: bash
@@ -146,7 +164,10 @@ jobs:
       - name: Mount, launch, close, and reopen macOS installer
         if: inputs.platform == 'macos'
         shell: bash
-        run: python DomainIntelDesktop/scripts/smoke_desktop.py --artifact DomainIntelDesktop/dist/IntDog-${{ inputs.version }}-macos-arm64.dmg --kind macos-dmg
+        run: |
+          lifecycle=(--allow-native-service-mutation)
+          if [ "${{ inputs.formal_release || inputs.publish_prerelease }}" != "true" ]; then lifecycle=(--allow-external-gaps); fi
+          python DomainIntelDesktop/scripts/smoke_desktop.py --artifact DomainIntelDesktop/dist/IntDog-${{ inputs.version }}-macos-arm64.dmg --kind macos-dmg --sidecar DomainIntelDesktop/build/backend/intdog-runtime "${lifecycle[@]}"
       - name: Build Linux installer
         if: inputs.platform == 'linux'
         shell: bash
@@ -154,7 +175,13 @@ jobs:
       - name: Launch, close, and reopen Linux AppImage
         if: inputs.platform == 'linux'
         shell: bash
-        run: xvfb-run -a python DomainIntelDesktop/scripts/smoke_desktop.py --artifact DomainIntelDesktop/dist/IntDog-${{ inputs.version }}-linux-x86_64.AppImage --kind appimage
+        run: |
+          lifecycle=(--allow-native-service-mutation)
+          if [ "${{ inputs.formal_release || inputs.publish_prerelease }}" != "true" ]; then lifecycle=(--allow-external-gaps); fi
+          xvfb-run -a python DomainIntelDesktop/scripts/smoke_desktop.py --artifact DomainIntelDesktop/dist/IntDog-${{ inputs.version }}-linux-x64.AppImage --kind appimage --sidecar DomainIntelDesktop/build/backend/intdog-runtime "${lifecycle[@]}"
+      - name: Write platform artifact SHA256 and same-SHA evidence
+        shell: bash
+        run: python DomainIntelDesktop/scripts/release_evidence.py --dist DomainIntelDesktop/dist --platform "${{ inputs.platform }}" --revision "${{ inputs.revision }}" --output "test-results/${{ inputs.platform }}-artifact-evidence.json"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: intdog-${{ inputs.platform }}-${{ inputs.version }}
@@ -162,6 +189,10 @@ jobs:
             DomainIntelDesktop/dist/*.exe
             DomainIntelDesktop/dist/*.dmg
             DomainIntelDesktop/dist/*.AppImage
+            DomainIntelDesktop/dist/*.native-smoke.json
+            test-results/${{ inputs.platform }}-artifact-evidence.json
+            test-results/${{ inputs.platform }}-artifact-evidence.sha256
+            test-results/*
           if-no-files-found: error
       - name: Publish platform Release
         if: inputs.formal_release || inputs.publish_prerelease
@@ -176,12 +207,46 @@ jobs:
             channel+=(--prerelease)
             warning=" UNSIGNED TEST BUILD: Windows SmartScreen or macOS Gatekeeper may require manual approval."
           fi
-          gh release create "$tag" DomainIntelDesktop/dist/*.${{ inputs.platform == 'windows' && 'exe' || inputs.platform == 'macos' && 'dmg' || 'AppImage' }} "${channel[@]}" --title "IntDog ${{ inputs.version }} · ${{ inputs.platform }}" --notes "Native ${{ inputs.platform }} distribution. Built and tested on its matching GitHub-hosted runner.${warning}"
-      - name: Close the platform release Issue
-        if: (inputs.formal_release || inputs.publish_prerelease) && inputs.issue_number != ''
+          artifact=(DomainIntelDesktop/dist/*.${{ inputs.platform == 'windows' && 'exe' || inputs.platform == 'macos' && 'dmg' || 'AppImage' }})
+          checksum="test-results/${{ inputs.platform }}-artifact-evidence.sha256"
+          title="IntDog ${{ inputs.version }} · ${{ inputs.platform }}"
+          notes="Native ${{ inputs.platform }} distribution from ${{ inputs.revision }}. Built and tested on its matching GitHub-hosted runner.${warning}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "${artifact[0]}" "$checksum" --clobber
+            gh release edit "$tag" "${channel[@]}" --title "$title" --notes "$notes"
+          else
+            gh release create "$tag" "${artifact[0]}" "$checksum" "${channel[@]}" --title "$title" --notes "$notes"
+          fi
+      - name: Find, reuse, or create platform release Issue
+        id: release_issue
+        if: inputs.formal_release || inputs.publish_prerelease
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh issue comment "${{ inputs.issue_number }}" --body "Released as \`v${{ inputs.version }}-${{ inputs.platform }}\` after the shared three-platform gate and native package lifecycle passed."
-          gh issue close "${{ inputs.issue_number }}" --reason completed
+          number="${{ inputs.issue_number }}"
+          label="platform-release:${{ inputs.platform }}"
+          title="IntDog ${{ inputs.platform }} release"
+          state=all
+          if [ -z "$number" ]; then
+            number="$(gh issue list --state "$state" --search "$title in:title" --json number,title --jq 'map(select(.title == "'"$title"'"))[0].number // empty')"
+          fi
+          if [ -z "$number" ]; then
+            gh label create "$label" --description "IntDog platform release tracking" --force
+            issue_url="$(gh issue create --title "$title" --label "$label" --body "Tracks the idempotent ${{ inputs.platform }} release lifecycle.")"
+            number="${issue_url##*/}"
+          fi
+          gh issue view "$number" --json number,title,state,url
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+      - name: Close the platform release Issue
+        if: inputs.formal_release || inputs.publish_prerelease
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          number="${{ steps.release_issue.outputs.number }}"
+          state="$(gh issue view "$number" --json state --jq .state)"
+          if [ "$state" = "CLOSED" ]; then gh issue reopen "$number"; fi
+          gh issue comment "$number" --body "Released as \`v${{ inputs.version }}-${{ inputs.platform }}\` after the shared three-platform gate and native package lifecycle passed."
+          gh issue close "$number" --reason completed
+          gh issue view "$number" --json number,title,state,url

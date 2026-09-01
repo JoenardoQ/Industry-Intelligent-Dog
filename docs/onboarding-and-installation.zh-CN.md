@@ -26,6 +26,29 @@
 当前测试版未签名。Windows SmartScreen 或 macOS Gatekeeper 可能要求用户手动允许；这不等于
 绕过安全检查。Intel Mac 不在当前测试版支持范围内。
 
+## 安装与卸载
+
+### Windows 10/11 x64
+
+1. 从 Windows Pre-release 下载 `IntDog-<version>-windows-x64.exe` 和 `.sha256`，不要下载源码压缩包。
+2. 在 PowerShell 执行 `Get-FileHash .\IntDog-<version>-windows-x64.exe -Algorithm SHA256` 核对摘要。
+3. 运行 NSIS 安装器，再从开始菜单或桌面快捷方式打开 IntDog。
+4. 日志与数据分别位于 `%APPDATA%\intdog-desktop\logs` 和 `%APPDATA%\intdog-desktop\data`；安装目录不保存用户数据库。
+
+### macOS Apple Silicon
+
+1. 下载 `IntDog-<version>-macos-arm64.dmg`，运行 `shasum -a 256 IntDog-<version>-macos-arm64.dmg` 核对摘要。
+2. 挂载 DMG，把 IntDog 拖入 Applications。当前 Beta 未签名；确认摘要与发行来源后，才使用 Finder 的“打开”例外。
+3. 日志与数据位于 `~/Library/Application Support/intdog-desktop/logs` 和 `~/Library/Application Support/intdog-desktop/data`。
+
+### Linux x64
+
+1. 下载 AppImage，执行 `chmod +x IntDog-<version>-linux-x64.AppImage`。
+2. 用 `sha256sum IntDog-<version>-linux-x64.AppImage` 核对摘要后启动。
+3. 日志与数据默认位于 `~/.config/intdog-desktop/logs` 和 `~/.config/intdog-desktop/data`；设置 `XDG_CONFIG_HOME` 时跟随该目录。
+
+卸载前先在系统状态中撤销/停用后台权限，并确认已停用。卸载只删除应用和快捷方式，用户数据默认“卸载保留”；备份或永久删除数据目录必须单独操作。安装兼容的新版本会复用保留的数据。
+
 ## Provider 状态机
 
 ```text
@@ -38,7 +61,7 @@
   CLI，只有探测成功时才使用 WSL fallback。官方流程是先安装 Codex CLI，再运行 `codex`
   并选择使用 ChatGPT 登录。
 - **OpenAI API**：用户必须提供 API Key 和模型。桌面应用通过 Electron `safeStorage`
-  使用操作系统加密能力保存 Key；后端只在当前进程环境中接收解密后的值。不得写入仓库、
+  使用操作系统凭据存储的加密能力保存 Key；后端只通过一次性匿名管道接收解密值，使用后清空传输对象。不得写入仓库、
   日志、URL、localStorage 或 API 响应。
 - **任务包**：无需模型和密钥，可创建结构化 prompt，但不会直接生成完整研究报告。
 
@@ -78,6 +101,12 @@ Provider 不可用时，生成类操作必须在入队前被阻止并给出可�
 4. 创建行业，运行“初始化行业研究”。应用跳转任务中心并持续显示阶段、日志、错误和产物。
 5. 首次成功后，概览必须出现信息源、文档、实体或明确的“待采集”状态。
 
+任务包与无模型真实采集不是同一结果。任务包只是交接；`NOM-01` 必须从公开免凭据来源取得发布者、文档、实体、产业链、内容哈希和零 Provider 调用证据。partial/offline 仍是外部缺口。
+
+## 后台权限与撤销
+
+后台调度默认关闭。用户启用后，IntDog 安装当前账户的 Windows 任务计划、macOS LaunchAgent 或 Linux systemd user timer。设置页显示安装/启用/最近运行/错误状态。撤销权限会移除系统调度入口，不删除计划、研究数据或凭据。关闭窗口后，已授权计划可以继续，但不得绕过 Provider 授权或安全存储状态。
+
 ## 故障与恢复
 
 - EXE 无窗口：显示启动错误框并指向用户数据目录下的 `logs/backend.log`；不能静默退出。
@@ -85,7 +114,7 @@ Provider 不可用时，生成类操作必须在入队前被阻止并给出可�
 - Codex 未登录或 401：显示“在 IntDog 所在的同一 Windows/WSL 环境登录”，提供重新检测。
 - API Key 无效：不持久化测试响应或 Key；显示供应商返回的脱敏错误。
 - 后端提前退出：保留日志，应用不得显示“已连接”。
-- 安全存储不可用：拒绝保存 API Key，允许用户改用进程环境变量或任务包。
+- 安全存储不可用：拒绝保存 API Key，允许用户改用任务包；桌面 App 不降级为明文或环境变量传递。
 
 ## P0 验收与测试覆盖
 
