@@ -6,6 +6,7 @@ import base64
 import hashlib
 import json
 import sqlite3
+import time
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -52,7 +53,14 @@ class IntelligenceRepository(
         self.data_root = Path(data_root)
         self.data_root.mkdir(parents=True, exist_ok=True)
         self.db_path = self.data_root / "intdog.sqlite3"
-        self.migrate()
+        for attempt in range(8):
+            try:
+                self.migrate()
+                break
+            except sqlite3.OperationalError as exc:
+                if "locked" not in str(exc).lower() or attempt == 7:
+                    raise
+                time.sleep(min(0.05 * (2 ** attempt), 0.5))
 
     def connect(self) -> sqlite3.Connection:
         con = sqlite3.connect(self.db_path, timeout=15)
