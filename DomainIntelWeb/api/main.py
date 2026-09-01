@@ -265,3 +265,10 @@ if WEB_DIST.is_dir():
         if candidate.is_file() and WEB_DIST in candidate.parents:
             return FileResponse(candidate)
         return FileResponse(WEB_DIST / "index.html")
+
+else:
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def web_app(full_path: str):
+        if full_path == "api" or full_path.startswith("api/"):
+            raise HTTPException(404, "API route not found")
+        raise HTTPException(404, "Web assets are not built")
