@@ -3,6 +3,7 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
+const { tmpdir } = require('node:os')
 const path = require('node:path')
 
 const {
@@ -42,7 +43,7 @@ test('background installation requires one bounded request and consumes its nonc
 })
 
 test('Linux AppImage background service uses a stable absolute regular file', t => {
-  const root = fs.mkdtempSync(path.join('/tmp', 'intdog-appimage-'))
+  const root = fs.mkdtempSync(path.join(tmpdir(), 'intdog-appimage-'))
   t.after(()=>fs.rmSync(root,{recursive:true,force:true}))
   const appImage = path.join(root,'IntDog.AppImage')
   fs.writeFileSync(appImage,'app')

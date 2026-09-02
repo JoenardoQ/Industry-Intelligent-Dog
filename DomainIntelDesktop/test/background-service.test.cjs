@@ -4,6 +4,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const { EventEmitter } = require('node:events')
 const fs = require('node:fs')
+const { tmpdir } = require('node:os')
 const path = require('node:path')
 const { PassThrough } = require('node:stream')
 
@@ -18,7 +19,7 @@ const {
 } = require('../src/background-service.cjs')
 
 function tempRoot(t) {
-  const root = fs.mkdtempSync(path.join('/tmp', 'intdog-background-'))
+  const root = fs.mkdtempSync(path.join(tmpdir(), 'intdog-background-'))
   t.after(() => fs.rmSync(root, { recursive:true, force:true }))
   return root
 }
