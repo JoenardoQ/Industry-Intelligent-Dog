@@ -43,8 +43,8 @@
 
 ### Linux x64
 
-1. 下载 AppImage，执行 `chmod +x IntDog-<version>-linux-x64.AppImage`。
-2. 用 `sha256sum IntDog-<version>-linux-x64.AppImage` 核对摘要后启动。
+1. 下载 AppImage，执行 `chmod +x IntDog-<version>-linux-x86_64.AppImage`。
+2. 用 `sha256sum IntDog-<version>-linux-x86_64.AppImage` 核对摘要后启动。
 3. 日志与数据默认位于 `~/.config/intdog-desktop/logs` 和 `~/.config/intdog-desktop/data`；设置 `XDG_CONFIG_HOME` 时跟随该目录。
 
 卸载前先在系统状态中撤销/停用后台权限，并确认已停用。卸载只删除应用和快捷方式，用户数据默认“卸载保留”；备份或永久删除数据目录必须单独操作。安装兼容的新版本会复用保留的数据。

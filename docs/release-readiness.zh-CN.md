@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | Windows | x64 | `IntDog-<版本>-windows-x64.exe` |
 | macOS | Apple Silicon arm64 | `IntDog-<版本>-macos-arm64.dmg` |
-| Linux | x64 | `IntDog-<版本>-linux-x64.AppImage` |
+| Linux | x64 | `IntDog-<版本>-linux-x86_64.AppImage` |
 
 每个包只包含本平台的 Electron 桌面壳和同平台 PyInstaller sidecar。WSL 或源码快捷方式不是 Windows 安装包。三个平台共享业务实现；Electron、API、Schema、Python 运行时或 Web UI 改变时，三平台任务必须全部重跑。
 
@@ -20,6 +20,11 @@
 - Windows 稳定版必须签名。macOS 稳定版必须签名并公证。
 - 缺少签名凭据时不得把测试 artifact 标成稳定版。
 - 现有 Windows、macOS、Linux Issue 应幂等复用；只有不存在时才新建。
+
+一次 `Release · Three platforms` 调度会并行构建三个原生安装包。每个安装包只构建一次，
+在对应平台 Runner 上完成测试后上传为 Actions artifact。只有整个矩阵全部成功，统一发布
+任务才会校验三个安装包、校验文件、证据清单和源码 revision，随后准备三个 Draft Release，
+并把这批已测试产物发布为三个 Pre-release。发布任务不会再次构建安装包。
 
 ## 必须通过的门槛
 

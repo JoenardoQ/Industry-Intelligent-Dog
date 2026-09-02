@@ -1,0 +1,167 @@
+name: Release · Three platforms
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Test SemVer without v
+        required: true
+        default: 4.1.0-test.2
+        type: string
+      windows_issue_number:
+        description: Existing Windows release Issue number (optional)
+        required: false
+        type: string
+      macos_issue_number:
+        description: Existing macOS release Issue number (optional)
+        required: false
+        type: string
+      linux_issue_number:
+        description: Existing Linux release Issue number (optional)
+        required: false
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+  issues: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Validate test version
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z.-]+$ ]]
+
+  build:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+          - platform: macos
+          - platform: linux
+    uses: ./.github/workflows/_native-package.yml
+    with:
+      platform: ${{ matrix.platform }}
+      revision: ${{ github.sha }}
+      version: ${{ inputs.version }}
+      release_candidate: true
+    secrets: inherit
+
+  publish:
+    needs: build
+    if: ${{ needs.build.result == 'success' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: Download the tested native bundles
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: intdog-*-${{ inputs.version }}
+          path: release-assets
+      - name: Validate the complete same-revision batch
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+          REVISION: ${{ github.sha }}
+        run: |
+          version="$VERSION"
+          revision="$REVISION"
+          python DomainIntelDesktop/scripts/validate_release_assets.py \
+            --root release-assets --version "$version" --revision "${revision}"
+      - name: Prepare all platform Releases as drafts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          REVISION: ${{ github.sha }}
+        run: |
+          version="$VERSION"
+          revision="$REVISION"
+          for platform in windows macos linux; do
+            tag="v${version}-${platform}"
+            title="IntDog ${version} · ${platform}"
+            notes="Native ${platform} test distribution from ${revision}. Built, tested, and lifecycle-checked on its matching GitHub-hosted runner. UNSIGNED TEST BUILD: Windows SmartScreen or macOS Gatekeeper may require manual approval."
+            if gh release view "$tag" >/dev/null 2>&1; then
+              tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" --jq .object.sha)"
+              test "$tag_sha" = "$revision"
+              gh release edit "$tag" --draft=true --prerelease=false \
+                --title "$title" --notes "$notes"
+            else
+              gh release create "$tag" --target "$revision" --draft \
+                --title "$title" --notes "$notes"
+            fi
+          done
+      - name: Upload every tested installer and checksum
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          version="$VERSION"
+          for platform in windows macos linux; do
+            case "$platform" in
+              windows) filename="IntDog-${version}-windows-x64.exe" ;;
+              macos) filename="IntDog-${version}-macos-arm64.dmg" ;;
+              linux) filename="IntDog-${version}-linux-x86_64.AppImage" ;;
+            esac
+            installer="$(find release-assets -type f -name "$filename" -print -quit)"
+            checksum="$(find release-assets -type f -name "${platform}-artifact-evidence.sha256" -print -quit)"
+            gh release upload "v${version}-${platform}" "$installer" "$checksum" --clobber
+          done
+      - name: Publish the complete batch as Pre-releases
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          version="$VERSION"
+          for platform in windows macos linux; do
+            gh release edit "v${version}-${platform}" --draft=false --prerelease
+          done
+      - name: Reuse or create platform Issues
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          WINDOWS_ISSUE: ${{ inputs.windows_issue_number }}
+          MACOS_ISSUE: ${{ inputs.macos_issue_number }}
+          LINUX_ISSUE: ${{ inputs.linux_issue_number }}
+        run: |
+          version="$VERSION"
+          for platform in windows macos linux; do
+            case "$platform" in
+              windows) number="$WINDOWS_ISSUE" ;;
+              macos) number="$MACOS_ISSUE" ;;
+              linux) number="$LINUX_ISSUE" ;;
+            esac
+            label="platform-release:${platform}"
+            title="IntDog ${platform} release"
+            if [ -z "$number" ]; then
+              number="$(gh issue list --state all --search "$title in:title" \
+                --json number,title --jq 'map(select(.title == "'"$title"'"))[0].number // empty')"
+            fi
+            if [ -z "$number" ]; then
+              gh label create "$label" --description "IntDog platform release tracking" --force
+              issue_url="$(gh issue create --title "$title" --label "$label" \
+                --body "Tracks the idempotent ${platform} release lifecycle.")"
+              number="${issue_url##*/}"
+            fi
+            state="$(gh issue view "$number" --json state --jq .state)"
+            if [ "$state" = "CLOSED" ]; then gh issue reopen "$number"; fi
+            gh issue comment "$number" \
+              --body "Released as \`v${version}-${platform}\` from the same three-platform tested artifact batch."
+            gh issue close "$number" --reason completed
+            gh issue view "$number" --json number,title,state,url
+          done

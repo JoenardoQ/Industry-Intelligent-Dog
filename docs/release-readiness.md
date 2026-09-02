@@ -10,7 +10,7 @@ This document defines release rules; it does not claim that the current working 
 | --- | --- | --- |
 | Windows | x64 | `IntDog-<version>-windows-x64.exe` |
 | macOS | Apple Silicon arm64 | `IntDog-<version>-macos-arm64.dmg` |
-| Linux | x64 | `IntDog-<version>-linux-x64.AppImage` |
+| Linux | x64 | `IntDog-<version>-linux-x86_64.AppImage` |
 
 Each package contains only its platform’s Electron shell and matching PyInstaller sidecar. A WSL or source shortcut is not a Windows installer. The business implementation is shared; changes to Electron, API, schema, Python runtime, or Web UI invalidate and rerun all three platform jobs.
 
@@ -20,6 +20,14 @@ Each package contains only its platform’s Electron shell and matching PyInstal
 - A stable Windows build must be signed. A stable macOS build must be signed and notarized.
 - Without signing credentials, a test artifact must not be labeled stable.
 - Existing Windows, macOS, and Linux tracking Issues are updated idempotently; create one only when it does not exist.
+
+One `Release · Three platforms` dispatch builds the three native packages in
+parallel. Each installer is built once, tested on its matching runner, and
+uploaded as an Actions artifact. Only after the complete matrix succeeds does a
+single publish job validate the three installers, checksums, evidence manifests,
+and source revision. It then prepares three draft Releases and makes the tested
+artifact batch public as three Pre-releases. The publish job never rebuilds an
+installer.
 
 ## Required gates
 

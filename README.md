@@ -41,7 +41,7 @@ Copying a repository `.exe`, backend file, or WSL shortcut is not a substitute f
 
 ### Linux x64
 
-1. Download `IntDog-<version>-linux-x64.AppImage`.
+1. Download `IntDog-<version>-linux-x86_64.AppImage`.
 2. Run `chmod +x IntDog-*.AppImage`.
 3. Double-click or execute the AppImage from a terminal.
 

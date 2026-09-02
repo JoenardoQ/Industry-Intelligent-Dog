@@ -39,26 +39,22 @@ test('native package emits platform-scoped hashes reports and lifecycle evidence
 
 test('beta remains prerelease and formal Windows and macOS builds require signing', () => {
   const reusable = read('.github/workflows/_native-package.yml')
-  assert.match(reusable, /publish_prerelease/)
-  assert.match(reusable, /--prerelease/)
-  assert.match(reusable, /gh release view/)
-  assert.match(reusable, /gh release upload.*--clobber/)
+  const release = read('.github/workflows/release-test.yml')
+  assert.match(release, /release_candidate: true/)
+  assert.match(release, /--draft=false --prerelease/)
+  assert.match(release, /gh release view/)
+  assert.match(release, /gh release upload.*--clobber/)
   assert.match(reusable, /inputs\.formal_release && inputs\.platform == 'windows'/)
   assert.match(reusable, /WINDOWS_CSC_LINK/)
   assert.match(reusable, /inputs\.formal_release && inputs\.platform == 'macos'/)
   for (const key of ['MACOS_CSC_LINK', 'APPLE_ID', 'APPLE_APP_SPECIFIC_PASSWORD', 'APPLE_TEAM_ID']) {
     assert.ok(reusable.includes(key), key)
   }
-  for (const platform of ['windows', 'macos', 'linux']) {
-    const release = read(`.github/workflows/release-${platform}.yml`)
-    assert.match(release, /publish_prerelease: true/)
-    assert.match(release, new RegExp(`platform: ${platform}`))
-  }
 })
 
 test('release issues are found reused or created and read back idempotently', () => {
-  const reusable = read('.github/workflows/_native-package.yml')
+  const reusable = read('.github/workflows/release-test.yml')
   for (const token of ['gh issue list', 'gh issue create', 'gh issue view',
-    'platform-release:', 'state=all']) assert.ok(reusable.includes(token), token)
+    'platform-release:', '--state all']) assert.ok(reusable.includes(token), token)
   assert.match(reusable, /gh issue comment/)
 })

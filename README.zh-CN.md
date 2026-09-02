@@ -41,7 +41,7 @@ IntDog 是一个本地优先的桌面应用，用于建立和持续更新行业�
 
 ### Linux x64
 
-1. 下载 `IntDog-<版本>-linux-x64.AppImage`。
+1. 下载 `IntDog-<版本>-linux-x86_64.AppImage`。
 2. 执行 `chmod +x IntDog-*.AppImage`。
 3. 双击或在终端运行该 AppImage。
 

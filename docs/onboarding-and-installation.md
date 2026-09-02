@@ -45,8 +45,8 @@ outside the current test boundary.
 
 ### Linux x64
 
-1. Download the AppImage and run `chmod +x IntDog-<version>-linux-x64.AppImage`.
-2. Verify it with `sha256sum IntDog-<version>-linux-x64.AppImage`, then launch it.
+1. Download the AppImage and run `chmod +x IntDog-<version>-linux-x86_64.AppImage`.
+2. Verify it with `sha256sum IntDog-<version>-linux-x86_64.AppImage`, then launch it.
 3. Logs and data are under `~/.config/intdog-desktop/logs` and `~/.config/intdog-desktop/data` unless `XDG_CONFIG_HOME` is overridden.
 
 Before uninstalling, disable background scheduling in System Status and confirm it is disabled. App uninstall removes binaries and shortcuts but retains the user-data directory. Back up or remove that directory separately; a compatible reinstall reuses it.
