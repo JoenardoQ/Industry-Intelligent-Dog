@@ -87,7 +87,7 @@ def index_result(repo: IntelligenceRepository, tmp_path, suffix: str = "one") ->
 
 
 def test_schema_14_migrates_to_latest_repeatably_without_changing_existing_claims(tmp_path):
-    assert repository_module.SCHEMA_VERSION == 21
+    assert repository_module.SCHEMA_VERSION == 22
     repo = IntelligenceRepository(tmp_path)
     repo.ensure_industry("AI")
     claim_id = repo.upsert_claim("AI", "existing", {"value": 1})
@@ -103,7 +103,7 @@ def test_schema_14_migrates_to_latest_repeatably_without_changing_existing_claim
         tables = {row[0] for row in con.execute(
             "SELECT name FROM sqlite_master WHERE type='table'")}
         claim = con.execute("SELECT status FROM claims WHERE id=?", (claim_id,)).fetchone()
-    assert versions == list(range(1, 22))
+    assert versions == list(range(1, repository_module.SCHEMA_VERSION + 1))
     assert {"agent_results", "agent_assertions", "agent_citations",
             "agent_result_reviews"}.issubset(tables)
     assert claim["status"] == "candidate"

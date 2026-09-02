@@ -13,6 +13,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from intdog_core import IntDogService, IntelligenceRepository
+from intdog_core.repository import SCHEMA_VERSION
 
 
 class IntelligenceCoreTests(unittest.TestCase):
@@ -103,7 +104,10 @@ class IntelligenceCoreTests(unittest.TestCase):
             IntelligenceRepository(temp)
             with IntelligenceRepository(temp).connection() as con:
                 versions = con.execute("SELECT version FROM schema_migrations").fetchall()
-            self.assertEqual([row["version"] for row in versions], list(range(1, 22)))
+            self.assertEqual(
+                [row["version"] for row in versions],
+                list(range(1, SCHEMA_VERSION + 1)),
+            )
 
     def test_schema_v10_recovers_when_columns_exist_before_marker(self):
         with tempfile.TemporaryDirectory() as temp:

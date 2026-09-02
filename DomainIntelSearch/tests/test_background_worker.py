@@ -47,7 +47,7 @@ def _schedule(service, action="daily", *, provider="public_sources",
         provider=provider, pipeline_mode=pipeline_mode)
 
 
-def test_schema21_and_app_worker_share_one_atomic_period_claim(tmp_path):
+def test_latest_schema_and_app_worker_share_one_atomic_period_claim(tmp_path):
     from src.background_worker import claim_due_schedules
 
     service = IntDogService(tmp_path)
@@ -58,7 +58,7 @@ def test_schema21_and_app_worker_share_one_atomic_period_claim(tmp_path):
         service.repo, now=now, owner="app:one", poll_seconds=15)
     worker = claim_due_schedules(
         service.repo, now=now, owner="worker:one", poll_seconds=15)
-    assert SCHEMA_VERSION == 21
+    assert SCHEMA_VERSION == 22
     assert len(app) == 1 and worker == []
     assert app[0].period_key == "2026-09-02"
     assert "Asia/Shanghai" in app[0].period_identity
@@ -167,7 +167,7 @@ def test_retry_exhaustion_pauses_without_advancing_success_boundary(tmp_path):
 def _items_for_plan(plan, *, peak=0, justified=False):
     items = []
     for bucket_index, bucket in enumerate(plan["buckets"]):
-        count = 100
+        count = bucket["target"]
         if bucket_index == 0 and peak:
             count = peak
         for index in range(count):
@@ -191,12 +191,12 @@ def test_two_and_five_year_plans_use_months_density_and_declared_targets():
     two = plan_horizon("biennial", end=end)
     five = plan_horizon("fiveyear", end=end)
     assert (two["target"], two["target_range"], len(two["buckets"])) == (
-        3000, [2400, 3600], 24)
+        4500, [3600, 5400], 24)
     assert (five["target"], five["target_range"], len(five["buckets"])) == (
-        8000, [7000, 9000], 60)
-    assert sum(row["target"] for row in two["buckets"]) == 3000
-    assert sum(row["target"] for row in five["buckets"]) == 8000
-    assert all(3 <= row["daily_density"] <= 5 for row in five["buckets"])
+        12000, [10500, 13500], 60)
+    assert sum(row["target"] for row in two["buckets"]) == 4500
+    assert sum(row["target"] for row in five["buckets"]) == 12000
+    assert all(5 <= row["daily_density"] <= 8 for row in five["buckets"])
 
 
 def test_history_gate_requires_quality_90_percent_months_and_explains_peaks():
@@ -204,27 +204,27 @@ def test_history_gate_requires_quality_90_percent_months_and_explains_peaks():
 
     plan = plan_horizon("biennial", end=date(2026, 12, 31))
     concentrated = evaluate_history_items(
-        _items_for_plan(plan, peak=400), "biennial", end=date(2026, 12, 31))
+        _items_for_plan(plan, peak=700), "biennial", end=date(2026, 12, 31))
     assert concentrated["buckets_covered"] == 24
     assert concentrated["coverage_ratio"] == 1.0
     assert not concentrated["ready"]
     assert concentrated["gaps"][0]["code"] == "unexplained_bucket_concentration"
 
     justified = evaluate_history_items(
-        _items_for_plan(plan, peak=400, justified=True), "biennial",
+        _items_for_plan(plan, peak=700, justified=True), "biennial",
         end=date(2026, 12, 31))
     assert justified["ready"]
     assert justified["overflow_buckets"][0]["justified"] is True
 
     low_quality = _items_for_plan(plan)
-    for item in low_quality[:500]:
+    for item in low_quality[:800]:
         item["credibility"] = .2
-    for item in low_quality[500:700]:
+    for item in low_quality[800:1100]:
         item["duplicate"] = True
     sparse = evaluate_history_items(
         low_quality, "biennial", end=date(2026, 12, 31))
-    assert sparse["rejected_low_quality"] == 500
-    assert sparse["rejected_duplicates"] == 200
+    assert sparse["rejected_low_quality"] == 800
+    assert sparse["rejected_duplicates"] == 300
     assert not sparse["ready"]
     assert {gap["code"] for gap in sparse["gaps"]} >= {
         "qualified_document_gap", "month_coverage_gap"}

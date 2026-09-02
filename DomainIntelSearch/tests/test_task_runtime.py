@@ -44,8 +44,8 @@ def test_schema20_is_repeatable_and_preserves_legacy_runs(tmp_path):
                              (legacy_id,)).fetchone()
         tables = {row[0] for row in con.execute(
             "SELECT name FROM sqlite_master WHERE type='table'")}
-    assert SCHEMA_VERSION == 21
-    assert versions == list(range(1, 22))
+    assert SCHEMA_VERSION == 22
+    assert versions == list(range(1, SCHEMA_VERSION + 1))
     assert dict(legacy) == {"kind": "legacy-report", "status": "running"}
     assert {"task_runs", "task_state_events", "background_authorizations"} <= tables
 
@@ -230,7 +230,8 @@ def test_concurrent_first_start_migration_is_idempotent(tmp_path):
     assert failures == []
     repo = IntelligenceRepository(tmp_path)
     with repo.connection() as con:
-        assert con.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 21
+        assert con.execute(
+            "SELECT MAX(version) FROM schema_migrations").fetchone()[0] == SCHEMA_VERSION
 
 
 def test_background_authorization_is_scoped_and_revocation_is_atomic(tmp_path):
