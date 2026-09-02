@@ -73,7 +73,7 @@ def test_provider_factory_passes_diagnosed_executable_binding_without_rewhich(tm
 
 
 def test_api_readiness_is_secret_presence_only_and_redaction_safe(monkeypatch, tmp_path):
-    monkeypatch.setenv("INTDOG_LLM_API_KEY", "secret-value")
+    monkeypatch.setenv("INTDOG_LLM_API_KEY", "test-only-value")
     monkeypatch.setenv("INTDOG_LLM_PROVIDER", "deepseek")
     result = provider_readiness("deepseek", tmp_path)
     assert result["ready"] is True
@@ -107,7 +107,7 @@ def test_generic_desktop_key_is_scoped_to_its_selected_provider(monkeypatch, tmp
     assert provider_readiness("deepseek", tmp_path)["ready"] is True
     assert provider_readiness("openai", tmp_path)["ready"] is False
     with patch.dict("os.environ", {
-            "INTDOG_LLM_API_KEY": "secret-value",
+            "INTDOG_LLM_API_KEY": "test-only-value",
             "INTDOG_LLM_PROVIDER": "deepseek",
             "INTDOG_LLM_MODEL": "deepseek-chat",
             "INTDOG_LLM_API_BASE": "https://api.deepseek.com"}, clear=True):
@@ -132,6 +132,34 @@ def test_capability_manifest_is_the_provider_factory_source_of_truth():
     assert {item.id for item in AGENT_SPECS} >= {
         "codex", "claude", "deepseek_harness", "workbuddy", "qwen_code",
         "codebuddy", "kimi", "gemini", "opencode"}
+
+
+def test_agent_manifest_declares_native_session_protocols_and_honest_fallbacks():
+    expected = {
+        "codex": ("codex_app_server", "stable", "full", True),
+        "claude": ("claude_agent_sdk", "stable", "full", False),
+        "deepseek_harness": ("deepseek_jsonrpc", "preview", "basic", False),
+        "workbuddy": ("workbuddy_mcp", "stable", "handoff", False),
+        "qwen_code": ("acp", "experimental", "basic", True),
+        "codebuddy": ("acp", "beta", "basic", True),
+        "kimi": ("acp", "experimental", "basic", True),
+        "gemini": ("acp", "experimental", "basic", True),
+        "opencode": ("opencode_http", "beta", "full", False),
+    }
+    assert {
+        item.id: (
+            item.session_protocol,
+            item.protocol_maturity,
+            item.session_level,
+            item.native_session_implemented,
+        )
+        for item in AGENT_SPECS
+    } == expected
+    for item in AGENT_SPECS:
+        public = item.public()
+        assert public["session_protocol"]
+        assert public["fallbacks"]
+        assert public["native_session_implemented"] is expected[item.id][3]
 
 
 def test_manifest_declares_exact_connection_and_execution_tiers():

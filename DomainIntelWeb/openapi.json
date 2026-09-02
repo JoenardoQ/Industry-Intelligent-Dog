@@ -1,6 +1,90 @@
 {
   "components": {
     "schemas": {
+      "ActionProposalState": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "confirmed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed At"
+          },
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "confirmed",
+              "rejected",
+              "expired",
+              "executed",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "task_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Run Id"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "conversation_id",
+          "revision",
+          "action",
+          "payload",
+          "status",
+          "expires_at",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ActionProposalState",
+        "type": "object"
+      },
       "AgendaItemState": {
         "additionalProperties": true,
         "properties": {
@@ -454,6 +538,13 @@
             "title": "Execution Level",
             "type": "string"
           },
+          "fallbacks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fallbacks",
+            "type": "array"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -471,8 +562,25 @@
             "title": "Name",
             "type": "string"
           },
+          "native_args": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Native Args",
+            "type": "array"
+          },
+          "native_session_implemented": {
+            "default": false,
+            "title": "Native Session Implemented",
+            "type": "boolean"
+          },
           "note": {
             "title": "Note",
+            "type": "string"
+          },
+          "protocol_maturity": {
+            "default": "none",
+            "title": "Protocol Maturity",
             "type": "string"
           },
           "region": {
@@ -482,6 +590,16 @@
           "schedulable": {
             "title": "Schedulable",
             "type": "boolean"
+          },
+          "session_level": {
+            "default": "none",
+            "title": "Session Level",
+            "type": "string"
+          },
+          "session_protocol": {
+            "default": "none",
+            "title": "Session Protocol",
+            "type": "string"
           },
           "structured_output": {
             "title": "Structured Output",
@@ -893,6 +1011,13 @@
             ],
             "title": "Failure Code"
           },
+          "fallbacks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fallbacks",
+            "type": "array"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -914,8 +1039,25 @@
             "title": "Name",
             "type": "string"
           },
+          "native_args": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Native Args",
+            "type": "array"
+          },
+          "native_session_implemented": {
+            "default": false,
+            "title": "Native Session Implemented",
+            "type": "boolean"
+          },
           "note": {
             "title": "Note",
+            "type": "string"
+          },
+          "protocol_maturity": {
+            "default": "none",
+            "title": "Protocol Maturity",
             "type": "string"
           },
           "ready": {
@@ -929,6 +1071,16 @@
           "schedulable": {
             "title": "Schedulable",
             "type": "boolean"
+          },
+          "session_level": {
+            "default": "none",
+            "title": "Session Level",
+            "type": "string"
+          },
+          "session_protocol": {
+            "default": "none",
+            "title": "Session Protocol",
+            "type": "string"
           },
           "status": {
             "enum": [
@@ -2876,6 +3028,13 @@
             "title": "Execution",
             "type": "string"
           },
+          "fallbacks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fallbacks",
+            "type": "array"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -2888,8 +3047,25 @@
             "title": "Name",
             "type": "string"
           },
+          "native_args": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Native Args",
+            "type": "array"
+          },
+          "native_session_implemented": {
+            "default": false,
+            "title": "Native Session Implemented",
+            "type": "boolean"
+          },
           "note": {
             "title": "Note",
+            "type": "string"
+          },
+          "protocol_maturity": {
+            "default": "none",
+            "title": "Protocol Maturity",
             "type": "string"
           },
           "ready": {
@@ -2904,6 +3080,16 @@
             "default": false,
             "title": "Schedulable",
             "type": "boolean"
+          },
+          "session_level": {
+            "default": "none",
+            "title": "Session Level",
+            "type": "string"
+          },
+          "session_protocol": {
+            "default": "none",
+            "title": "Session Protocol",
+            "type": "string"
           }
         },
         "required": [
@@ -4261,6 +4447,137 @@
           "prototype_policy"
         ],
         "title": "ColumnarPrototypeState",
+        "type": "object"
+      },
+      "ConfirmedProposalState": {
+        "properties": {
+          "job": {
+            "additionalProperties": true,
+            "title": "Job",
+            "type": "object"
+          },
+          "proposal": {
+            "$ref": "#/components/schemas/ActionProposalState"
+          }
+        },
+        "required": [
+          "proposal",
+          "job"
+        ],
+        "title": "ConfirmedProposalState",
+        "type": "object"
+      },
+      "ConversationMessageState": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "role": {
+            "enum": [
+              "user",
+              "assistant",
+              "system",
+              "tool"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "conversation_id",
+          "role",
+          "content",
+          "created_at"
+        ],
+        "title": "ConversationMessageState",
+        "type": "object"
+      },
+      "ConversationState": {
+        "properties": {
+          "capability": {
+            "additionalProperties": true,
+            "title": "Capability",
+            "type": "object"
+          },
+          "connection": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection"
+          },
+          "conversation": {
+            "additionalProperties": true,
+            "title": "Conversation",
+            "type": "object"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationMessageState"
+            },
+            "title": "Messages",
+            "type": "array"
+          },
+          "proposals": {
+            "items": {
+              "$ref": "#/components/schemas/ActionProposalState"
+            },
+            "title": "Proposals",
+            "type": "array"
+          }
+        },
+        "required": [
+          "conversation",
+          "messages",
+          "proposals",
+          "capability"
+        ],
+        "title": "ConversationState",
+        "type": "object"
+      },
+      "ConversationTurnRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          },
+          "provider": {
+            "pattern": "^[A-Za-z0-9._-]{1,80}$",
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "message"
+        ],
+        "title": "ConversationTurnRequest",
         "type": "object"
       },
       "CountState": {
@@ -7386,6 +7703,21 @@
         "title": "ProductsState",
         "type": "object"
       },
+      "ProposalDecisionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "revision": {
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revision"
+        ],
+        "title": "ProposalDecisionRequest",
+        "type": "object"
+      },
       "QualityDriftState": {
         "properties": {
           "alert_count": {
@@ -9791,7 +10123,7 @@
   },
   "info": {
     "title": "IntDog Local API",
-    "version": "4.0.0"
+    "version": "4.1.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -10968,6 +11300,233 @@
         "summary": "Run Now",
         "tags": [
           "automation"
+        ]
+      }
+    },
+    "/api/industries/{folder}/conversation": {
+      "get": {
+        "operationId": "conversation_api_industries__folder__conversation_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "maxLength": 80,
+              "minLength": 1,
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Conversation",
+        "tags": [
+          "conversation"
+        ]
+      }
+    },
+    "/api/industries/{folder}/conversation/proposals/{proposal_id}/confirm": {
+      "post": {
+        "operationId": "confirm_api_industries__folder__conversation_proposals__proposal_id__confirm_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposalDecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmedProposalState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm",
+        "tags": [
+          "conversation"
+        ]
+      }
+    },
+    "/api/industries/{folder}/conversation/proposals/{proposal_id}/reject": {
+      "post": {
+        "operationId": "reject_api_industries__folder__conversation_proposals__proposal_id__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposalDecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionProposalState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject",
+        "tags": [
+          "conversation"
+        ]
+      }
+    },
+    "/api/industries/{folder}/conversation/turn": {
+      "post": {
+        "operationId": "turn_api_industries__folder__conversation_turn_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationTurnRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Turn",
+        "tags": [
+          "conversation"
         ]
       }
     },

@@ -13,6 +13,8 @@ from typing import Literal
 
 Connection = Literal["native_cli", "api", "mcp", "taskpack", "restricted_cli"]
 ExecutionLevel = Literal["direct", "handoff", "import_only"]
+ProtocolMaturity = Literal["stable", "beta", "preview", "experimental", "none"]
+SessionLevel = Literal["full", "basic", "one_shot", "handoff", "none"]
 
 
 @dataclass(frozen=True)
@@ -36,6 +38,12 @@ class AgentCapability:
     default_model: str = ""
     default_api_base: str = ""
     schedulable: bool = False
+    session_protocol: str = "none"
+    protocol_maturity: ProtocolMaturity = "none"
+    session_level: SessionLevel = "none"
+    native_session_implemented: bool = False
+    native_args: tuple[str, ...] = ()
+    fallbacks: tuple[str, ...] = ("taskpack",)
 
     @property
     def execution(self) -> str:
@@ -49,7 +57,7 @@ class AgentCapability:
 
     def public(self) -> dict:
         value = asdict(self)
-        for key in ("commands", "version_args", "auth_args"):
+        for key in ("commands", "version_args", "auth_args", "native_args", "fallbacks"):
             value[key] = list(value[key])
         value.pop("version_pattern", None)
         value["execution"] = self.execution
@@ -67,7 +75,10 @@ CAPABILITY_MANIFEST: tuple[AgentCapability, ...] = (
         "Uses the user's public Codex CLI sign-in status.", ("codex",),
         version_pattern=r"(?im)^\s*(?:openai\s+)?codex(?:-cli)?\s+v?\d+\.\d+",
         auth_args=("login", "status"), auth="subscription", web_access=True,
-        schedulable=True,
+        schedulable=True, session_protocol="codex_app_server",
+        protocol_maturity="stable", session_level="full",
+        native_session_implemented=True, native_args=("app-server",),
+        fallbacks=("cli", "api", "taskpack"),
     ),
     AgentCapability(
         "claude", "Claude Code", "agent", "international", "native_cli", "direct",
@@ -75,43 +86,63 @@ CAPABILITY_MANIFEST: tuple[AgentCapability, ...] = (
         "Uses Claude Code's public version and authentication status commands.",
         ("claude",), version_pattern=r"(?im)^\s*claude(?:\s+code)?\s+v?\d+\.\d+",
         auth_args=("auth", "status"), auth="subscription", web_access=True,
-        schedulable=True,
+        schedulable=True, session_protocol="claude_agent_sdk",
+        protocol_maturity="stable", session_level="full",
+        fallbacks=("cli", "api", "taskpack"),
     ),
     AgentCapability(
         "deepseek_harness", "DeepSeek Harness", "agent", "china",
         "restricted_cli", "handoff", "https://deepseek-harness.github.io/deepseek-harness/",
         "Developer preview; use MCP or a reviewable task package.", ("dsh",),
+        session_protocol="deepseek_jsonrpc", protocol_maturity="preview",
+        session_level="basic", fallbacks=("cli", "api", "mcp", "taskpack"),
     ),
     AgentCapability(
         "workbuddy", "Work Buddy", "agent", "international", "restricted_cli", "handoff",
         "https://docs.work-buddy.ai/", "Connect through MCP or reviewable task packages.",
         ("work-buddy", "workbuddy"), version_pattern=r"(?i)\bwork\s*buddy\s+v?\d+\.\d+",
+        session_protocol="workbuddy_mcp", protocol_maturity="stable",
+        session_level="handoff", fallbacks=("mcp", "taskpack"),
     ),
     AgentCapability(
         "qwen_code", "Qwen Code", "agent", "china", "restricted_cli", "handoff",
         "https://github.com/QwenLM/qwen-code",
         "MCP/task-package handoff until a stable direct adapter is verified.",
         ("qwen", "qwen-code"),
+        session_protocol="acp", protocol_maturity="experimental",
+        session_level="basic", native_session_implemented=True,
+        native_args=("--acp",), fallbacks=("cli", "api", "mcp", "taskpack"),
     ),
     AgentCapability(
         "codebuddy", "CodeBuddy Code", "agent", "china", "restricted_cli", "handoff",
         "https://www.codebuddy.ai/", "MCP/task-package handoff.",
         ("codebuddy", "codebuddy-code"),
+        session_protocol="acp", protocol_maturity="beta", session_level="basic",
+        native_session_implemented=True, native_args=("--acp",),
+        fallbacks=("cli", "api", "mcp", "taskpack"),
     ),
     AgentCapability(
         "kimi", "Kimi CLI", "agent", "china", "restricted_cli", "handoff",
         "https://github.com/MoonshotAI/kimi-cli", "MCP/task-package handoff.",
         ("kimi", "kimi-cli"),
+        session_protocol="acp", protocol_maturity="experimental",
+        session_level="basic", native_session_implemented=True,
+        native_args=("acp",), fallbacks=("cli", "api", "mcp", "taskpack"),
     ),
     AgentCapability(
         "gemini", "Gemini CLI", "agent", "international", "restricted_cli", "handoff",
         "https://github.com/google-gemini/gemini-cli", "MCP/task-package handoff.",
         ("gemini",),
+        session_protocol="acp", protocol_maturity="experimental",
+        session_level="basic", native_session_implemented=True,
+        native_args=("--acp",), fallbacks=("cli", "api", "mcp", "taskpack"),
     ),
     AgentCapability(
         "opencode", "OpenCode", "agent", "international", "restricted_cli", "handoff",
         "https://opencode.ai/docs/", "Provider-neutral MCP/task-package handoff.",
         ("opencode",),
+        session_protocol="opencode_http", protocol_maturity="beta",
+        session_level="full", fallbacks=("cli", "api", "mcp", "taskpack"),
     ),
     AgentCapability(
         "openai", "OpenAI API", "api", "international", "api", "direct",

@@ -58,7 +58,7 @@ def test_latest_schema_and_app_worker_share_one_atomic_period_claim(tmp_path):
         service.repo, now=now, owner="app:one", poll_seconds=15)
     worker = claim_due_schedules(
         service.repo, now=now, owner="worker:one", poll_seconds=15)
-    assert SCHEMA_VERSION == 22
+    assert SCHEMA_VERSION == 23
     assert len(app) == 1 and worker == []
     assert app[0].period_key == "2026-09-02"
     assert "Asia/Shanghai" in app[0].period_identity

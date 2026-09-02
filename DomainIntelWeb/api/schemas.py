@@ -115,6 +115,53 @@ class GenerateRequest(BaseModel):
         return self
 
 
+class ConversationTurnRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    provider: str = Field(pattern=r"^[A-Za-z0-9._-]{1,80}$")
+    message: str = Field(min_length=1, max_length=20_000)
+
+
+class ProposalDecisionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    revision: int = Field(ge=1)
+
+
+class ConversationMessageState(BaseModel):
+    id: str
+    conversation_id: str
+    role: Literal["user", "assistant", "system", "tool"]
+    content: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: str
+
+
+class ActionProposalState(BaseModel):
+    id: str
+    conversation_id: str
+    revision: int
+    action: str
+    payload: dict[str, Any]
+    status: Literal["pending", "confirmed", "rejected", "expired", "executed", "failed"]
+    expires_at: str
+    confirmed_at: str | None = None
+    task_run_id: str | None = None
+    created_at: str
+    updated_at: str
+
+
+class ConversationState(BaseModel):
+    conversation: dict[str, Any]
+    messages: list[ConversationMessageState]
+    proposals: list[ActionProposalState]
+    capability: dict[str, Any]
+    connection: str | None = None
+
+
+class ConfirmedProposalState(BaseModel):
+    proposal: ActionProposalState
+    job: dict[str, Any]
+
+
 class TextOffsetLocator(BaseModel):
     model_config = ConfigDict(extra="forbid")
     type: Literal["text_offset"]
@@ -249,6 +296,12 @@ class AgentCapabilityState(BaseModel):
     docs_url: str
     note: str
     commands: list[str]
+    session_protocol: str = "none"
+    protocol_maturity: str = "none"
+    session_level: str = "none"
+    native_session_implemented: bool = False
+    native_args: list[str] = Field(default_factory=list)
+    fallbacks: list[str] = Field(default_factory=list)
 
 
 class AgentCapabilityPage(BaseModel):
@@ -1480,6 +1533,12 @@ class AgentState(BaseModel):
     executable: str = ""
     detail: str = ""
     schedulable: bool = False
+    session_protocol: str = "none"
+    protocol_maturity: str = "none"
+    session_level: str = "none"
+    native_session_implemented: bool = False
+    native_args: list[str] = Field(default_factory=list)
+    fallbacks: list[str] = Field(default_factory=list)
 
 
 class ApiProviderState(BaseModel):

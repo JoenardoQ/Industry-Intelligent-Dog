@@ -1,6 +1,20 @@
 /* Generated from openapi.json. Do not edit by hand. */
-export type ApiPath = "/api/agent-bridge/capabilities" | "/api/agent-bridge/discover" | "/api/agent-bridge/profiles" | "/api/agent-bridge/profiles/{profile_id}" | "/api/agent-bridge/profiles/{profile_id}/diagnose" | "/api/agent-bridge/profiles/{profile_id}/probe" | "/api/artifact" | "/api/background" | "/api/background/permissions" | "/api/health" | "/api/industries" | "/api/industries/import" | "/api/industries/{folder}" | "/api/industries/{folder}/agent-bridge/results" | "/api/industries/{folder}/agent-bridge/results/{result_id}" | "/api/industries/{folder}/agent-bridge/results/{result_id}/review" | "/api/industries/{folder}/agent-bridge/results/{result_id}/verify" | "/api/industries/{folder}/agent-bridge/tasks" | "/api/industries/{folder}/agent-bridge/tasks/{task_id}" | "/api/industries/{folder}/automation" | "/api/industries/{folder}/automation/{action}" | "/api/industries/{folder}/automation/{action}/run" | "/api/industries/{folder}/coverage" | "/api/industries/{folder}/coverage-expansions" | "/api/industries/{folder}/coverage-expansions/{round_id}/execute" | "/api/industries/{folder}/coverage-matrix" | "/api/industries/{folder}/coverage-review-queue" | "/api/industries/{folder}/coverage/cells" | "/api/industries/{folder}/coverage/cells/{cell_id}/attempts" | "/api/industries/{folder}/coverage/initialize" | "/api/industries/{folder}/coverage/plan" | "/api/industries/{folder}/daily" | "/api/industries/{folder}/entity-candidates/{candidate_id}/review" | "/api/industries/{folder}/export" | "/api/industries/{folder}/generate" | "/api/industries/{folder}/history" | "/api/industries/{folder}/knowledge/entities" | "/api/industries/{folder}/knowledge/entities/{entity_id}" | "/api/industries/{folder}/overview" | "/api/industries/{folder}/portable/daily" | "/api/industries/{folder}/products" | "/api/industries/{folder}/quality-drift" | "/api/industries/{folder}/relation-candidates/{candidate_id}/review" | "/api/industries/{folder}/research" | "/api/industries/{folder}/settings/{operation}" | "/api/industries/{folder}/source-campaigns" | "/api/industries/{folder}/source-campaigns/{campaign_id}" | "/api/industries/{folder}/source-campaigns/{campaign_id}/execute" | "/api/industries/{folder}/source-candidates/{candidate_id}/review" | "/api/industries/{folder}/sources" | "/api/industries/{folder}/sources/{source_id}/reassess" | "/api/industries/{folder}/stories" | "/api/industries/{folder}/stories-momentum" | "/api/industries/{folder}/stories/{story_id}" | "/api/industries/{folder}/stories/{story_id}/ignore" | "/api/industries/{folder}/stories/{story_id}/merge" | "/api/industries/{folder}/stories/{story_id}/momentum" | "/api/industries/{folder}/stories/{story_id}/split" | "/api/industries/{folder}/stories/{story_id}/unlock" | "/api/jobs" | "/api/jobs/{run_id}/cancel" | "/api/jobs/{run_id}/output" | "/api/jobs/{run_id}/retry" | "/api/settings/effective" | "/api/settings/global/{operation}" | "/api/setup" | "/api/shutdown" | "/api/trash" | "/api/trash/audits/recent" | "/api/trash/{item_id}/preview" | "/api/trash/{item_id}/restore"
-export type ApiOperation = "GET /api/agent-bridge/capabilities" | "POST /api/agent-bridge/discover" | "GET /api/agent-bridge/profiles" | "POST /api/agent-bridge/profiles" | "DELETE /api/agent-bridge/profiles/{profile_id}" | "POST /api/agent-bridge/profiles/{profile_id}/diagnose" | "POST /api/agent-bridge/profiles/{profile_id}/probe" | "GET /api/artifact" | "GET /api/background" | "PUT /api/background/permissions" | "GET /api/health" | "GET /api/industries" | "POST /api/industries" | "POST /api/industries/import" | "DELETE /api/industries/{folder}" | "PATCH /api/industries/{folder}" | "GET /api/industries/{folder}/agent-bridge/results" | "POST /api/industries/{folder}/agent-bridge/results" | "GET /api/industries/{folder}/agent-bridge/results/{result_id}" | "POST /api/industries/{folder}/agent-bridge/results/{result_id}/review" | "POST /api/industries/{folder}/agent-bridge/results/{result_id}/verify" | "GET /api/industries/{folder}/agent-bridge/tasks" | "GET /api/industries/{folder}/agent-bridge/tasks/{task_id}" | "GET /api/industries/{folder}/automation" | "PUT /api/industries/{folder}/automation/{action}" | "POST /api/industries/{folder}/automation/{action}/run" | "GET /api/industries/{folder}/coverage" | "GET /api/industries/{folder}/coverage-expansions" | "POST /api/industries/{folder}/coverage-expansions" | "POST /api/industries/{folder}/coverage-expansions/{round_id}/execute" | "GET /api/industries/{folder}/coverage-matrix" | "GET /api/industries/{folder}/coverage-review-queue" | "POST /api/industries/{folder}/coverage/cells" | "POST /api/industries/{folder}/coverage/cells/{cell_id}/attempts" | "POST /api/industries/{folder}/coverage/initialize" | "POST /api/industries/{folder}/coverage/plan" | "DELETE /api/industries/{folder}/daily" | "GET /api/industries/{folder}/daily" | "POST /api/industries/{folder}/entity-candidates/{candidate_id}/review" | "GET /api/industries/{folder}/export" | "POST /api/industries/{folder}/generate" | "GET /api/industries/{folder}/history" | "GET /api/industries/{folder}/knowledge/entities" | "GET /api/industries/{folder}/knowledge/entities/{entity_id}" | "GET /api/industries/{folder}/overview" | "POST /api/industries/{folder}/portable/daily" | "GET /api/industries/{folder}/products" | "GET /api/industries/{folder}/quality-drift" | "POST /api/industries/{folder}/relation-candidates/{candidate_id}/review" | "GET /api/industries/{folder}/research" | "DELETE /api/industries/{folder}/settings/{operation}" | "PUT /api/industries/{folder}/settings/{operation}" | "GET /api/industries/{folder}/source-campaigns" | "POST /api/industries/{folder}/source-campaigns" | "GET /api/industries/{folder}/source-campaigns/{campaign_id}" | "POST /api/industries/{folder}/source-campaigns/{campaign_id}/execute" | "POST /api/industries/{folder}/source-candidates/{candidate_id}/review" | "DELETE /api/industries/{folder}/sources" | "GET /api/industries/{folder}/sources" | "POST /api/industries/{folder}/sources" | "POST /api/industries/{folder}/sources/{source_id}/reassess" | "GET /api/industries/{folder}/stories" | "GET /api/industries/{folder}/stories-momentum" | "GET /api/industries/{folder}/stories/{story_id}" | "POST /api/industries/{folder}/stories/{story_id}/ignore" | "POST /api/industries/{folder}/stories/{story_id}/merge" | "GET /api/industries/{folder}/stories/{story_id}/momentum" | "POST /api/industries/{folder}/stories/{story_id}/split" | "POST /api/industries/{folder}/stories/{story_id}/unlock" | "GET /api/jobs" | "POST /api/jobs/{run_id}/cancel" | "GET /api/jobs/{run_id}/output" | "POST /api/jobs/{run_id}/retry" | "GET /api/settings/effective" | "DELETE /api/settings/global/{operation}" | "PUT /api/settings/global/{operation}" | "GET /api/setup" | "POST /api/shutdown" | "GET /api/trash" | "GET /api/trash/audits/recent" | "GET /api/trash/{item_id}/preview" | "POST /api/trash/{item_id}/restore"
+export type ApiPath = "/api/agent-bridge/capabilities" | "/api/agent-bridge/discover" | "/api/agent-bridge/profiles" | "/api/agent-bridge/profiles/{profile_id}" | "/api/agent-bridge/profiles/{profile_id}/diagnose" | "/api/agent-bridge/profiles/{profile_id}/probe" | "/api/artifact" | "/api/background" | "/api/background/permissions" | "/api/health" | "/api/industries" | "/api/industries/import" | "/api/industries/{folder}" | "/api/industries/{folder}/agent-bridge/results" | "/api/industries/{folder}/agent-bridge/results/{result_id}" | "/api/industries/{folder}/agent-bridge/results/{result_id}/review" | "/api/industries/{folder}/agent-bridge/results/{result_id}/verify" | "/api/industries/{folder}/agent-bridge/tasks" | "/api/industries/{folder}/agent-bridge/tasks/{task_id}" | "/api/industries/{folder}/automation" | "/api/industries/{folder}/automation/{action}" | "/api/industries/{folder}/automation/{action}/run" | "/api/industries/{folder}/conversation" | "/api/industries/{folder}/conversation/proposals/{proposal_id}/confirm" | "/api/industries/{folder}/conversation/proposals/{proposal_id}/reject" | "/api/industries/{folder}/conversation/turn" | "/api/industries/{folder}/coverage" | "/api/industries/{folder}/coverage-expansions" | "/api/industries/{folder}/coverage-expansions/{round_id}/execute" | "/api/industries/{folder}/coverage-matrix" | "/api/industries/{folder}/coverage-review-queue" | "/api/industries/{folder}/coverage/cells" | "/api/industries/{folder}/coverage/cells/{cell_id}/attempts" | "/api/industries/{folder}/coverage/initialize" | "/api/industries/{folder}/coverage/plan" | "/api/industries/{folder}/daily" | "/api/industries/{folder}/entity-candidates/{candidate_id}/review" | "/api/industries/{folder}/export" | "/api/industries/{folder}/generate" | "/api/industries/{folder}/history" | "/api/industries/{folder}/knowledge/entities" | "/api/industries/{folder}/knowledge/entities/{entity_id}" | "/api/industries/{folder}/overview" | "/api/industries/{folder}/portable/daily" | "/api/industries/{folder}/products" | "/api/industries/{folder}/quality-drift" | "/api/industries/{folder}/relation-candidates/{candidate_id}/review" | "/api/industries/{folder}/research" | "/api/industries/{folder}/settings/{operation}" | "/api/industries/{folder}/source-campaigns" | "/api/industries/{folder}/source-campaigns/{campaign_id}" | "/api/industries/{folder}/source-campaigns/{campaign_id}/execute" | "/api/industries/{folder}/source-candidates/{candidate_id}/review" | "/api/industries/{folder}/sources" | "/api/industries/{folder}/sources/{source_id}/reassess" | "/api/industries/{folder}/stories" | "/api/industries/{folder}/stories-momentum" | "/api/industries/{folder}/stories/{story_id}" | "/api/industries/{folder}/stories/{story_id}/ignore" | "/api/industries/{folder}/stories/{story_id}/merge" | "/api/industries/{folder}/stories/{story_id}/momentum" | "/api/industries/{folder}/stories/{story_id}/split" | "/api/industries/{folder}/stories/{story_id}/unlock" | "/api/jobs" | "/api/jobs/{run_id}/cancel" | "/api/jobs/{run_id}/output" | "/api/jobs/{run_id}/retry" | "/api/settings/effective" | "/api/settings/global/{operation}" | "/api/setup" | "/api/shutdown" | "/api/trash" | "/api/trash/audits/recent" | "/api/trash/{item_id}/preview" | "/api/trash/{item_id}/restore"
+export type ApiOperation = "GET /api/agent-bridge/capabilities" | "POST /api/agent-bridge/discover" | "GET /api/agent-bridge/profiles" | "POST /api/agent-bridge/profiles" | "DELETE /api/agent-bridge/profiles/{profile_id}" | "POST /api/agent-bridge/profiles/{profile_id}/diagnose" | "POST /api/agent-bridge/profiles/{profile_id}/probe" | "GET /api/artifact" | "GET /api/background" | "PUT /api/background/permissions" | "GET /api/health" | "GET /api/industries" | "POST /api/industries" | "POST /api/industries/import" | "DELETE /api/industries/{folder}" | "PATCH /api/industries/{folder}" | "GET /api/industries/{folder}/agent-bridge/results" | "POST /api/industries/{folder}/agent-bridge/results" | "GET /api/industries/{folder}/agent-bridge/results/{result_id}" | "POST /api/industries/{folder}/agent-bridge/results/{result_id}/review" | "POST /api/industries/{folder}/agent-bridge/results/{result_id}/verify" | "GET /api/industries/{folder}/agent-bridge/tasks" | "GET /api/industries/{folder}/agent-bridge/tasks/{task_id}" | "GET /api/industries/{folder}/automation" | "PUT /api/industries/{folder}/automation/{action}" | "POST /api/industries/{folder}/automation/{action}/run" | "GET /api/industries/{folder}/conversation" | "POST /api/industries/{folder}/conversation/proposals/{proposal_id}/confirm" | "POST /api/industries/{folder}/conversation/proposals/{proposal_id}/reject" | "POST /api/industries/{folder}/conversation/turn" | "GET /api/industries/{folder}/coverage" | "GET /api/industries/{folder}/coverage-expansions" | "POST /api/industries/{folder}/coverage-expansions" | "POST /api/industries/{folder}/coverage-expansions/{round_id}/execute" | "GET /api/industries/{folder}/coverage-matrix" | "GET /api/industries/{folder}/coverage-review-queue" | "POST /api/industries/{folder}/coverage/cells" | "POST /api/industries/{folder}/coverage/cells/{cell_id}/attempts" | "POST /api/industries/{folder}/coverage/initialize" | "POST /api/industries/{folder}/coverage/plan" | "DELETE /api/industries/{folder}/daily" | "GET /api/industries/{folder}/daily" | "POST /api/industries/{folder}/entity-candidates/{candidate_id}/review" | "GET /api/industries/{folder}/export" | "POST /api/industries/{folder}/generate" | "GET /api/industries/{folder}/history" | "GET /api/industries/{folder}/knowledge/entities" | "GET /api/industries/{folder}/knowledge/entities/{entity_id}" | "GET /api/industries/{folder}/overview" | "POST /api/industries/{folder}/portable/daily" | "GET /api/industries/{folder}/products" | "GET /api/industries/{folder}/quality-drift" | "POST /api/industries/{folder}/relation-candidates/{candidate_id}/review" | "GET /api/industries/{folder}/research" | "DELETE /api/industries/{folder}/settings/{operation}" | "PUT /api/industries/{folder}/settings/{operation}" | "GET /api/industries/{folder}/source-campaigns" | "POST /api/industries/{folder}/source-campaigns" | "GET /api/industries/{folder}/source-campaigns/{campaign_id}" | "POST /api/industries/{folder}/source-campaigns/{campaign_id}/execute" | "POST /api/industries/{folder}/source-candidates/{candidate_id}/review" | "DELETE /api/industries/{folder}/sources" | "GET /api/industries/{folder}/sources" | "POST /api/industries/{folder}/sources" | "POST /api/industries/{folder}/sources/{source_id}/reassess" | "GET /api/industries/{folder}/stories" | "GET /api/industries/{folder}/stories-momentum" | "GET /api/industries/{folder}/stories/{story_id}" | "POST /api/industries/{folder}/stories/{story_id}/ignore" | "POST /api/industries/{folder}/stories/{story_id}/merge" | "GET /api/industries/{folder}/stories/{story_id}/momentum" | "POST /api/industries/{folder}/stories/{story_id}/split" | "POST /api/industries/{folder}/stories/{story_id}/unlock" | "GET /api/jobs" | "POST /api/jobs/{run_id}/cancel" | "GET /api/jobs/{run_id}/output" | "POST /api/jobs/{run_id}/retry" | "GET /api/settings/effective" | "DELETE /api/settings/global/{operation}" | "PUT /api/settings/global/{operation}" | "GET /api/setup" | "POST /api/shutdown" | "GET /api/trash" | "GET /api/trash/audits/recent" | "GET /api/trash/{item_id}/preview" | "POST /api/trash/{item_id}/restore"
+
+export interface ActionProposalState {
+  "action": string
+  "confirmed_at"?: string | null
+  "conversation_id": string
+  "created_at": string
+  "expires_at": string
+  "id": string
+  "payload": Record<string, unknown>
+  "revision": number
+  "status": "pending" | "confirmed" | "rejected" | "expired" | "executed" | "failed"
+  "task_run_id"?: string | null
+  "updated_at": string
+}
 
 export interface AgendaItemState {
   "id": string
@@ -68,12 +82,18 @@ export interface AgentCapabilityState {
   "connection": "native_cli" | "api" | "mcp" | "taskpack" | "restricted_cli"
   "docs_url": string
   "execution_level": "direct" | "handoff" | "import_only"
+  "fallbacks"?: Array<string>
   "id": string
   "kind": "agent" | "api" | "bridge"
   "name": string
+  "native_args"?: Array<string>
+  "native_session_implemented"?: boolean
   "note": string
+  "protocol_maturity"?: string
   "region": string
   "schedulable": boolean
+  "session_level"?: string
+  "session_protocol"?: string
   "structured_output": boolean
   "web_access"?: boolean | null
 }
@@ -133,14 +153,20 @@ export interface AgentDiscoveryState {
   "executable": string
   "execution_level": "direct" | "handoff" | "import_only"
   "failure_code"?: string | null
+  "fallbacks"?: Array<string>
   "id": string
   "installed": boolean
   "kind": "agent" | "api" | "bridge"
   "name": string
+  "native_args"?: Array<string>
+  "native_session_implemented"?: boolean
   "note": string
+  "protocol_maturity"?: string
   "ready": boolean
   "region": string
   "schedulable": boolean
+  "session_level"?: string
+  "session_protocol"?: string
   "status": "missing" | "detected" | "ready" | "incompatible" | "timeout" | "output_limit" | "auth_failed" | "handoff" | "import_only" | "invalid_configuration" | "not_configured"
   "structured_output": boolean
   "version"?: string
@@ -404,13 +430,19 @@ export interface AgentState {
   "docs_url": string
   "executable"?: string
   "execution": string
+  "fallbacks"?: Array<string>
   "id": string
   "installed": boolean
   "name": string
+  "native_args"?: Array<string>
+  "native_session_implemented"?: boolean
   "note": string
+  "protocol_maturity"?: string
   "ready": boolean
   "region": string
   "schedulable"?: boolean
+  "session_level"?: string
+  "session_protocol"?: string
 }
 
 export interface AgentTaskExport {
@@ -656,6 +688,33 @@ export interface ColumnarPrototypeState {
   "prototype_recommended": boolean
   "triggers": Record<string, boolean>
   "write_path": "sqlite_only"
+}
+
+export interface ConfirmedProposalState {
+  "job": Record<string, unknown>
+  "proposal": ActionProposalState
+}
+
+export interface ConversationMessageState {
+  "content": string
+  "conversation_id": string
+  "created_at": string
+  "id": string
+  "metadata"?: Record<string, unknown>
+  "role": "user" | "assistant" | "system" | "tool"
+}
+
+export interface ConversationState {
+  "capability": Record<string, unknown>
+  "connection"?: string | null
+  "conversation": Record<string, unknown>
+  "messages": Array<ConversationMessageState>
+  "proposals": Array<ActionProposalState>
+}
+
+export interface ConversationTurnRequest {
+  "message": string
+  "provider": string
 }
 
 export interface CountState {
@@ -1215,6 +1274,10 @@ export interface ProductsState {
   "impacts": Array<ArtifactState>
   "periodic": PeriodicArtifactsState
   "reports": Array<ArtifactState>
+}
+
+export interface ProposalDecisionRequest {
+  "revision": number
 }
 
 export interface QualityDriftState {

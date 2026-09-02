@@ -23,9 +23,10 @@ from .source_repository import SourceRepositoryMixin
 from .observability_repository import ObservabilityRepositoryMixin
 from .task_repository import TaskRepositoryMixin
 from .settings_repository import SettingsRepositoryMixin
+from .conversation_repository import ConversationRepositoryMixin
 
 
-SCHEMA_VERSION = 22
+SCHEMA_VERSION = 23
 
 
 def _execute_script(con: sqlite3.Connection, script: str) -> None:
@@ -42,7 +43,7 @@ def _execute_script(con: sqlite3.Connection, script: str) -> None:
 
 
 class IntelligenceRepository(
-        SettingsRepositoryMixin, TaskRepositoryMixin, ObservabilityRepositoryMixin, SourceRepositoryMixin, EvidenceRepositoryMixin, WorkbenchRepositoryMixin,
+        ConversationRepositoryMixin, SettingsRepositoryMixin, TaskRepositoryMixin, ObservabilityRepositoryMixin, SourceRepositoryMixin, EvidenceRepositoryMixin, WorkbenchRepositoryMixin,
         AnalysisRepositoryMixin, ChainRepositoryMixin):
     """One repository per DomainIntelData root.
 
@@ -1045,6 +1046,45 @@ class IntelligenceRepository(
                 """)
                 con.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)",
                             (22, utc_now()))
+            if not con.execute(
+                    "SELECT 1 FROM schema_migrations WHERE version=23").fetchone():
+                _execute_script(con, """
+                    CREATE TABLE IF NOT EXISTS agent_conversations (
+                        id TEXT PRIMARY KEY,
+                        industry_id TEXT NOT NULL REFERENCES industries(id) ON DELETE CASCADE,
+                        provider TEXT NOT NULL,
+                        external_session_id TEXT NOT NULL DEFAULT '',
+                        created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                        archived_at TEXT);
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_conversation_active
+                        ON agent_conversations(industry_id,provider)
+                        WHERE archived_at IS NULL;
+                    CREATE TABLE IF NOT EXISTS conversation_messages (
+                        id TEXT PRIMARY KEY,
+                        conversation_id TEXT NOT NULL REFERENCES agent_conversations(id)
+                            ON DELETE CASCADE,
+                        role TEXT NOT NULL CHECK(role IN ('user','assistant','system','tool')),
+                        content TEXT NOT NULL,
+                        metadata_json TEXT NOT NULL DEFAULT '{}',
+                        created_at TEXT NOT NULL);
+                    CREATE INDEX IF NOT EXISTS idx_conversation_messages
+                        ON conversation_messages(conversation_id,created_at,id);
+                    CREATE TABLE IF NOT EXISTS action_proposals (
+                        id TEXT PRIMARY KEY,
+                        conversation_id TEXT NOT NULL REFERENCES agent_conversations(id)
+                            ON DELETE CASCADE,
+                        revision INTEGER NOT NULL DEFAULT 1,
+                        action TEXT NOT NULL, payload_json TEXT NOT NULL DEFAULT '{}',
+                        status TEXT NOT NULL CHECK(status IN
+                            ('pending','confirmed','rejected','expired','executed','failed')),
+                        expires_at TEXT NOT NULL, confirmed_at TEXT,
+                        task_run_id TEXT REFERENCES task_runs(id) ON DELETE SET NULL,
+                        created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+                    CREATE INDEX IF NOT EXISTS idx_action_proposals_conversation
+                        ON action_proposals(conversation_id,status,created_at);
+                """)
+                con.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)",
+                            (23, utc_now()))
 
 
     def ensure_industry(self, folder: str, name: str = "") -> str:

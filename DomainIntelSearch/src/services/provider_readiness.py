@@ -77,3 +77,27 @@ def provider_readiness(provider: str, workspace: str | Path) -> dict:
         "credential_configured": bool(generic_key or provider_key),
     })
     return {"provider": name, **result}
+
+
+def session_readiness(provider: str, workspace: str | Path) -> dict:
+    """Diagnose a native conversation adapter without authorizing task execution."""
+    name = str(provider or "").strip().casefold()
+    spec = capability_or_unknown(name)
+    if not spec.native_session_implemented:
+        return {"provider": name, "ready": False, "installed": False,
+                "failure_code": "native_session_unavailable",
+                "detail": "该 Agent 尚无 IntDog 原生会话适配器"}
+    if spec.execution_level == "direct":
+        return provider_readiness(name, workspace)
+    profile = _saved_agent_profile(name, workspace)
+    if profile is None:
+        from .agent_registry import default_agent_search_path, discover_local_agents
+        row = next((item for item in discover_local_agents(
+            path=default_agent_search_path(), selected_executables=[])
+                    if item["id"] == name), None)
+        if not row or not row.get("executable"):
+            return {"provider": name, "ready": False, "installed": False,
+                    "failure_code": "executable_missing", "detail": "未找到 Agent CLI"}
+        profile = {"id": name, "capability_id": name,
+                   "executable": row["executable"], "command": spec.commands[0]}
+    return {"provider": name, **diagnose_agent(profile)}

@@ -4,7 +4,7 @@
 
 IntDog is a local-first desktop application for building and continuously updating an industry knowledge system. It starts with sources and a value chain, collects news, papers, GitHub activity, funding, hiring, and leadership posts, and produces cited research artifacts with explicit status and visualizations.
 
-> Version 4.0 is a test release. Model output is review-required draft material, not confirmed fact, legal advice, or investment advice.
+> Version 4.1 is a test release. Model output is review-required draft material, not confirmed fact, legal advice, or investment advice.
 
 ## Capabilities
 
@@ -15,6 +15,8 @@ IntDog is a local-first desktop application for building and continuously updati
 - Generate weekly, monthly, quarterly, six-month, two-year, and five-year artifacts, plus value-chain, competition, market, and event-impact research.
 - Export a self-contained HTML briefing with local search, filters, bookmarks, printing, and PDF support; no IntDog backend is required to open it.
 - Use a signed-in local agent, a model API, or a generic task package. Agent results must pass evidence gates before entering the fact store.
+- Each industry has a separate local Agent conversation. Agents can only propose execution cards; a job starts after explicit per-card confirmation.
+- The “?” badge at the lower right of every page explains its purpose, recommended workflow, functions, and important caveats.
 - Optionally run local background schedules. Email delivery, cloud sync, and collaboration are disabled by default.
 
 ## Installation
@@ -62,17 +64,18 @@ After onboarding, use “Connection settings” in the top bar to replace an Age
 
 ## Supported agents
 
-| Agent | Current support tier | Available capabilities |
+| Agent | Conversation interface | Research-task interface |
 | --- | --- | --- |
-| Codex CLI | Native direct | Automatic discovery, explicit selection, sign-in diagnosis, live probe, direct generation, schedules |
-| Claude Code | Native direct | Automatic discovery, explicit selection, sign-in diagnosis, live probe, direct generation, schedules |
-| DeepSeek Harness | Experimental handoff | Command discovery, MCP, task packages, and result import; no direct-generation claim |
-| Work Buddy | MCP / task package | Command discovery, MCP, task packages, and result import |
-| Qwen Code, CodeBuddy Code, Kimi CLI | MCP / task package | Command discovery, task handoff, and result import |
-| Gemini CLI, OpenCode | MCP / task package | Command discovery, task handoff, and result import |
-| Other agents | Generic handoff | Generic MCP, or exported task JSON followed by review-required result import |
+| Codex CLI | Implemented Codex App Server durable session, with `codex exec` fallback | Direct local CLI generation, schedules, API, or task package |
+| Claude Code | One-shot `claude -p` conversation today; Claude Agent SDK interface is registered | Direct local CLI generation, schedules, or task package; Anthropic API is catalogued only |
+| Gemini CLI | Implemented ACP stdio adapter with runtime handshake | MCP, API, or task package; chat support is not misreported as direct task execution |
+| Qwen Code, Kimi CLI, CodeBuddy Code | Implemented shared ACP stdio adapter | Respective APIs, MCP, or task packages |
+| OpenCode | HTTP/SSE Server interface registered; native adapter not enabled yet | CLI/API, MCP, or task package |
+| DeepSeek Harness | Developer Preview JSON-RPC interface registered; native adapter not enabled yet | DeepSeek API, MCP, or task package |
+| Work Buddy | MCP Gateway/sidecar, not treated as a generic model runtime | MCP and task packages |
+| Other agents | No native session; a configured compatible API may be used | Generic MCP or task-package import/export |
 
-“Supported” does not mean that every Agent can be launched directly by IntDog. Native direct execution is limited to Agents with a stable, verifiable non-interactive CLI contract. Other integrations remain explicit handoffs so that executable discovery is never misreported as a connected model.
+“Registered,” “installed,” “diagnosed,” and “native adapter implemented” are distinct states. Settings show the effective protocol, maturity, and fallback. IntDog does not scan or take over an already-open Agent GUI. See [Agent connectivity and conversations](docs/agent-connectivity.md) for handshakes, installation paths, and limitations.
 
 ## Daily workflow
 
@@ -125,4 +128,4 @@ npm test --prefix DomainIntelDesktop
 | `DomainIntelDesktop` | Electron shell and three-platform packaging |
 | `DomainIntelData` | Local-data templates; generated industry data stays out of Git |
 
-Further reading: [architecture](DESIGN.md) · [installation and agent connections](docs/onboarding-and-installation.md) · [source policy](docs/source-governance.md) · [release gates](docs/release-readiness.md).
+Further reading: [architecture](DESIGN.md) · [installation and agent connections](docs/onboarding-and-installation.md) · [Agent session protocols](docs/agent-connectivity.md) · [source policy](docs/source-governance.md) · [release gates](docs/release-readiness.md).

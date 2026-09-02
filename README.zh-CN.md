@@ -4,7 +4,7 @@
 
 IntDog 是一个本地优先的桌面应用，用于建立和持续更新行业知识体系。它从信息源与产业链开始，采集新闻、论文、GitHub、融资、招聘和管理层动态，再生成带引用、状态与可视化的研究产物。
 
-> 当前为 4.0 测试版。模型生成内容默认是待复核草稿，不是已确认事实、法律意见或投资建议。
+> 当前为 4.1 测试版。模型生成内容默认是待复核草稿，不是已确认事实、法律意见或投资建议。
 
 ## 能做什么
 
@@ -15,6 +15,8 @@ IntDog 是一个本地优先的桌面应用，用于建立和持续更新行业�
 - 一键生成周、月、季、半年、两年和五年研究产物，以及产业链、竞争格局、市场和事件影响研究。
 - 生成无需 IntDog 后端即可打开的单文件 HTML 简报，支持本地搜索、筛选、收藏、打印和 PDF。
 - 使用已登录的本机 Agent、模型 API 或通用任务包；Agent 返回结果必须经过证据门槛才能进入事实库。
+- 每个行业拥有独立的本机 Agent 对话；Agent 只能提出执行卡片，用户逐项确认后才会进入任务中心。
+- 每页右下角的“？”提供该页面的用途、推荐步骤、功能说明和注意事项。
 - 可选本地后台计划；默认不发送邮件，也不做云端同步或协作。
 
 ## 安装
@@ -62,17 +64,18 @@ IntDog 只连接同一操作系统中的本机 Agent，不默认跨 Windows/WSL 
 
 ## 已支持的 Agent
 
-| Agent | 当前支持级别 | 可用能力 |
+| Agent | 对话接口 | 研究任务接口 |
 | --- | --- | --- |
-| Codex CLI | 原生直连 | 自动检测、手动选择、登录诊断、真实连接测试、直接生成、定时任务 |
-| Claude Code | 原生直连 | 自动检测、手动选择、登录诊断、真实连接测试、直接生成、定时任务 |
-| DeepSeek Harness | 实验性交接 | 命令识别、MCP、任务包与结果导入；不宣称可直接生成 |
-| Work Buddy | MCP / 任务包 | 命令识别、MCP、任务包与结果导入 |
-| Qwen Code、CodeBuddy Code、Kimi CLI | MCP / 任务包 | 命令识别、任务交接与结果导入 |
-| Gemini CLI、OpenCode | MCP / 任务包 | 命令识别、任务交接与结果导入 |
-| 其他 Agent | 通用交接 | 通用 MCP，或导出任务 JSON 后导入待复核结果 |
+| Codex CLI | 已实现 Codex App Server 持续会话；保留 `codex exec` 回退 | 本机 CLI 直接生成、定时任务、API 或任务包 |
+| Claude Code | 当前使用 `claude -p` 单次对话；已登记 Claude Agent SDK 接口 | 本机 CLI 直接生成、定时任务或任务包；Anthropic API 仅登记 |
+| Gemini CLI | 已实现 ACP stdio 适配器，按版本握手 | MCP、API 或任务包；不把对话能力冒充为任务直连 |
+| Qwen Code、Kimi CLI、CodeBuddy Code | 已实现共用 ACP stdio 适配器 | 各自 API、MCP 或任务包 |
+| OpenCode | 已登记 HTTP/SSE Server 接口，原生适配器尚未启用 | CLI/API、MCP 或任务包 |
+| DeepSeek Harness | 已登记 Developer Preview JSON-RPC 接口，原生适配器尚未启用 | DeepSeek API、MCP 或任务包 |
+| Work Buddy | MCP Gateway / sidecar，不作为通用模型运行时 | MCP 与任务包 |
+| 其他 Agent | 无原生会话；可使用已配置的兼容 API | 通用 MCP 或任务包导入/导出 |
 
-“支持”不等于全部都能被 IntDog 直接启动。只有具有稳定、可验证非交互 CLI 协议的 Agent 才进入原生直连；其余接口保持显式交接，避免把“检测到程序”误报成“模型已连接”。
+“已登记”“已安装”“已通过诊断”和“原生适配器已实现”是四种不同状态。设置页会显示实际协议、成熟度和回退方式；IntDog 不会扫描或接管一个已经打开的 Agent GUI。完整握手、安装方式和限制见 [Agent 连接与对话](docs/agent-connectivity.zh-CN.md)。
 
 ## 日常工作流
 
@@ -125,4 +128,4 @@ npm test --prefix DomainIntelDesktop
 | `DomainIntelDesktop` | Electron 桌面壳与三平台打包 |
 | `DomainIntelData` | 本地数据模板；实际行业数据不进入 Git |
 
-进一步阅读：[架构](DESIGN.zh-CN.md) · [安装与 Agent 连接](docs/onboarding-and-installation.zh-CN.md) · [信息源规则](docs/source-governance.zh-CN.md) · [发行门槛](docs/release-readiness.zh-CN.md)。
+进一步阅读：[架构](DESIGN.zh-CN.md) · [安装与 Agent 连接](docs/onboarding-and-installation.zh-CN.md) · [Agent 会话协议](docs/agent-connectivity.zh-CN.md) · [信息源规则](docs/source-governance.zh-CN.md) · [发行门槛](docs/release-readiness.zh-CN.md)。

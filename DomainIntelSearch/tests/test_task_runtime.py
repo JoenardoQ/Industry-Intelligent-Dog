@@ -44,7 +44,7 @@ def test_schema20_is_repeatable_and_preserves_legacy_runs(tmp_path):
                              (legacy_id,)).fetchone()
         tables = {row[0] for row in con.execute(
             "SELECT name FROM sqlite_master WHERE type='table'")}
-    assert SCHEMA_VERSION == 22
+    assert SCHEMA_VERSION == 23
     assert versions == list(range(1, SCHEMA_VERSION + 1))
     assert dict(legacy) == {"kind": "legacy-report", "status": "running"}
     assert {"task_runs", "task_state_events", "background_authorizations"} <= tables

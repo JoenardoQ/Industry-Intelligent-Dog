@@ -1,7 +1,10 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
-import { Activity, BookOpen, Building2, Check, ChevronDown, CircleDot, FileText, FlaskConical, FolderKanban, Globe2, LayoutDashboard, Menu, Newspaper, ServerCog, X } from 'lucide-react'
+import { Activity, BookOpen, Check, CircleDot, FileText, FlaskConical, FolderKanban, Globe2, LayoutDashboard, Menu, Newspaper, ServerCog, X } from 'lucide-react'
 import { api, type Industry, type PageKey, type SetupPayload } from './api'
 import { Empty, Loading, type Toast } from './features/shared'
+import AgentConversation from './features/AgentConversation'
+import PageHelp from './features/PageHelp'
+import IndustryPicker from './features/IndustryPicker'
 
 const OverviewPage = lazy(() => import('./features/OverviewPage'))
 const DailyPage = lazy(() => import('./features/DailyPage'))
@@ -77,6 +80,13 @@ function App() {
   const apiState=setup?.api_providers.find(item=>item.id===selectedProvider)
   const connectionReady=selectedProvider==='taskpack'||Boolean(agentState?.ready)||Boolean(apiState?.ready)
   const connectionLabel=selectedProvider==='taskpack'?(agentState&&agentState.id!=='taskpack'?`${agentState.name} · 任务包交接`:'任务包模式可用'):(agentState?.ready?`${agentState.name} 已连接`:apiState?.ready?`${apiState.name} 已配置`:'智能体尚未就绪')
+  const preferredAgent=setup?.agents.find(item=>item.id===selectedAgent)
+  const preferredApi=setup?.api_providers.find(item=>item.id===selectedProvider)
+  const chatTarget=(preferredAgent?.installed||preferredAgent?.ready)?preferredAgent:
+    preferredApi?.ready?preferredApi:
+    setup?.agents.find(item=>item.ready)||setup?.api_providers.find(item=>item.ready)
+  const chatProvider=chatTarget?.id||''
+  const chatProviderName=chatTarget?.name||''
 
   return <div className="app-shell">
     <aside className={`sidebar ${mobileNav ? 'sidebar-open' : ''}`}>
@@ -86,9 +96,11 @@ function App() {
     </aside>
     {mobileNav && <button className="scrim" aria-label="关闭导航" onClick={() => setMobileNav(false)}/>}
     <main>
-      <header className="topbar"><button className="icon-button mobile-menu" onClick={() => setMobileNav(true)}><Menu/></button><div className="industry-select"><Building2 size={18}/><label><span>当前行业</span><select value={industry} onChange={event => chooseIndustry(event.target.value)} disabled={loading}>{industries.map(row => <option key={row.folder} value={row.folder}>{row.name}</option>)}</select></label><ChevronDown size={16}/></div><div className="top-status"><span className={`status-dot ${connectionReady?'':'warn'}`}/><span>{loading?'正在连接本地数据':`${current?`${current.name} 已加载 · `:''}${connectionLabel}`}</span><button onClick={()=>setShowSetup(true)}>连接设置</button></div></header>
+      <header className="topbar"><button className="icon-button mobile-menu" onClick={() => setMobileNav(true)}><Menu/></button><IndustryPicker industries={industries} value={industry} onChange={chooseIndustry} disabled={loading}/><div className="top-status"><span className={`status-dot ${connectionReady?'':'warn'}`}/><span>{loading?'正在连接本地数据':`${current?`${current.name} 已加载 · `:''}${connectionLabel}`}</span><button onClick={()=>setShowSetup(true)}>连接设置</button></div></header>
       <div className="workspace">{loading ? <Loading label="正在加载行业数据库…"/> : !industry && page !== 'system' ? <Empty title="还没有行业" body="从左侧进入系统状态，新建第一个行业。"/> : <Suspense fallback={<Loading label="正在载入工作台模块…"/>}><PageRouter page={page} industry={industry} navigate={navigate} notify={notify} setup={setup}/></Suspense>}</div>
     </main>
+    <AgentConversation industry={industry} provider={chatProvider} providerName={chatProviderName} notify={notify}/>
+    <PageHelp page={page}/>
     {toast && <div className={`toast ${toast.kind}`} role="status">{toast.kind === 'ok' ? <Check/> : <X/>}{toast.text}</div>}
     {showSetup&&setup&&<Suspense fallback={null}><SetupWizard setup={setup} hasIndustry={Boolean(industries.length)} onRefresh={refreshSetup} onComplete={async(_provider,folder)=>{if(folder){localStorage.setItem('intdog.industry',folder);await refreshIndustries();navigate('overview')}setShowSetup(false)}}/></Suspense>}
   </div>

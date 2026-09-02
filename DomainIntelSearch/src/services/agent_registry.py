@@ -452,7 +452,7 @@ def _diagnose_agent_unlocked(profile: dict, *, timeout_seconds: int = 10) -> dic
                       detail="Executable contains unsupported characters")
         return result
 
-    if spec.execution_level == "direct":
+    if spec.execution_level == "direct" or spec.native_session_implemented:
         allowed = {_command_identity(command) for command in spec.commands}
         declared = str(profile.get("command") or "")
         identities = [_command_identity(executable)]
@@ -481,7 +481,7 @@ def _diagnose_agent_unlocked(profile: dict, *, timeout_seconds: int = 10) -> dic
                   executable_fingerprint=fingerprint, status="detected",
                   failure_code=None, detail="Executable detected")
 
-    if spec.execution_level != "direct":
+    if spec.execution_level != "direct" and not spec.native_session_implemented:
         result.update(ready=spec.execution_level == "handoff",
                       status=spec.execution_level, detail=(
                           "Detected restricted CLI; use handoff" if spec.execution_level == "handoff"
@@ -506,13 +506,18 @@ def _diagnose_agent_unlocked(profile: dict, *, timeout_seconds: int = 10) -> dic
         return result
     version_text = (version_probe.stdout + b"\n" + version_probe.stderr).decode(
         "utf-8", errors="replace")
-    match = re.search(spec.version_pattern, version_text) if spec.version_pattern else None
+    match = (re.search(spec.version_pattern, version_text) if spec.version_pattern
+             else re.search(r"(?im)^\s*[^\r\n]{1,120}$", version_text))
     if version_probe.returncode != 0 or match is None:
         result.update(status="incompatible", failure_code="unrecognized_version",
                       detail="Executable did not return a recognized version")
         return result
     result.update(version_verified=True, version=match.group(0)[:120])
 
+    if spec.native_session_implemented and spec.execution_level != "direct":
+        result.update(ready=True, status="ready", failure_code=None,
+                      detail="Native session command verified; authentication is checked by its protocol handshake")
+        return result
     if not spec.auth_args:
         result.update(ready=True, status="ready", failure_code=None,
                       detail="Verified direct CLI is ready")

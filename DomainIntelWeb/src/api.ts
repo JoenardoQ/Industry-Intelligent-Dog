@@ -56,6 +56,10 @@ import type {
   StorySummaryState,
   TrashItemState,
   WorkflowSettingsState,
+  ConversationState as GeneratedConversationState,
+  ConversationMessageState as GeneratedConversationMessageState,
+  ActionProposalState as GeneratedActionProposalState,
+  ConfirmedProposalState as GeneratedConfirmedProposalState,
 } from './generated/openapi'
 
 export type ContractPath = ApiPath
@@ -115,3 +119,7 @@ export type TrashItem = TrashItemState
 export type RestorePreview = RestorePreviewState
 export type AuditRow = AuditState
 export type WorkflowSettings = WorkflowSettingsState
+export type Conversation = GeneratedConversationState
+export type ConversationMessage = GeneratedConversationMessageState
+export type ActionProposal = GeneratedActionProposalState
+export type ConfirmedProposal = GeneratedConfirmedProposalState

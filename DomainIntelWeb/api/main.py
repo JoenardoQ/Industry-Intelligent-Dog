@@ -27,6 +27,7 @@ from .routers.automation import build_automation_router
 from .routers.intelligence import build_intelligence_router
 from .routers.recovery import build_recovery_router
 from .routers.agent_bridge import build_agent_bridge_router
+from .routers.conversation import build_conversation_router
 from .security import install_security
 
 PROJECT_ROOT = Path(os.environ.get("INTDOG_PROJECT_ROOT") or Path(__file__).resolve().parents[2])
@@ -42,6 +43,7 @@ from intdog_core.models import validate_folder  # noqa: E402
 from intdog_core import IntDogService  # noqa: E402
 from src.services.semantic_verifier import build_production_assertion_verifier  # noqa: E402
 from src.services.runtime_credentials import credential_bundle  # noqa: E402
+from src.services.conversation_broker import ConversationBroker  # noqa: E402
 from .automation import AutomationScheduler  # noqa: E402
 
 
@@ -53,6 +55,7 @@ DATA_ROOT = Path(
 WEB_DIST = PROJECT_ROOT / "DomainIntelWeb" / "dist"
 
 service = IntDogService(DATA_ROOT)
+conversation_broker = ConversationBroker(service.repo, DATA_ROOT)
 jobs = JobManager(
     DATA_ROOT, ledger=service.repo, credential_supplier=credential_bundle)
 automation = AutomationScheduler(
@@ -65,9 +68,10 @@ async def lifespan(_app: FastAPI):
     yield
     automation.stop(timeout=3)
     jobs.shutdown(timeout=3)
+    conversation_broker.close()
 
 
-app = FastAPI(title="IntDog Local API", version="4.0.0", lifespan=lifespan)
+app = FastAPI(title="IntDog Local API", version="4.1.0", lifespan=lifespan)
 install_security(app, os.environ.get("INTDOG_SESSION_TOKEN", ""))
 
 
@@ -275,6 +279,12 @@ operations_router = build_operations_router(
     search_root=SEARCH_ROOT, project_root=PROJECT_ROOT, dataio=dataio,
     sanitize_text=sanitize_text)
 app.include_router(operations_router)
+generate_operation = next(
+    route.endpoint for route in operations_router.routes
+    if route.path.endswith("/generate") and "POST" in route.methods)
+app.include_router(build_conversation_router(
+    broker=conversation_broker, repo=service.repo, resolve_folder=_folder,
+    generate=generate_operation))
 
 
 if WEB_DIST.is_dir():

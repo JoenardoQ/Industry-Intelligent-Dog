@@ -87,7 +87,7 @@ def index_result(repo: IntelligenceRepository, tmp_path, suffix: str = "one") ->
 
 
 def test_schema_14_migrates_to_latest_repeatably_without_changing_existing_claims(tmp_path):
-    assert repository_module.SCHEMA_VERSION == 22
+    assert repository_module.SCHEMA_VERSION == 23
     repo = IntelligenceRepository(tmp_path)
     repo.ensure_industry("AI")
     claim_id = repo.upsert_claim("AI", "existing", {"value": 1})
@@ -2119,7 +2119,7 @@ def test_production_fetch_rejects_peer_address_outside_validated_dns(monkeypatch
      "evidence"),
     ("<html><p id='fact'>Evidence only</p><p>secret page</p></html>",
      {"type": "html_selector", "selector": "#fact"}, "Evidence only"),
-    ('{"result":{"value":12,"secret":"never-send"}}',
+    ('{"result":{"value":12,"private_field":"never-send"}}',
      {"type": "api_field", "path": "result.value"}, "12"),
 ])
 def test_production_fetch_replays_submitted_locator_and_hash_locally(
