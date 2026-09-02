@@ -108,6 +108,17 @@ def test_schedule_inherits_shared_provider_until_explicitly_overridden(tmp_path)
     assert "claude" in jobs.calls[0][0]
 
 
+def test_new_periodic_schedules_do_not_embed_a_codex_default(tmp_path):
+    service = IntDogService(tmp_path)
+    service.create_industry("AI", "人工智能")
+    scheduler = AutomationScheduler(
+        tmp_path, FakeJobs(), search_root=tmp_path, project_root=tmp_path)
+
+    rows = scheduler.snapshot("AI")
+
+    assert {row["provider"] for row in rows if row["action"] != "daily"} == {""}
+
+
 def test_coverage_frontier_deduplicates_queries_and_tracks_yield(tmp_path):
     service = IntDogService(tmp_path)
     service.create_industry("CHIPS", "芯片")

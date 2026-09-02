@@ -1896,6 +1896,49 @@
         "title": "AgentLocatorProvenance",
         "type": "object"
       },
+      "AgentProbeState": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "maxLength": 1000,
+            "title": "Detail",
+            "type": "string"
+          },
+          "latency_ms": {
+            "minimum": 0.0,
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "not_ready",
+              "unsupported",
+              "unexpected_response",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "ready",
+          "status",
+          "latency_ms",
+          "detail"
+        ],
+        "title": "AgentProbeState",
+        "type": "object"
+      },
       "AgentProfileDeleteState": {
         "properties": {
           "removed": {
@@ -9965,6 +10008,60 @@
           }
         },
         "summary": "Diagnose Profile",
+        "tags": [
+          "agent-bridge"
+        ]
+      }
+    },
+    "/api/agent-bridge/profiles/{profile_id}/probe": {
+      "post": {
+        "operationId": "probe_profile_api_agent_bridge_profiles__profile_id__probe_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "profile_id",
+            "required": true,
+            "schema": {
+              "title": "Profile Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timeout_seconds",
+            "required": false,
+            "schema": {
+              "default": 90,
+              "maximum": 180,
+              "minimum": 5,
+              "title": "Timeout Seconds",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentProbeState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Probe Profile",
         "tags": [
           "agent-bridge"
         ]

@@ -1,4 +1,4 @@
-"""Direct report execution for Codex subscription or explicit API providers.
+"""Direct report execution for supported local Agents or explicit API providers.
 
 Task packages remain inspectable, but this module turns them into actual Markdown
 artifacts and deterministic chart data so the desktop app can generate and render
@@ -349,7 +349,7 @@ def _ensure_history(config: dict, store, horizon: str) -> dict | None:
 
 @tracked_function("generate-period", store_position=1)
 def generate_periodic(config: dict, store, kind: str,
-                      provider: str = "codex") -> dict:
+                      provider: str | None = None) -> dict:
     from .scheduler import PeriodicScheduler
     if kind not in {"weekly", "monthly", "quarterly"}:
         raise ValueError("周期必须是 weekly/monthly/quarterly")
@@ -378,7 +378,7 @@ def generate_periodic(config: dict, store, kind: str,
 
 @tracked_function("generate-report", store_position=1)
 def generate_industry_report(config: dict, store, report_id: str,
-                             provider: str = "codex", industry_en: str = "") -> dict:
+                             provider: str | None = None, industry_en: str = "") -> dict:
     from .report_tasks import build_report_tasks
     tasks = build_report_tasks(store, store.name, industry_en)
     task = next((item for item in tasks if item["id"] == report_id), None)
@@ -402,7 +402,7 @@ def generate_industry_report(config: dict, store, report_id: str,
 
 @tracked_function("generate-deep-report", store_position=1)
 def generate_deep_report(config: dict, store, report_type: str,
-                         provider: str = "codex", industry_en: str = "") -> dict:
+                         provider: str | None = None, industry_en: str = "") -> dict:
     from .deep_reports import build_deep_reports
     _ensure_history(config, store, "quarterly")
     task = build_deep_reports(store, store.name, industry_en, rtype=report_type)[0]
@@ -422,7 +422,7 @@ def generate_deep_report(config: dict, store, report_type: str,
 
 @tracked_function("generate-impact", store_position=1)
 def generate_impact_report(config: dict, store, profile_config: dict, event: str,
-                           provider: str = "codex") -> dict:
+                           provider: str | None = None) -> dict:
     from .impact_engine import analyze_event
     skeleton = analyze_event(store, profile_config, event)
     task = store._read_json(Path(skeleton["task_file"]), {})

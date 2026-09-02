@@ -38,9 +38,12 @@ Electron：窗口、生命周期、系统安全存储
 
 能力目录是 Agent/API 的唯一清单。所有本机 Agent 统一经过候选发现、路径规范化、有界指纹、版本探测、认证探测和能力判定。大型合法 CLI 不能因固定 64 MiB 上限被误判；执行前仍重新校验绑定。
 
+默认连接边界是同一操作系统、同一用户账户。发现流程合并桌面进程 `PATH`、有限的常见安装目录和用户通过系统文件选择器明确选择的命令文件，不扫描主目录或整块磁盘，也不默认跨 Windows/WSL。已验证的手动绑定写入本地 `_settings/agent_profiles.json`，供初始化、前台任务和后台调度共享；文件改变后必须重新诊断。
+
 - Codex CLI 与 Claude Code只有在稳定的非交互适配器和公开登录探针通过后才能直接执行。
 - DeepSeek Harness、Work Buddy、Qwen Code、CodeBuddy、Kimi、Gemini CLI、OpenCode及后续 Agent 使用同一诊断管线；没有直接适配器时只提供 MCP、任务包或结果导入。
 - GUI 正在运行不等于可调用，未知 Agent 不自动获得直接执行权限。
+- 就绪状态由版本与公开认证探针确定；用户主动点击的真实连接测试还必须完成一次带固定标记的最小非交互调用。静态 MCP 配置存在不能替代真实 Agent 验收。
 - OpenAI、DeepSeek、Qwen、Azure OpenAI及兼容 API 必须显式配置；远程端点必须使用 HTTPS。
 
 ## 一键工作流与进度

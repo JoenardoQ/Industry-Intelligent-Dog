@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import os
 import hashlib
+import os
 import re
 import signal
 import shutil
 import stat
 import subprocess
+import sys
 import threading
 import time
 from dataclasses import dataclass
@@ -162,11 +163,51 @@ def _selected_file(raw: str) -> Path | None:
     return candidate
 
 
+def default_agent_search_path(environment: dict[str, str] | None = None,
+                              *, platform: str | None = None) -> str:
+    """Return a bounded same-OS search path for GUI-launched desktop builds.
+
+    Desktop applications do not reliably inherit terminal profile PATH changes.
+    Add only conventional executable directories; never traverse a home folder.
+    """
+    env = environment if environment is not None else dict(os.environ)
+    target = platform or sys.platform
+    separator = ";" if target == "win32" else os.pathsep
+    values = [item for item in str(env.get("PATH") or "").split(separator) if item]
+    home = Path(env.get("USERPROFILE") or env.get("HOME") or Path.home())
+    if target == "win32":
+        appdata = env.get("APPDATA")
+        local = env.get("LOCALAPPDATA")
+        candidates = [
+            Path(appdata) / "npm" if appdata else None,
+            Path(local) / "Microsoft" / "WindowsApps" if local else None,
+            home / ".local" / "share" / "pnpm",
+            home / ".bun" / "bin",
+            home / ".codex" / "bin",
+        ]
+    else:
+        candidates = [
+            home / ".local" / "bin", home / ".local" / "share" / "pnpm",
+            home / ".npm-global" / "bin", home / ".bun" / "bin",
+            Path("/opt/homebrew/bin"), Path("/usr/local/bin"),
+        ]
+    seen = {os.path.normcase(os.path.normpath(item)) for item in values}
+    for candidate in candidates:
+        if candidate is None:
+            continue
+        value = str(candidate)
+        identity = os.path.normcase(os.path.normpath(value))
+        if identity not in seen:
+            values.append(value)
+            seen.add(identity)
+    return separator.join(values)
+
+
 def discover_local_agents(*, path: str, selected_executables: list[str]) -> list[dict]:
     """Check only a supplied PATH and explicit user-selected executable files."""
     selected: dict[str, str] = {}
     command_to_id = {
-        command.casefold().removesuffix(".exe"): spec.id
+        _command_identity(command): spec.id
         for spec in AGENT_SPECS for command in spec.commands
     }
     unknown_selected: list[tuple[str, str]] = []
@@ -174,7 +215,7 @@ def discover_local_agents(*, path: str, selected_executables: list[str]) -> list
         candidate = _selected_file(raw)
         if candidate is None:
             continue
-        basename = candidate.name.casefold().removesuffix(".exe")
+        basename = _command_identity(candidate.name)
         item_id = command_to_id.get(basename)
         if item_id:
             selected.setdefault(item_id, str(candidate))
@@ -525,7 +566,7 @@ def diagnose_agent(profile: dict, *, timeout_seconds: int = 10) -> dict:
 def discover_agents(*, check_auth: bool = True) -> list[dict]:
     """Compatibility setup view backed by conservative discovery."""
     rows = discover_local_agents(
-        path=os.environ.get("PATH", ""), selected_executables=[])
+        path=default_agent_search_path(), selected_executables=[])
     for row in rows:
         spec = capability_or_unknown(row["id"])
         if not row["installed"]:

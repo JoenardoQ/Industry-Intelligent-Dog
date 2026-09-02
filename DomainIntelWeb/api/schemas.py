@@ -320,6 +320,16 @@ class AgentDiagnosticState(BaseModel):
     detail: str
 
 
+class AgentProbeState(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: str
+    ready: bool
+    status: Literal["ready", "not_ready", "unsupported", "unexpected_response", "failed"]
+    latency_ms: int = Field(ge=0)
+    detail: str = Field(max_length=1000)
+
+
 class AgentProfilePage(BaseModel):
     items: list[CustomAgentProfile] = Field(max_length=100)
     total: int = Field(ge=0, le=100)

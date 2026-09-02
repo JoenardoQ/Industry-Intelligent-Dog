@@ -565,7 +565,7 @@ def prepare_bootstrap(store, industry_en: str = "", profile: dict | None = None)
 @tracked_function("refresh-sources", store_position=1)
 def refresh_sources_with_agent(config: dict, store, industry_en: str = "",
                                profile: dict | None = None,
-                               provider: str = "codex", progress=print) -> dict:
+                               provider: str | None = None, progress=print) -> dict:
     """Refresh only the source universe while preserving reviewed chain/entity artifacts."""
     existing = store.get_sources()
     client = create_provider(config, provider, store.root)
@@ -603,7 +603,7 @@ def refresh_sources_with_agent(config: dict, store, industry_en: str = "",
 def run_bootstrap(config: dict, store, industry_en: str = "", profile: dict | None = None,
                   provider: str | None = None, progress=print) -> dict:
     status = prepare_bootstrap(store, industry_en, profile)
-    status["mode"] = "codex" if provider == "codex" else "api"
+    status["mode"] = provider or "unconfigured"
     client = create_provider(config, provider, store.root)
     tasks = build_tasks(store.name, industry_en)
     progress("[1/3] 搜索并审计信息源…")

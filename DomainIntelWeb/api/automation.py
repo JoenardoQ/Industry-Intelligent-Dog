@@ -108,7 +108,7 @@ class AutomationScheduler:
                 folder, action, enabled=enabled, local_time=local_time,
                 weekday=weekly, monthday=monthday, catch_up=True,
                 pipeline_mode="aggregate" if action == "daily" else "generate",
-                provider="public_sources" if action == "daily" else "codex")
+                provider="public_sources" if action == "daily" else "")
         self.service.update_control(folder, {"scheduler_owner": "web"})
 
     def tick(self) -> int:

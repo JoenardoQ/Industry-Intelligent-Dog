@@ -34,7 +34,7 @@ export default function SetupWizard({setup,onRefresh,onComplete,hasIndustry=true
     <header><div className="eyebrow">FIRST RUN · 首次启动</div><h1 id="setup-title">建立可恢复的研究工作区</h1><p>四步完成环境诊断、连接、行业和首轮知识门槛；任何一步都不会读取其他桌面应用的私有登录数据。</p></header>
     <ol className="setup-progress" aria-label="首次引导进度">{['环境诊断','研究连接','行业','首轮结果'].map((label,index)=><li key={label} className={step===index+1?'active':step>index+1?'complete':''}><span>{index+1}</span>{label}</li>)}</ol>
     {step===1&&<DiagnosticsStep setup={setup} onRefresh={onRefresh} onNext={()=>setStep(2)} onReturn={hasIndustry?returnToWorkbench:undefined}/>}
-    {step===2&&<ConnectionStep setup={setup} selected={selected} setSelected={setSelected} onBack={()=>setStep(1)} onNext={()=>setStep(3)}/>}
+    {step===2&&<ConnectionStep setup={setup} selected={selected} setSelected={setSelected} onBack={()=>setStep(1)} onNext={()=>setStep(3)} onRefresh={onRefresh} onUseSelected={hasIndustry?returnToWorkbench:undefined}/>}
     {step===3&&<IndustryStep onBack={()=>setStep(2)} onStart={begin}/>}
     {step===4&&active&&<BootstrapStep active={active} onChange={setActive} onComplete={finish}/>}
   </section></div>

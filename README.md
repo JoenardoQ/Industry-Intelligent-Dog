@@ -49,14 +49,30 @@ The three installers are independent artifacts. Any shared code change requires 
 
 1. Wait until the setup wizard reports a ready local runtime and data directory.
 2. Select a model source:
-   - **Local agent:** install and sign in through the agent’s official CLI first. IntDog runs public diagnostics and does not read private GUI sessions.
+   - **Local agent:** install and sign in to the Agent CLI under the same operating system and user account as IntDog. IntDog detects it automatically; if discovery fails, select the `codex.exe`, `codex.cmd`, `claude`, or equivalent command file with “Select installed Agent.”
    - **API:** select a provider and enter a model and key. The desktop stores the key in the operating-system credential vault.
    - **Task package:** no key is required, but the result is a task for any agent, not a finished research report.
 3. Create an industry name and data folder.
 4. Select “Initialize industry research.” The job enters the queue directly; the current page shows its real stage and elapsed time, while Task Center exposes logs, cancellation, and retry.
 5. Review source candidates, value-chain order, entity coverage, and evidence gaps before starting daily collection or reports.
 
-If a signed-in agent is not detected, rerun diagnosis in Connection settings and verify that its CLI is executable in the environment that launches IntDog. Windows, WSL, and macOS/Linux can have different PATH values. IntDog applies the same executable, version, authentication, and capability checks to every registered agent. Tools without direct execution can use MCP or task-package handoff.
+IntDog connects to local Agents in the same operating system; Windows/WSL bridging is not a default product path. A desktop process can still receive a different `PATH` from a terminal, so discovery checks a bounded list of conventional install directories without scanning the disk. Manual selection verifies executable identity, version, and public sign-in status before persisting a local binding. “Test live connection” sends one very short model request and may count against the Agent subscription. Statuses distinguish ready, sign-in required, incompatible, MCP/task-package only, and unsupported.
+
+After onboarding, use “Connection settings” in the top bar to replace an Agent, rerun diagnosis, test the connection, or restore automatic discovery. Global defaults apply to industries that still inherit them; explicit industry overrides remain unchanged. An installed or running GUI is not necessarily callable. Agents without a stable non-interactive CLI use MCP or task-package handoff.
+
+## Supported agents
+
+| Agent | Current support tier | Available capabilities |
+| --- | --- | --- |
+| Codex CLI | Native direct | Automatic discovery, explicit selection, sign-in diagnosis, live probe, direct generation, schedules |
+| Claude Code | Native direct | Automatic discovery, explicit selection, sign-in diagnosis, live probe, direct generation, schedules |
+| DeepSeek Harness | Experimental handoff | Command discovery, MCP, task packages, and result import; no direct-generation claim |
+| Work Buddy | MCP / task package | Command discovery, MCP, task packages, and result import |
+| Qwen Code, CodeBuddy Code, Kimi CLI | MCP / task package | Command discovery, task handoff, and result import |
+| Gemini CLI, OpenCode | MCP / task package | Command discovery, task handoff, and result import |
+| Other agents | Generic handoff | Generic MCP, or exported task JSON followed by review-required result import |
+
+“Supported” does not mean that every Agent can be launched directly by IntDog. Native direct execution is limited to Agents with a stable, verifiable non-interactive CLI contract. Other integrations remain explicit handoffs so that executable discovery is never misreported as a connected model.
 
 ## Daily workflow
 

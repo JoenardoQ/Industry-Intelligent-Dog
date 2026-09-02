@@ -1513,6 +1513,8 @@ def test_agent_capability_discovery_and_diagnosis_routes_are_typed(monkeypatch, 
         ("/api/agent-bridge/discover", "POST"): "AgentDiscoveryPage",
         ("/api/agent-bridge/profiles/{profile_id}/diagnose", "POST"):
             "AgentDiagnosticState",
+        ("/api/agent-bridge/profiles/{profile_id}/probe", "POST"):
+            "AgentProbeState",
     }
     operations = module.app.openapi()["paths"]
     for (path, method), schema_name in expected.items():

@@ -59,10 +59,10 @@ unchecked → not installed / signed out / connected / check failed
                    create industry → first job → logs and artifact
 ```
 
-- **Codex subscription:** IntDog must find an executable Codex CLI and confirm its
-  sign-in state. Windows prefers a native CLI and uses WSL only after a successful
-  fallback probe. The official flow is to install Codex CLI, run `codex`, and choose
-  ChatGPT sign-in.
+- **Codex subscription:** IntDog must find an executable Codex CLI under the same
+  operating system and user account and confirm its sign-in state. When automatic
+  discovery fails, the user can select `codex.exe` or `codex.cmd` with the native
+  file picker. Windows/WSL bridging is not a default product path.
 - **OpenAI API:** the user supplies an API key and model. The desktop app stores the
   key with Electron `safeStorage`, backed by the operating-system encryption
   facility; the backend receives the decrypted value through an anonymous one-shot
@@ -75,9 +75,9 @@ unchecked → not installed / signed out / connected / check failed
 
 | Interface | Direct generation | Discovery | Connection boundary |
 | --- | --- | --- | --- |
-| Codex CLI | yes | CLI and public login status | Native; Windows may use WSL only after a successful probe |
+| Codex CLI | yes | CLI and public login status | Same OS as IntDog; automatic discovery or explicit command-file selection |
 | Claude Code | yes | CLI and `auth status` | Official `-p` mode with plan permissions |
-| DeepSeek Harness | experimental | `dsh` | Developer preview; prefer MCP/task-package handoff |
+| DeepSeek Harness | no (experimental discovery) | `dsh` | Developer preview; use MCP/task-package handoff without claiming a stable direct CLI |
 | Work Buddy | no | executable | A workflow layer over Claude Code; use MCP/task packages |
 | Qwen Code, CodeBuddy Code, Kimi CLI | no | executable | MCP/task-package bridges for Chinese agents |
 | Gemini CLI, OpenCode | no | executable | MCP/task-package bridges for international/neutral agents |
@@ -122,7 +122,7 @@ Background scheduling is off until the user enables it. IntDog installs a per-us
 
 - No window after EXE launch: show a startup error and the user-data `logs/backend.log` path; never fail silently.
 - Codex missing: show the probed path and official setup link; do not install external tools automatically.
-- Codex signed out or HTTP 401: instruct the user to sign in within the same Windows/WSL environment and offer recheck.
+- Codex signed out or HTTP 401: instruct the user to sign in under the same operating system and user account, then offer recheck and command-file reselection.
 - Invalid API key: do not persist the test response or key; show a redacted provider error.
 - Backend exits early: retain logs and never show a connected state.
 - Secure storage unavailable: refuse to store a key and offer task-package mode; do not downgrade the desktop app to plaintext or environment transfer.
@@ -132,7 +132,7 @@ Background scheduling is off until the user enables it. IntDog installs a per-us
 | ID | Risk or behavior | States and interactions | Oracle |
 | --- | --- | --- | --- |
 | O1 | First launch after install | fresh user data, second launch, spaces/Unicode in path | Native package shows backend, UI, and log evidence |
-| O2 | Provider diagnosis | no CLI, native CLI, WSL fallback, signed out, signed in | Synthetic executable/status outputs and API decision table |
+| O2 | Provider diagnosis | no CLI, automatic discovery, manual selection, `.cmd` shim, signed out, signed in | Synthetic executable/status outputs and API decision table |
 | O3 | API credentials | empty key, valid shape, restart, no safeStorage | No plaintext key in files, logs, DOM, or API response |
 | O4 | Onboarding state | first run, task package, complete, reopen settings | DOM/accessibility state transitions and button gates |
 | O5 | First job | ready provider, unavailable provider, job failure | Unavailable does not queue; ready navigates to visible job log |

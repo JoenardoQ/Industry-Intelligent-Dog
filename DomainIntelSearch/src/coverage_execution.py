@@ -116,7 +116,7 @@ def _prompt(cells: list[dict], max_candidates: int) -> str:
 """
 
 
-def execute_coverage(config: dict, store, *, provider: str = "codex", budget: int = 12,
+def execute_coverage(config: dict, store, *, provider: str | None = None, budget: int = 12,
                      provider_client=None, probe=probe_url) -> dict:
     """Search and persist reviewable candidates without activating sources/entities."""
     budget = max(1, min(50, int(budget)))
@@ -227,7 +227,7 @@ def execute_coverage(config: dict, store, *, provider: str = "codex", budget: in
 
 
 def execute_persisted_coverage_round(config: dict, store, round_id: str, *,
-                                     provider: str = "codex",
+                                     provider: str | None = None,
                                      provider_client=None) -> dict:
     """Execute and resume a server-persisted entity/relation frontier."""
     repo = store.service.repo

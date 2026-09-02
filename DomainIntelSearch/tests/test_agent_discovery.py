@@ -9,6 +9,8 @@ from pathlib import Path
 import pytest
 
 from src.services import agent_registry
+from src.services.provider_readiness import provider_readiness
+from src.services.agent_connection import probe_agent_connection
 from src.services.capability_manifest import AgentCapability
 from src.services.claude_cli_service import ClaudeCLIError, ClaudeCLIService
 
@@ -43,6 +45,102 @@ def test_discovery_checks_only_supplied_path_and_user_selected_files(tmp_path, m
     assert by_id["codex"]["execution_level"] == "direct"
     assert by_id["codex"]["ready"] is False
     assert by_id["workbuddy"]["installed"] is False
+
+
+def test_user_selected_windows_command_shim_is_recognized_as_known_agent(tmp_path):
+    shim = tmp_path / "codex.cmd"
+    shim.write_text("@echo off\r\n", encoding="utf-8")
+
+    rows = agent_registry.discover_local_agents(
+        path="", selected_executables=[str(shim.resolve())])
+
+    codex = next(row for row in rows if row["id"] == "codex")
+    assert codex["installed"] is True
+    assert codex["executable"] == str(shim.resolve())
+    assert not any(row["id"].startswith("selected-") for row in rows)
+
+
+def test_default_search_path_adds_only_known_same_os_install_locations(tmp_path):
+    appdata = tmp_path / "AppData" / "Roaming"
+    local = tmp_path / "AppData" / "Local"
+    environment = {
+        "PATH": r"C:\\Windows\\System32",
+        "APPDATA": str(appdata),
+        "LOCALAPPDATA": str(local),
+        "USERPROFILE": str(tmp_path),
+    }
+
+    value = agent_registry.default_agent_search_path(environment, platform="win32")
+    parts = value.split(";")
+
+    assert parts[0] == environment["PATH"]
+    assert str(appdata / "npm") in parts
+    assert str(tmp_path / ".local" / "bin") not in parts
+
+
+def test_provider_readiness_uses_saved_verified_executable_binding(tmp_path, monkeypatch):
+    executable = _executable(
+        tmp_path / "tools", "codex",
+        "import sys\n"
+        "print('codex-cli 1.2.3' if '--version' in sys.argv else 'Logged in')\n",
+    )
+    settings = tmp_path / "_settings"
+    settings.mkdir()
+    (settings / "agent_profiles.json").write_text(
+        '[{"id":"binding-codex","name":"Codex CLI","command":"codex",'
+        f'"args":[],"executable_path":"{executable}","capability_id":"codex"}}]',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("DOMAIN_INTEL_DATA_ROOT", str(tmp_path))
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+
+    result = provider_readiness("codex", tmp_path / "AI")
+
+    assert result["ready"] is True
+    assert result["resolved_executable"] == str(executable.resolve())
+
+
+def test_connection_probe_requires_a_real_noninteractive_agent_response(tmp_path):
+    executable = _executable(
+        tmp_path / "tools", "claude",
+        "import sys\n"
+        "if '--version' in sys.argv:\n"
+        "    print('Claude Code 2.1.4')\n"
+        "elif sys.argv[1:3] == ['auth', 'status']:\n"
+        "    print('authenticated')\n"
+        "else:\n"
+        "    sys.stdin.read()\n"
+        "    print('INTDOG_CONNECTION_OK')\n",
+    )
+
+    result = probe_agent_connection(
+        {"id": "claude", "executable": str(executable)}, tmp_path,
+        timeout_seconds=5)
+
+    assert result["ready"] is True
+    assert result["status"] == "ready"
+    assert result["detail"] == "真实最小调用成功"
+
+
+def test_connection_probe_rejects_a_response_that_only_echoes_the_marker(tmp_path):
+    executable = _executable(
+        tmp_path / "tools", "claude",
+        "import sys\n"
+        "if '--version' in sys.argv:\n"
+        "    print('Claude Code 2.1.4')\n"
+        "elif sys.argv[1:3] == ['auth', 'status']:\n"
+        "    print('authenticated')\n"
+        "else:\n"
+        "    sys.stdin.read()\n"
+        "    print('The requested marker was INTDOG_CONNECTION_OK')\n",
+    )
+
+    result = probe_agent_connection(
+        {"id": "claude", "executable": str(executable)}, tmp_path,
+        timeout_seconds=5)
+
+    assert result["ready"] is False
+    assert result["status"] == "unexpected_response"
 
 
 def test_missing_native_executable_is_not_ready(tmp_path):

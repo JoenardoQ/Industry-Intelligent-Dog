@@ -25,9 +25,9 @@ Each package contains only its platform’s Electron shell and matching PyInstal
 
 1. The same revision passes Python tests, Web tests/build, Desktop tests, type/OpenAPI contracts, repository hygiene, and secret scanning.
 2. Each native platform completes install or mount, first launch, backend readiness, close, process/port release, and relaunch.
-3. With an isolated temporary data root, test industry creation, agent diagnosis, first job, all eight primary pages, cancel/retry, delete/restore, and safe shutdown.
+3. With an isolated temporary data root, test industry creation, automatic Agent discovery and explicit command-file selection, version/sign-in diagnosis, first job, all eight primary pages, cancel/retry, delete/restore, and safe shutdown. Windows must cover a `.cmd` shim; macOS/Linux must cover desktop launch without terminal-profile PATH entries.
 4. The no-model flow must produce a deterministic useful minimum; creating only a task package is not research success.
-5. At least one real signed-in agent completes a deep job without credential leakage. Unavailable hosts or external-network gates remain explicitly unverified.
+5. A real signed-in Agent first passes the UI fixed-marker minimal call and then completes a deep job without credential leakage. Static MCP configuration is not sufficient evidence. Unavailable hosts or external-network gates remain explicitly unverified.
 6. A direct research job that does not publish its required artifact ends `partial` or `failed`, never `completed`.
 
 ## Security and data boundary

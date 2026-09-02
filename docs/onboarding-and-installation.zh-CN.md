@@ -57,9 +57,7 @@
              创建行业 → 首次任务 → 查看日志与产物
 ```
 
-- **Codex 套餐**：IntDog 必须找到可执行的 Codex CLI，并确认登录状态。Windows 优先原生
-  CLI，只有探测成功时才使用 WSL fallback。官方流程是先安装 Codex CLI，再运行 `codex`
-  并选择使用 ChatGPT 登录。
+- **Codex 套餐**：IntDog 必须在同一操作系统和用户账户中找到可执行的 Codex CLI，并确认登录状态。自动检测失败时，用户可通过系统文件选择器选择 `codex.exe` 或 `codex.cmd`。产品不默认跨 Windows/WSL 调用。
 - **OpenAI API**：用户必须提供 API Key 和模型。桌面应用通过 Electron `safeStorage`
   使用操作系统凭据存储的加密能力保存 Key；后端只通过一次性匿名管道接收解密值，使用后清空传输对象。不得写入仓库、
   日志、URL、localStorage 或 API 响应。
@@ -69,9 +67,9 @@
 
 | 接口 | 直接生成 | 自动检测 | 连接方式与边界 |
 | --- | --- | --- | --- |
-| Codex CLI | 是 | CLI + 公开登录状态 | 本机原生；Windows 可在探测成功后回退 WSL |
+| Codex CLI | 是 | CLI + 公开登录状态 | 与 IntDog 同系统；可自动发现或手动选择命令文件 |
 | Claude Code | 是 | CLI + `auth status` | 官方 `-p` 非交互模式，使用 plan 权限模式 |
-| DeepSeek Harness | 实验性 | `dsh` | 开发者预览；优先 MCP/任务包，不伪装稳定一次性 CLI |
+| DeepSeek Harness | 否（实验性识别） | `dsh` | 开发者预览；使用 MCP/任务包，不伪装稳定一次性 CLI |
 | Work Buddy | 否 | 可执行文件 | 它是 Claude Code 上的工作流层，通过 MCP/任务包交接 |
 | Qwen Code、CodeBuddy Code、Kimi CLI | 否 | 可执行文件 | 国内 Agent 的 MCP/任务包交接入口 |
 | Gemini CLI、OpenCode | 否 | 可执行文件 | 海外/中立 Agent 的 MCP/任务包交接入口 |
@@ -111,7 +109,7 @@ Provider 不可用时，生成类操作必须在入队前被阻止并给出可�
 
 - EXE 无窗口：显示启动错误框并指向用户数据目录下的 `logs/backend.log`；不能静默退出。
 - Codex 未安装：显示实际探测路径和官方安装链接，不自动安装第三方工具。
-- Codex 未登录或 401：显示“在 IntDog 所在的同一 Windows/WSL 环境登录”，提供重新检测。
+- Codex 未登录或 401：显示“在 IntDog 所在的同一操作系统和用户账户中登录”，提供重新检测和重新选择命令文件。
 - API Key 无效：不持久化测试响应或 Key；显示供应商返回的脱敏错误。
 - 后端提前退出：保留日志，应用不得显示“已连接”。
 - 安全存储不可用：拒绝保存 API Key，允许用户改用任务包；桌面 App 不降级为明文或环境变量传递。
@@ -121,7 +119,7 @@ Provider 不可用时，生成类操作必须在入队前被阻止并给出可�
 | ID | 风险/行为 | 状态与交互 | 判定方式 |
 | --- | --- | --- | --- |
 | O1 | 安装后首次启动 | 全新用户目录、第二次启动、路径含空格/中文 | 原生安装包启动并取得后端、UI 与日志证据 |
-| O2 | Provider 诊断 | 无 CLI、原生 CLI、WSL fallback、未登录、已登录 | 合成可执行文件/状态输出与 API 决策表 |
+| O2 | Provider 诊断 | 无 CLI、自动发现、手动选择、`.cmd` 包装器、未登录、已登录 | 合成可执行文件/状态输出与 API 决策表 |
 | O3 | API 凭据 | 空 Key、有效格式、重启、无 safeStorage | Key 不出现在文件明文、日志、DOM、API 响应 |
 | O4 | 引导状态 | 首次、任务包、完成、重新打开设置 | DOM/可访问性测试验证状态转换和按钮门槛 |
 | O5 | 首次任务 | 可用 Provider、不可用 Provider、任务失败 | 不可用时不入队；可用时跳转任务中心并可见日志 |

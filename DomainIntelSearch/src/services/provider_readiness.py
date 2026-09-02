@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -10,15 +11,42 @@ from .capability_manifest import capability_or_unknown
 from .runtime_credentials import credential_for
 
 
+def _saved_agent_profile(provider: str, workspace: str | Path) -> dict | None:
+    explicit_root = os.environ.get("DOMAIN_INTEL_DATA_ROOT", "").strip()
+    base = Path(explicit_root) if explicit_root else Path(workspace)
+    candidates = [base / "_settings" / "agent_profiles.json"]
+    if not explicit_root:
+        candidates.append(base.parent / "_settings" / "agent_profiles.json")
+    for path in candidates:
+        try:
+            if not path.is_file() or path.stat().st_size > 256 * 1024:
+                continue
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            continue
+        if not isinstance(value, list):
+            continue
+        matches = [item for item in value if (
+            isinstance(item, dict)
+            and str(item.get("capability_id") or "").casefold() == provider)]
+        preferred = next((item for item in matches
+                          if item.get("id") == f"binding-{provider}"), None)
+        if preferred is not None:
+            return preferred
+        if matches:
+            return matches[-1]
+    return None
+
+
 def provider_readiness(provider: str, workspace: str | Path) -> dict:
-    del workspace  # the diagnostic contract never scans a workspace
     name = str(provider or "").strip().lower()
     if not name or name == "taskpack":
         return {"provider": "taskpack", "ready": True, "installed": True,
                 "failure_code": None, "detail": "任务包模式"}
     spec = capability_or_unknown(name)
     if spec.connection == "native_cli":
-        result = diagnose_agent({"id": name})
+        profile = _saved_agent_profile(name, workspace) or {"id": name}
+        result = diagnose_agent(profile)
         return {"provider": name, **result}
     if spec.connection != "api":
         return {"provider": name, "ready": False, "installed": False,

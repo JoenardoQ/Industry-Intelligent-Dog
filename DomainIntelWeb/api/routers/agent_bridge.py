@@ -20,6 +20,7 @@ from src.services.capability_manifest import CAPABILITY_MANIFEST
 from ..schemas import (
     AgentProfileDeleteState,
     AgentProfilePage,
+    AgentProbeState,
     AgentCapabilityPage,
     AgentDiagnosticState,
     AgentDiscoveryPage,
@@ -340,6 +341,22 @@ def build_agent_bridge_router(*, data_root: Path, dataio,
         if profile is None:
             raise HTTPException(404, "Agent Profile 不存在")
         return diagnose_agent(profile, timeout_seconds=timeout_seconds)
+
+    @router.post("/agent-bridge/profiles/{profile_id}/probe",
+                 response_model=AgentProbeState)
+    def probe_profile(
+            profile_id: str,
+            timeout_seconds: Annotated[int, Query(ge=5, le=180)] = 90) -> dict:
+        if not COMMAND.fullmatch(profile_id):
+            raise HTTPException(422, "Profile ID 无效")
+        with profiles_lock:
+            profile = next((item for item in profiles()["items"]
+                            if item.get("id") == profile_id), None)
+        if profile is None:
+            raise HTTPException(404, "Agent Profile 不存在")
+        from src.services.agent_connection import probe_agent_connection
+        return probe_agent_connection(
+            profile, data_root, timeout_seconds=timeout_seconds)
 
     @router.get("/industries/{folder}/agent-bridge/tasks", response_model=AgentTaskPage)
     def tasks(folder: str, limit: int = Query(50, ge=1, le=100),

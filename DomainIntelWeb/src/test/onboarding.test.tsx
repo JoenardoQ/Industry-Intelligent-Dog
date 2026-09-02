@@ -11,6 +11,7 @@ vi.mock('../api', async importOriginal => {
 import OverviewPage from '../features/OverviewPage'
 import SetupWizard from '../features/SetupWizard'
 import SystemPage from '../features/SystemPage'
+import ConnectionStep from '../features/setup/ConnectionStep'
 
 const setup: SetupPayload = {
   runtime_ready:true, data_root:'/data', taskpack_ready:true,
@@ -25,6 +26,79 @@ beforeEach(() => { apiMock.mockReset(); localStorage.clear(); vi.stubGlobal('con
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); localStorage.clear() })
 
 describe('first-run and industry overview loop', () => {
+  it('auto-detects and connects an Agent when the source workbench has no Desktop bridge', async () => {
+    Object.defineProperty(window,'intdogDesktop',{configurable:true,value:undefined})
+    const sourceSetup={...setup,agents:[setup.agents[0],{
+      ...setup.agents[0],id:'claude',name:'Claude Code',commands:['claude'],executable:'claude',
+    }]}
+    apiMock.mockImplementation((path:string,init?:RequestInit) => {
+      if(path==='/agent-bridge/discover') return Promise.resolve({items:[{
+        id:'codex',name:'Codex CLI',kind:'agent',region:'international',connection:'native_cli',execution_level:'direct',
+        auth:'subscription',web_access:true,structured_output:false,schedulable:true,docs_url:'',note:'本机 CLI',commands:['codex'],
+        installed:true,authenticated:null,version_verified:false,ready:false,executable:'/usr/local/bin/codex',
+        status:'detected',failure_code:null,version:'',detail:'Detected',
+      },{
+        id:'claude',name:'Claude Code',kind:'agent',region:'international',connection:'native_cli',execution_level:'direct',
+        auth:'subscription',web_access:true,structured_output:false,schedulable:true,docs_url:'',note:'本机 CLI',commands:['claude'],
+        installed:true,authenticated:null,version_verified:false,ready:false,executable:'/usr/local/bin/claude',
+        status:'detected',failure_code:null,version:'',detail:'Detected',
+      }],total:2})
+      if(path==='/agent-bridge/profiles'&&init?.method==='POST') return Promise.resolve({
+        id:'binding-claude',name:'Claude Code',command:'claude',args:[],
+        executable_path:'/usr/local/bin/claude',capability_id:'claude',
+      })
+      if(path==='/agent-bridge/profiles/binding-claude/diagnose') return Promise.resolve({
+        id:'claude',connection:'native_cli',execution_level:'direct',installed:true,version_verified:true,
+        authenticated:true,ready:true,status:'ready',failure_code:null,executable:'/usr/local/bin/claude',resolved_executable:'/usr/local/bin/claude',version:'claude 1.2.3',detail:'已登录',
+      })
+      throw new Error(`${path} ${String(init?.method)}`)
+    })
+    render(<ConnectionStep setup={sourceSetup} selected="claude" setSelected={vi.fn()} onBack={vi.fn()} onNext={vi.fn()} onRefresh={vi.fn().mockResolvedValue(undefined)}/> )
+
+    fireEvent.click(screen.getByRole('button',{name:'自动检测本机 Agent'}))
+
+    expect(await screen.findByText(/claude 1.2.3/)).toBeInTheDocument()
+    expect(screen.getByText('可以直接使用')).toBeInTheDocument()
+    expect(screen.queryByText(/浏览器模式不支持本机文件选择/)).not.toBeInTheDocument()
+  })
+
+  it('lets a desktop user select, diagnose, and test a local agent executable', async () => {
+    Object.defineProperty(window,'intdogDesktop',{configurable:true,value:{
+      selectAgentExecutable:vi.fn().mockResolvedValue({canceled:false,path:'C:\\Users\\Test\\AppData\\Roaming\\npm\\codex.cmd'}),
+    }})
+    apiMock.mockImplementation((path:string,init?:RequestInit) => {
+      if(path==='/agent-bridge/discover') return Promise.resolve({items:[{
+        id:'codex',name:'Codex CLI',kind:'agent',region:'international',connection:'native_cli',execution_level:'direct',
+        auth:'subscription',web_access:true,structured_output:false,schedulable:true,docs_url:'',note:'本机 CLI',commands:['codex'],
+        installed:true,authenticated:null,version_verified:false,ready:false,executable:'C:\\Users\\Test\\AppData\\Roaming\\npm\\codex.cmd',
+        status:'detected',failure_code:null,version:'',detail:'Detected',
+      }],total:1})
+      if(path==='/agent-bridge/profiles'&&init?.method==='POST') return Promise.resolve({
+        id:'binding-codex',name:'Codex CLI',command:'codex',args:[],
+        executable_path:'C:\\Users\\Test\\AppData\\Roaming\\npm\\codex.cmd',capability_id:'codex',
+      })
+      if(path==='/agent-bridge/profiles/binding-codex/diagnose') return Promise.resolve({
+        id:'codex',connection:'native_cli',execution_level:'direct',installed:true,version_verified:true,
+        authenticated:true,ready:true,status:'ready',failure_code:null,executable:'codex.cmd',resolved_executable:'codex.cmd',version:'codex-cli 1.2.3',detail:'已登录',
+      })
+      if(path==='/agent-bridge/profiles/binding-codex/probe') return Promise.resolve({
+        provider:'codex',ready:true,status:'ready',latency_ms:120,detail:'真实最小调用成功',
+      })
+      throw new Error(`${path} ${String(init?.method)}`)
+    })
+    const refresh=vi.fn().mockResolvedValue(undefined)
+    const useSelected=vi.fn()
+    render(<ConnectionStep setup={setup} selected="codex" setSelected={vi.fn()} onBack={vi.fn()} onNext={vi.fn()} onRefresh={refresh} onUseSelected={useSelected}/>)
+
+    fireEvent.click(screen.getByRole('button',{name:'选择已安装的 Agent'}))
+    expect(await screen.findByText(/codex-cli 1.2.3/)).toBeInTheDocument()
+    expect(screen.getByText('可以直接使用')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button',{name:'测试真实连接'}))
+    expect(await screen.findByText(/真实最小调用成功.*120 ms/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button',{name:'设为全局默认并返回工作台'}))
+    expect(useSelected).toHaveBeenCalledOnce()
+  })
+
   it('diagnoses four connection modes and keeps bootstrap gates in the wizard until confirmed', async () => {
     apiMock.mockImplementation((path:string, init?:RequestInit) => {
       if(path==='/industries') return Promise.resolve([])

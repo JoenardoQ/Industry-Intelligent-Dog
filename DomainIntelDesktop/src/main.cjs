@@ -285,6 +285,15 @@ if (serviceMode) {
     saveConfig(app.getPath('userData'), safeStorage, value)))
   ipcMain.handle('intdog:clear-provider', privileged(() =>
     clearConfig(app.getPath('userData'))))
+  ipcMain.handle('intdog:select-agent-executable', privileged(async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title:'选择已安装的 Agent 命令', properties:['openFile'],
+      filters:process.platform==='win32'
+        ? [{name:'Agent 命令',extensions:['exe','cmd','bat']},{name:'所有文件',extensions:['*']}]
+        : [{name:'所有文件',extensions:['*']}],
+    })
+    return {canceled:result.canceled,path:result.filePaths[0]||''}
+  }))
   ipcMain.handle('intdog:background-status', privileged(() => backgroundServiceStatus({
     platform:process.platform,executable:stableBackgroundExecutable({}),
     userData:app.getPath('userData') })))
