@@ -99,7 +99,7 @@ function App() {
       <header className="topbar"><button className="icon-button mobile-menu" onClick={() => setMobileNav(true)}><Menu/></button><IndustryPicker industries={industries} value={industry} onChange={chooseIndustry} disabled={loading}/><div className="top-status"><span className={`status-dot ${connectionReady?'':'warn'}`}/><span>{loading?'正在连接本地数据':`${current?`${current.name} 已加载 · `:''}${connectionLabel}`}</span><button onClick={()=>setShowSetup(true)}>连接设置</button></div></header>
       <div className="workspace">{loading ? <Loading label="正在加载行业数据库…"/> : !industry && page !== 'system' ? <Empty title="还没有行业" body="从左侧进入系统状态，新建第一个行业。"/> : <Suspense fallback={<Loading label="正在载入工作台模块…"/>}><PageRouter page={page} industry={industry} navigate={navigate} notify={notify} setup={setup}/></Suspense>}</div>
     </main>
-    <AgentConversation industry={industry} provider={chatProvider} providerName={chatProviderName} notify={notify}/>
+    <AgentConversation industry={industry} provider={chatProvider} providerName={chatProviderName} notify={notify} onOpenConnection={()=>setShowSetup(true)}/>
     <PageHelp page={page}/>
     {toast && <div className={`toast ${toast.kind}`} role="status">{toast.kind === 'ok' ? <Check/> : <X/>}{toast.text}</div>}
     {showSetup&&setup&&<Suspense fallback={null}><SetupWizard setup={setup} hasIndustry={Boolean(industries.length)} onRefresh={refreshSetup} onComplete={async(_provider,folder)=>{if(folder){localStorage.setItem('intdog.industry',folder);await refreshIndustries();navigate('overview')}setShowSetup(false)}}/></Suspense>}
@@ -113,7 +113,7 @@ function PageRouter({ page, industry, navigate, notify, setup }: { page: PageKey
   if (page === 'products') return <ProductsPage industry={industry} notify={notify}/>
   if (page === 'sources') return <SourcesPage industry={industry} notify={notify}/>
   if (page === 'research') return <ResearchPage industry={industry} notify={notify} setup={setup}/>
-  if (page === 'jobs') return <JobsPage/>
+  if (page === 'jobs') return <JobsPage industry={industry}/>
   return <SystemPage industry={industry} notify={notify} setup={setup}/>
 }
 

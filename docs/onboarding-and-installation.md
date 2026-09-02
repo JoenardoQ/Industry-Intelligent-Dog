@@ -1,145 +1,123 @@
-# IntDog Installation, First-run, and Agent Connection Contract
+# IntDog Installation and First Run
 
 [中文](onboarding-and-installation.zh-CN.md)
 
-## User outcome
+This guide is for desktop-package users. IntDog stores industry data locally, but an installer does not include a model account, API quota, or paid third-party data. The current build is an unsigned test release. Download it only from the project Release and verify the accompanying SHA-256.
 
-A first-time desktop user must be able to do the following without reading the source:
+## Supported platforms
 
-1. see a clear first-run guide;
-2. inspect the real local backend, data-directory, and model-provider state;
-3. choose a detected local agent, explicit API, or model-free task-package mode;
-4. create the first industry and run one observable initialization job; and
-5. use the task center to understand success, failure, and the next action.
+| Platform | Current architecture | Package |
+| --- | --- | --- |
+| Windows 10/11 | x64 | `IntDog-<version>-windows-x64.exe` |
+| macOS | Apple Silicon arm64 | `IntDog-<version>-macos-arm64.dmg` |
+| Linux | x64 | `IntDog-<version>-linux-x86_64.AppImage` |
 
-The installer contains the IntDog desktop shell, Web workbench, and local Python
-sidecar. It does not include a ChatGPT account, Codex CLI login, or OpenAI API
-quota. The UI must not present “IntDog started” as “agent connected.”
+Intel Macs and other CPU architectures are outside the current test boundary. The three packages are independent and are not interchangeable.
 
-## Supported boundary
-
-| Platform | Test architecture | Artifact | Model prerequisite |
-| --- | --- | --- | --- |
-| Windows 10/11 | x64 | NSIS `.exe` | Codex/Claude CLI, explicit API, or task package |
-| macOS | Apple Silicon arm64 | `.dmg` | Codex/Claude CLI, explicit API, or task package |
-| Linux | x64 | `.AppImage` | Codex/Claude CLI, explicit API, or task package |
-
-Test packages are unsigned. Windows SmartScreen or macOS Gatekeeper may require
-manual approval; that is not a reason to bypass security checks. Intel macOS is
-outside the current test boundary.
-
-## Install and remove
+## Install
 
 ### Windows 10/11 x64
 
-1. Download `IntDog-<version>-windows-x64.exe` and its `.sha256` from the Windows Pre-release; do not download the source archive.
-2. Verify it with `Get-FileHash .\IntDog-<version>-windows-x64.exe -Algorithm SHA256` in PowerShell.
-3. Run the NSIS installer and launch IntDog from the Start menu or desktop shortcut.
-4. Logs and data are under `%APPDATA%\intdog-desktop\logs` and `%APPDATA%\intdog-desktop\data`; the install directory contains no user database.
+1. Download the Windows `.exe` and matching `.sha256`. Do not download GitHub's generated Source code archive.
+2. In PowerShell, run:
+
+   ```powershell
+   Get-FileHash .\IntDog-<version>-windows-x64.exe -Algorithm SHA256
+   ```
+
+3. If the digest matches, run the installer and start IntDog from the Start menu or desktop shortcut.
+4. An unsigned test build may trigger SmartScreen. Verify the release source and digest before deciding whether to continue.
+
+Logs are under `%APPDATA%\intdog-desktop\logs`; local data is under `%APPDATA%\intdog-desktop\data`.
 
 ### macOS Apple Silicon
 
-1. Download `IntDog-<version>-macos-arm64.dmg` and run `shasum -a 256 IntDog-<version>-macos-arm64.dmg`.
-2. Mount the DMG and drag IntDog into Applications. This Beta is unsigned; inspect the checksum and release source before using the Finder **Open** exception.
-3. Logs and data are under `~/Library/Application Support/intdog-desktop/logs` and `~/Library/Application Support/intdog-desktop/data`.
+1. Download the DMG and run `shasum -a 256 IntDog-<version>-macos-arm64.dmg`.
+2. Open the DMG and drag IntDog into Applications.
+3. Gatekeeper may block an unsigned test build. After verifying the digest, decide whether to allow it in Privacy & Security.
+
+Logs and data are under `~/Library/Application Support/intdog-desktop/logs` and `~/Library/Application Support/intdog-desktop/data`.
 
 ### Linux x64
 
-1. Download the AppImage and run `chmod +x IntDog-<version>-linux-x86_64.AppImage`.
-2. Verify it with `sha256sum IntDog-<version>-linux-x86_64.AppImage`, then launch it.
-3. Logs and data are under `~/.config/intdog-desktop/logs` and `~/.config/intdog-desktop/data` unless `XDG_CONFIG_HOME` is overridden.
-
-Before uninstalling, disable background scheduling in System Status and confirm it is disabled. App uninstall removes binaries and shortcuts but retains the user-data directory. Back up or remove that directory separately; a compatible reinstall reuses it.
-
-## Provider state machine
-
-```text
-unchecked → not installed / signed out / connected / check failed
-                               ↓
-                   create industry → first job → logs and artifact
+```bash
+chmod +x IntDog-<version>-linux-x86_64.AppImage
+sha256sum IntDog-<version>-linux-x86_64.AppImage
+./IntDog-<version>-linux-x86_64.AppImage
 ```
 
-- **Codex subscription:** IntDog must find an executable Codex CLI under the same
-  operating system and user account and confirm its sign-in state. When automatic
-  discovery fails, the user can select `codex.exe` or `codex.cmd` with the native
-  file picker. Windows/WSL bridging is not a default product path.
-- **OpenAI API:** the user supplies an API key and model. The desktop app stores the
-  key with Electron `safeStorage`, backed by the operating-system encryption
-  facility; the backend receives the decrypted value through an anonymous one-shot
-  pipe and clears the in-memory transfer object after use.
-  The key must never enter the repository, logs, URL, localStorage, or API response.
-- **Task package:** no model or secret is required. It creates a structured prompt,
-  not a completed research report.
+Logs and data default to `~/.config/intdog-desktop/logs` and `~/.config/intdog-desktop/data`. They follow `XDG_CONFIG_HOME` when it is set.
 
-### Agent interface matrix
+## First run
 
-| Interface | Direct generation | Discovery | Connection boundary |
-| --- | --- | --- | --- |
-| Codex CLI | yes | CLI and public login status | Same OS as IntDog; automatic discovery or explicit command-file selection |
-| Claude Code | yes | CLI and `auth status` | Official `-p` mode with plan permissions |
-| DeepSeek Harness | no (experimental discovery) | `dsh` | Developer preview; use MCP/task-package handoff without claiming a stable direct CLI |
-| Work Buddy | no | executable | A workflow layer over Claude Code; use MCP/task packages |
-| Qwen Code, CodeBuddy Code, Kimi CLI | no | executable | MCP/task-package bridges for Chinese agents |
-| Gemini CLI, OpenCode | no | executable | MCP/task-package bridges for international/neutral agents |
-| Custom CLI | no | validated UI profile or `INTDOG_CUSTOM_AGENT_COMMAND` | Public argv only; handoff by default |
-| OpenAI, DeepSeek, Qwen, Azure OpenAI API | yes | environment or desktop secure storage | Keys never enter the browser, repository, logs, or API response |
+The first launch prepares the local backend and data directory, then opens four steps: Diagnostics, Research connection, Industry, and First result.
 
-“Detected” proves only that a public command exists. “Connected” additionally
-requires the adapter's public authentication check to pass. IntDog does not scan
-private account directories belonging to ChatGPT, Claude, or other GUI apps.
-Unlisted agents can use the generic MCP configuration shown during setup or export
-task JSON from **Research Studio → Agent handoff**. Their result JSON imports into
-a review-required area. A direct adapter still requires a fixed public contract for
-input, output, authentication, timeout, and failure behavior. Existing task packages
-and model-free collection remain available.
+### 1. Diagnostics
 
-### Agent result contract
+Confirm that the local runtime and data directory are ready. This is IntDog's own status; it does not mean a model is connected.
 
-An import contains `task_id`, `agent_id`, `summary`, and one or more `assertions`; every assertion requires HTTP(S) `citations`. IntDog rejects unknown tasks, uncited or invalid schemas, content over 500 KiB, and path/shell syntax in custom command profiles. Valid output is an audited `draft_review_required` file under `one_time/agent_results/` and never mutates the fact store directly.
+### 2. Choose a research connection
 
-When a provider is unavailable, model-generation actions must be rejected before
-queueing with an actionable recovery message. Local browsing, industry management,
-task packages, and model-free collection remain available.
+Three modes are available:
 
-## First-run journey
+- **Local Agent:** the Agent CLI must be installed and signed in under the same operating system and user account as IntDog. Discovery checks `PATH` and a bounded set of conventional locations. If that fails, select the CLI command file manually. IntDog does not take over an open Agent GUI and does not bridge Windows and WSL by default.
+- **API:** select a provider and enter an exact model ID, API key, optional HTTPS API base, and authentication mode. `OpenAI` is a provider name, not a model ID.
+- **Task package:** no model or key is required. It creates a handoff package for a compatible Agent, not completed research.
 
-1. Show three diagnostics—local runtime, data directory, and agent—instead of an empty workbench.
-2. Let the user choose a provider:
-   - Codex shows executable discovery, sign-in state, resolved path, and official setup link;
-   - API mode accepts provider, key, model, and an optional HTTPS API base, then securely restarts;
-   - task package explicitly states that it does not call a model.
-3. Finish only when a provider is ready or the user explicitly selects task-package mode.
-4. Create an industry, run initialization, and navigate to the task center with stage, log, error, and artifact visibility.
-5. After success, show sources, documents, entities, or an explicit waiting-for-collection state.
+The desktop main process protects the API key with operating-system credential encryption. The browser UI, logs, URLs, and API responses never return it. If secure storage is unavailable, IntDog refuses a plaintext downgrade.
 
-Task-package mode and the no-model live path are different. A task package is only a handoff. The live `NOM-01` path must collect credential-free public evidence and meet the documented publisher, document, entity, value-chain, content-hash, and zero-Provider-call oracle; partial/offline results remain an external gap.
+After an API is configured, you can still:
 
-## Background permission and revocation
+- edit the model, API base, or authentication mode; leaving the key blank preserves the existing key for the same provider;
+- change providers, which requires a new key;
+- run **Test API connection** as a real minimal request; or
+- clear the API configuration without deleting industry data.
 
-Background scheduling is off until the user enables it. IntDog installs a per-user Task Scheduler entry (Windows), LaunchAgent (macOS), or systemd user timer (Linux). The settings page shows installed/enabled/last-run/error state. Use **Revoke background permission** to remove the scheduler entry; revocation does not erase schedules, research, or credentials. Closing the window may leave an authorized schedule active, but it may not bypass provider authorization or secure-storage state.
+The probe checks authentication and model access and, when bootstrap requires it, the web-search tool. It may consume a small amount of API quota. Success proves only that this minimal request worked, not the quality of later research.
 
-## Failure and recovery
+### 3. Create an industry
 
-- No window after EXE launch: show a startup error and the user-data `logs/backend.log` path; never fail silently.
-- Codex missing: show the probed path and official setup link; do not install external tools automatically.
-- Codex signed out or HTTP 401: instruct the user to sign in under the same operating system and user account, then offer recheck and command-file reselection.
-- Invalid API key: do not persist the test response or key; show a redacted provider error.
-- Backend exits early: retain logs and never show a connected state.
-- Secure storage unavailable: refuse to store a key and offer task-package mode; do not downgrade the desktop app to plaintext or environment transfer.
+Enter a display name and local data-folder name. Submission starts initialization directly; there is no second task-package confirmation. Mutating jobs for the same industry run in submission order, while different industries can run independently.
 
-## P0 acceptance and coverage
+### 4. First result
 
-| ID | Risk or behavior | States and interactions | Oracle |
-| --- | --- | --- | --- |
-| O1 | First launch after install | fresh user data, second launch, spaces/Unicode in path | Native package shows backend, UI, and log evidence |
-| O2 | Provider diagnosis | no CLI, automatic discovery, manual selection, `.cmd` shim, signed out, signed in | Synthetic executable/status outputs and API decision table |
-| O3 | API credentials | empty key, valid shape, restart, no safeStorage | No plaintext key in files, logs, DOM, or API response |
-| O4 | Onboarding state | first run, task package, complete, reopen settings | DOM/accessibility state transitions and button gates |
-| O5 | First job | ready provider, unavailable provider, job failure | Unavailable does not queue; ready navigates to visible job log |
-| O6 | Package completeness | missing sidecar/Web/icon/uninstaller | Installed resource inventory and prelaunch checks |
-| O7 | Diagnostics | backend exit, timeout, provider 401 | Actionable log location and no credential disclosure |
-| O8 | Agent extensibility | native execution, MCP handoff, experimental and unknown CLIs | Registry never confuses presence with authentication or direct execution |
+Direct initialization executes this sequence:
 
-Synthetic local tests do not prove that a real ChatGPT account or paid API is
-available. A public test build may ship only after all three native runners repeat
-installation, onboarding, provider diagnosis, shutdown, and reopen checks.
+1. source discovery, reachability checks, and the source gate;
+2. value-chain nodes, directed edges, citations, and the chain gate;
+3. cited entities plus China/global and chain-stage coverage gates; and
+4. publication of a review-required knowledge draft.
+
+The UI shows three fixed stage rows and real milestones. While waiting for a provider, it shows the current stage and elapsed time without inventing internal progress.
+
+- `Completed`: all three gates passed and a review-required draft was published. Model output is still not accepted fact.
+- `Partial`: a gate did not pass. Completed checkpoints and candidates remain, and downstream work is not misreported as successful.
+- `Failed`: provider, configuration, transport, or parsing failed. Task Center shows the redacted concrete cause.
+- `Queued`: another mutating job owns this industry. It can be cancelled before launch.
+- `Task package created`: a handoff file exists, but industry research has not run.
+
+**Resume and retry** probes the provider again. It reuses a passed stage only when industry, model, workflow, and input fingerprints still match; otherwise it restarts at the first invalid stage.
+
+## Agent connection boundary
+
+IntDog currently executes diagnosed Codex CLI and Claude Code adapters directly. Other registered Agents use ACP, MCP, APIs, or task packages according to the actual adapter. See [Agent connectivity](agent-connectivity.md) for the complete matrix, handshakes, and maturity levels.
+
+“Detected,” “installed,” “signed in,” and “directly executable” are different states. Selecting the ChatGPT GUI `chatgpt.exe` is not a substitute for Codex CLI. Unknown or GUI-only Agents are never presented as callable models.
+
+## Background work, data, and uninstall
+
+Background work is off by default and requires permission. It can be revoked in System Status. Revocation removes the system scheduler entry but does not delete schedules, industry data, or credentials.
+
+Uninstall removes application binaries and shortcuts while user data is retained. A compatible reinstall reuses it. To migrate or back up IntDog, copy the complete platform data directory rather than only the SQLite file.
+
+## Troubleshooting
+
+- **No application window:** inspect `backend.log` in the platform log directory. Remove personal paths, tokens, and keys before sharing it.
+- **Agent not found:** confirm that a supported CLI is installed, run its version and login-status commands in the same system, then re-detect or select its command file.
+- **401 / authentication:** sign in under the same operating system and user account, or replace the API key.
+- **invalid_model:** copy the exact model ID from the provider console; do not enter a provider name.
+- **unsupported_tool:** the model or endpoint lacks the web-search tool required by bootstrap. Select a model or provider that explicitly supports it.
+- **quota / rate_limit:** check quota and throttling, wait if necessary, then use safe retry.
+- **Partial:** inspect the failed gate. This represents a research-coverage gap, not a formatting error.
+
+Synthetic local tests do not prove that a real paid account is available. A public test release still requires native install, first-launch, shutdown, and reopen gates on Windows, macOS, and Linux.

@@ -1,131 +1,123 @@
-# IntDog 安装、首次启动与智能体连接合同
+# IntDog 安装与首次使用
 
 [English](onboarding-and-installation.md)
 
-## 用户结果
+本指南面向桌面安装版用户。IntDog 本地保存行业数据，但安装包不包含模型账号、API 额度或第三方付费数据。当前为未签名测试版；请只从项目 Release 下载，并核对随附的 SHA-256。
 
-面向第一次接触 IntDog 的桌面用户，安装完成后无需阅读源码即可：
+## 支持平台
 
-1. 看见明确的首次启动向导；
-2. 确认本地后端、数据目录和模型 Provider 的真实状态；
-3. 选择已检测的本机 Agent、显式 API 或无模型任务包；
-4. 创建第一个行业并运行一次可观察的初始化任务；
-5. 从任务中心判断成功、失败原因和下一步操作。
+| 平台 | 当前架构 | 安装包 |
+| --- | --- | --- |
+| Windows 10/11 | x64 | `IntDog-<version>-windows-x64.exe` |
+| macOS | Apple Silicon arm64 | `IntDog-<version>-macos-arm64.dmg` |
+| Linux | x64 | `IntDog-<version>-linux-x86_64.AppImage` |
 
-安装包只包含 IntDog 桌面壳、Web 工作台和本地 Python sidecar。它不包含 ChatGPT
-账号、Codex CLI 登录或 OpenAI API 额度。界面不得把“IntDog 已启动”显示成“智能体已连接”。
+Intel Mac 和其他 CPU 架构不在当前测试范围。三个安装包是独立构建产物，不能互换。
 
-## 支持边界
-
-| 平台 | 测试版架构 | 安装产物 | 模型前提 |
-| --- | --- | --- | --- |
-| Windows 10/11 | x64 | NSIS `.exe` | Codex/Claude CLI、显式 API 或任务包 |
-| macOS | Apple Silicon arm64 | `.dmg` | Codex/Claude CLI、显式 API 或任务包 |
-| Linux | x64 | `.AppImage` | Codex/Claude CLI、显式 API 或任务包 |
-
-当前测试版未签名。Windows SmartScreen 或 macOS Gatekeeper 可能要求用户手动允许；这不等于
-绕过安全检查。Intel Mac 不在当前测试版支持范围内。
-
-## 安装与卸载
+## 安装
 
 ### Windows 10/11 x64
 
-1. 从 Windows Pre-release 下载 `IntDog-<version>-windows-x64.exe` 和 `.sha256`，不要下载源码压缩包。
-2. 在 PowerShell 执行 `Get-FileHash .\IntDog-<version>-windows-x64.exe -Algorithm SHA256` 核对摘要。
-3. 运行 NSIS 安装器，再从开始菜单或桌面快捷方式打开 IntDog。
-4. 日志与数据分别位于 `%APPDATA%\intdog-desktop\logs` 和 `%APPDATA%\intdog-desktop\data`；安装目录不保存用户数据库。
+1. 下载 Windows `.exe` 和对应 `.sha256`，不要下载 GitHub 自动生成的 Source code。
+2. 在 PowerShell 运行：
+
+   ```powershell
+   Get-FileHash .\IntDog-<version>-windows-x64.exe -Algorithm SHA256
+   ```
+
+3. 摘要一致后运行安装器，再从开始菜单或桌面快捷方式启动。
+4. 未签名测试包可能触发 SmartScreen。核对发布来源和摘要后，再自行决定是否继续。
+
+日志位于 `%APPDATA%\intdog-desktop\logs`，本地数据位于 `%APPDATA%\intdog-desktop\data`。
 
 ### macOS Apple Silicon
 
-1. 下载 `IntDog-<version>-macos-arm64.dmg`，运行 `shasum -a 256 IntDog-<version>-macos-arm64.dmg` 核对摘要。
-2. 挂载 DMG，把 IntDog 拖入 Applications。当前 Beta 未签名；确认摘要与发行来源后，才使用 Finder 的“打开”例外。
-3. 日志与数据位于 `~/Library/Application Support/intdog-desktop/logs` 和 `~/Library/Application Support/intdog-desktop/data`。
+1. 下载 DMG，并运行 `shasum -a 256 IntDog-<version>-macos-arm64.dmg`。
+2. 打开 DMG，把 IntDog 拖入 Applications。
+3. 未签名测试包可能被 Gatekeeper 阻止。确认摘要后，可在“隐私与安全”中选择是否允许。
+
+日志和数据分别位于 `~/Library/Application Support/intdog-desktop/logs` 与 `~/Library/Application Support/intdog-desktop/data`。
 
 ### Linux x64
 
-1. 下载 AppImage，执行 `chmod +x IntDog-<version>-linux-x86_64.AppImage`。
-2. 用 `sha256sum IntDog-<version>-linux-x86_64.AppImage` 核对摘要后启动。
-3. 日志与数据默认位于 `~/.config/intdog-desktop/logs` 和 `~/.config/intdog-desktop/data`；设置 `XDG_CONFIG_HOME` 时跟随该目录。
-
-卸载前先在系统状态中撤销/停用后台权限，并确认已停用。卸载只删除应用和快捷方式，用户数据默认“卸载保留”；备份或永久删除数据目录必须单独操作。安装兼容的新版本会复用保留的数据。
-
-## Provider 状态机
-
-```text
-未检测 → 未安装 / 未登录 / 已连接 / 检测失败
-                     ↓
-             创建行业 → 首次任务 → 查看日志与产物
+```bash
+chmod +x IntDog-<version>-linux-x86_64.AppImage
+sha256sum IntDog-<version>-linux-x86_64.AppImage
+./IntDog-<version>-linux-x86_64.AppImage
 ```
 
-- **Codex 套餐**：IntDog 必须在同一操作系统和用户账户中找到可执行的 Codex CLI，并确认登录状态。自动检测失败时，用户可通过系统文件选择器选择 `codex.exe` 或 `codex.cmd`。产品不默认跨 Windows/WSL 调用。
-- **OpenAI API**：用户必须提供 API Key 和模型。桌面应用通过 Electron `safeStorage`
-  使用操作系统凭据存储的加密能力保存 Key；后端只通过一次性匿名管道接收解密值，使用后清空传输对象。不得写入仓库、
-  日志、URL、localStorage 或 API 响应。
-- **任务包**：无需模型和密钥，可创建结构化 prompt，但不会直接生成完整研究报告。
+日志和数据默认位于 `~/.config/intdog-desktop/logs` 与 `~/.config/intdog-desktop/data`；设置 `XDG_CONFIG_HOME` 后跟随该目录。
 
-### Agent 接口矩阵
+## 首次启动
 
-| 接口 | 直接生成 | 自动检测 | 连接方式与边界 |
-| --- | --- | --- | --- |
-| Codex CLI | 是 | CLI + 公开登录状态 | 与 IntDog 同系统；可自动发现或手动选择命令文件 |
-| Claude Code | 是 | CLI + `auth status` | 官方 `-p` 非交互模式，使用 plan 权限模式 |
-| DeepSeek Harness | 否（实验性识别） | `dsh` | 开发者预览；使用 MCP/任务包，不伪装稳定一次性 CLI |
-| Work Buddy | 否 | 可执行文件 | 它是 Claude Code 上的工作流层，通过 MCP/任务包交接 |
-| Qwen Code、CodeBuddy Code、Kimi CLI | 否 | 可执行文件 | 国内 Agent 的 MCP/任务包交接入口 |
-| Gemini CLI、OpenCode | 否 | 可执行文件 | 海外/中立 Agent 的 MCP/任务包交接入口 |
-| 自定义 CLI | 否 | 受校验 UI Profile 或 `INTDOG_CUSTOM_AGENT_COMMAND` | 只保存公开 argv；默认只允许交接 |
-| OpenAI、DeepSeek、Qwen、Azure OpenAI API | 是 | 环境或桌面安全存储 | Key 不进入浏览器、仓库、日志或 API 响应 |
+首次启动会准备本地后端和数据目录，然后显示四步向导：环境诊断、研究连接、行业、首轮结果。
 
-“检测到”只证明公开命令存在；“已连接”还要求适配器的公开认证检查通过。IntDog 不扫描
-ChatGPT、Claude 或其他 GUI 应用的私有账户目录。未列出的 Agent 可复制首次设置中的通用 MCP 配置读取 IntDog，
-或在“研究助手 → Agent 任务交接”导出任务 JSON；完成后把结果 JSON 导回待复核区。新增直接执行适配器必须先固定输入、输出、认证、
-权限、超时和错误契约。
+### 1. 环境诊断
 
-Provider 不可用时，生成类操作必须在入队前被阻止并给出可执行修复步骤；纯本地浏览、行业管理、
-任务包和不依赖模型的采集仍可使用。
+确认本地运行组件和数据目录可用。这里显示的是 IntDog 自身状态，不代表模型已经连接。
 
-### Agent 结果格式
+### 2. 选择研究连接
 
-导入对象必须包含 `task_id`、`agent_id`、`summary` 和至少一条 `assertions`；每条断言必须有 HTTP(S) `citations`。系统拒绝未知任务、无引用、错误 Schema、超过 500 KiB 和命令路径/shell 语法；合规结果只写入 `one_time/agent_results/` 的 `draft_review_required` 草稿并保留审计，不直接修改事实库。
+可以选择三种模式：
 
-## 首次启动旅程
+- **本机 Agent**：Agent CLI 必须安装在与 IntDog 相同的操作系统和用户账户中，并已登录。IntDog 先检查 `PATH` 和有限的常见安装目录；失败时可手动选择 CLI 命令文件。它不会接管已经打开的 Agent GUI，也不默认跨 Windows/WSL 连接。
+- **API**：选择 Provider，填写精确模型 ID、API Key、可选 HTTPS API Base 和认证方式。`OpenAI` 是 Provider 名称，不是模型 ID。
+- **任务包**：无需模型或 Key，只生成可交给兼容 Agent 的任务包，不等于完成研究。
 
-1. 应用显示“本地运行组件 → 数据目录 → 智能体”的三项诊断，而不是空白工作台。
-2. 用户选择 Provider：
-   - Codex：显示安装状态、登录状态、执行路径和官方安装/登录链接；
-   - API 模式：选择 Provider，输入 Key、模型和可选 HTTPS API Base，保存后安全重启；
-   - 任务包：明确说明不会调用模型。
-3. Provider 达到可用状态，或用户明确选择任务包后，才能完成向导。
-4. 创建行业，运行“初始化行业研究”。应用跳转任务中心并持续显示阶段、日志、错误和产物。
-5. 首次成功后，概览必须出现信息源、文档、实体或明确的“待采集”状态。
+API Key 由桌面主进程通过系统凭据加密能力保存；浏览器界面、日志、URL 和 API 响应不会返回 Key。若系统安全存储不可用，IntDog 会拒绝明文降级。
 
-任务包与无模型真实采集不是同一结果。任务包只是交接；`NOM-01` 必须从公开免凭据来源取得发布者、文档、实体、产业链、内容哈希和零 Provider 调用证据。partial/offline 仍是外部缺口。
+API 已配置后仍可：
 
-## 后台权限与撤销
+- 编辑模型、API Base 或认证方式；Key 留空会保留同一 Provider 的现有密钥；
+- 更换 Provider，但必须填写新 Key；
+- 点击“测试 API 连接”执行真实最小调用；
+- 清除 API 配置，且不会删除行业数据。
 
-后台调度默认关闭。用户启用后，IntDog 安装当前账户的 Windows 任务计划、macOS LaunchAgent 或 Linux systemd user timer。设置页显示安装/启用/最近运行/错误状态。撤销权限会移除系统调度入口，不删除计划、研究数据或凭据。关闭窗口后，已授权计划可以继续，但不得绕过 Provider 授权或安全存储状态。
+真实探针会核验认证、模型，并在初始化需要时核验联网搜索工具。它可能消耗少量 API 额度。测试成功只能证明本次最小调用成功，不保证后续研究内容质量。
 
-## 故障与恢复
+### 3. 创建行业
 
-- EXE 无窗口：显示启动错误框并指向用户数据目录下的 `logs/backend.log`；不能静默退出。
-- Codex 未安装：显示实际探测路径和官方安装链接，不自动安装第三方工具。
-- Codex 未登录或 401：显示“在 IntDog 所在的同一操作系统和用户账户中登录”，提供重新检测和重新选择命令文件。
-- API Key 无效：不持久化测试响应或 Key；显示供应商返回的脱敏错误。
-- 后端提前退出：保留日志，应用不得显示“已连接”。
-- 安全存储不可用：拒绝保存 API Key，允许用户改用任务包；桌面 App 不降级为明文或环境变量传递。
+填写行业显示名称和本地数据文件夹。提交后会直接开始初始化，无需再次确认任务包。相同行业的变更任务按提交顺序排队；其他行业可以独立运行。
 
-## P0 验收与测试覆盖
+### 4. 首轮结果
 
-| ID | 风险/行为 | 状态与交互 | 判定方式 |
-| --- | --- | --- | --- |
-| O1 | 安装后首次启动 | 全新用户目录、第二次启动、路径含空格/中文 | 原生安装包启动并取得后端、UI 与日志证据 |
-| O2 | Provider 诊断 | 无 CLI、自动发现、手动选择、`.cmd` 包装器、未登录、已登录 | 合成可执行文件/状态输出与 API 决策表 |
-| O3 | API 凭据 | 空 Key、有效格式、重启、无 safeStorage | Key 不出现在文件明文、日志、DOM、API 响应 |
-| O4 | 引导状态 | 首次、任务包、完成、重新打开设置 | DOM/可访问性测试验证状态转换和按钮门槛 |
-| O5 | 首次任务 | 可用 Provider、不可用 Provider、任务失败 | 不可用时不入队；可用时跳转任务中心并可见日志 |
-| O6 | 安装包完整性 | sidecar/Web/图标/卸载器缺失 | 安装后资源清单和启动前检查 |
-| O7 | 诊断能力 | 后端退出、超时、Provider 401 | 用户可定位日志且错误信息不泄露凭据 |
-| O8 | Agent 扩展 | 原生执行、MCP 交接、实验接口、未知 CLI | 注册表不把“存在”误报为“已认证/可直接生成” |
+直接初始化按顺序执行：
 
-本地合成测试不证明真实 ChatGPT 账号或付费 API 可用。公开测试版只有在三个原生 runner
-重新通过安装、引导、Provider 诊断、关闭和重开后才可发布。
+1. 信息源发现、可达性检查与来源门槛；
+2. 产业链节点、有向边和引用门槛；
+3. 实体引用、中国/海外与产业链覆盖门槛；
+4. 发布待复核知识草稿。
+
+界面显示固定的三行阶段状态与真实里程碑。等待 Provider 时只显示当前阶段和已用时间，不虚构内部进度。
+
+- `已完成`：三道门槛已通过并发布待复核草稿；模型输出仍不是正式事实。
+- `部分完成`：某道门槛未通过；已完成检查点和候选材料保留，下游阶段不会伪装成成功。
+- `失败`：Provider、配置、网络或解析失败；任务中心显示脱敏后的具体原因。
+- `排队中`：同一行业已有变更任务；可以在启动前取消。
+- `任务包已创建`：只是交接文件，尚未执行行业研究。
+
+“恢复并重试”会先重新检查 Provider，并在行业、模型、工作流和输入指纹一致时复用已通过阶段；否则从第一个无效阶段重新开始。
+
+## Agent 连接边界
+
+IntDog 目前可直接执行已通过诊断的 Codex CLI 与 Claude Code；其他已登记 Agent 根据实际适配器使用 ACP、MCP、API 或任务包。完整清单、握手方式和成熟度见[Agent 连接说明](agent-connectivity.zh-CN.md)。
+
+“已检测”“已安装”“已登录”“可直接执行”不是同一状态。选择 ChatGPT GUI 的 `chatgpt.exe` 不能代替 Codex CLI。未知或仅有 GUI 的 Agent 不会被冒充为可调用模型。
+
+## 后台、数据与卸载
+
+后台运行默认关闭。启用前 IntDog 会请求权限；可在系统状态中撤销。撤销只移除系统调度入口，不删除计划、行业数据或凭据。
+
+卸载应用会删除程序和快捷方式，但用户数据默认“卸载保留”。升级兼容版本会继续使用这些数据。要迁移或备份，请复制整个平台数据目录；不要只复制 SQLite 文件。
+
+## 故障排查
+
+- **应用无窗口**：查看平台日志目录下的 `backend.log`。分享前删除个人路径、令牌和 Key。
+- **Agent 未找到**：确认安装的是受支持 CLI，在同一系统终端运行其版本和登录命令，再回到 IntDog 重新检测或选择命令文件。
+- **401 / authentication**：在同一操作系统和用户账户中登录 Agent，或重新填写 API Key。
+- **invalid_model**：从 Provider 控制台复制精确模型 ID；不要填写 Provider 名称。
+- **unsupported_tool**：当前模型或端点不支持初始化所需的联网搜索；更换明确支持该工具的模型或 Provider。
+- **quota / rate_limit**：检查额度和限流，等待后安全重试。
+- **部分完成**：查看未通过检查；这是研究覆盖不足，不是界面格式错误。
+
+本地合成测试不能证明真实付费账号可用。公开测试版仍需分别通过 Windows、macOS 和 Linux 原生安装、首次启动、关闭与重开门槛。

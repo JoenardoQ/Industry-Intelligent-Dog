@@ -154,7 +154,7 @@ export default function SourceCampaignPanel({industry,notify}:{industry:string;n
           aria-label="下一页候选" onClick={()=>void loadDetail(detail.id,detail.candidate_page.next_offset!)}>
           下一页候选</button>}
       </>}
-      <RunFeedback runId={runId}/>
+      <RunFeedback runId={runId} onTerminal={()=>void load()}/>
       <div className="coverage-matrix"><div className="section-heading"><div><h3>还缺哪些企业和研究团队</h3>
         <p>{coverage?.completeness_proven?'当前范围已经过覆盖检查':'系统会保留尚未找到足够实体的产业链位置，并继续补充。'}</p></div>
         <button className="button secondary" onClick={()=>void expand()}>继续补充企业与研究团队</button></div>

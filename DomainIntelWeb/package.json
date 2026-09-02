@@ -1,7 +1,7 @@
 {
   "name": "intdog-workbench",
   "private": true,
-  "version": "4.1.0-test.2",
+  "version": "4.1.0-test.3",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",

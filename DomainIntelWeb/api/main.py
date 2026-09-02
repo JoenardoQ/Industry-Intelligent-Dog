@@ -208,6 +208,7 @@ def _job_rows() -> list[dict]:
             recovery.append("retry")
         rows.append({
             "run_id": run_id,
+            "folder": str(task_input.get("folder") or ""),
             "title": sanitize_text(manifest.get("title") or task["operation"]),
             "status": status, "updated_at": str(task.get("updated_at") or ""),
             "stalled": bool(status in {"queued", "running", "cancelling"}
@@ -246,6 +247,7 @@ def _job_rows() -> list[dict]:
         age = heartbeat_age(heartbeat)
         rows.append({
             "run_id": str(manifest.get("run_id")),
+            "folder": str(manifest.get("folder") or ""),
             "title": sanitize_text(manifest.get("title") or "Legacy task"),
             "status": status, "updated_at": str(manifest.get("updated_at") or ""),
             "stalled": bool(status in {"queued", "running", "cancelling"}

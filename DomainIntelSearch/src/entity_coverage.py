@@ -60,6 +60,12 @@ def build_coverage_matrix(repo, folder: str) -> dict:
         target = 8 if high_value else 3
         for entity_type in applicable:
             for region in REGIONS:
+                discovered = {
+                    row["entity_id"] for row in records
+                    if row["chain_stage"] == node["name"] and
+                    row["entity_type"] == entity_type and
+                    _region(row) == region
+                }
                 members = {
                     row["entity_id"] for row in records
                     if row["chain_stage"] == node["name"] and
@@ -78,6 +84,7 @@ def build_coverage_matrix(repo, folder: str) -> dict:
                     "chain_stage": node["name"],
                     "entity_type": entity_type,
                     "region": region,
+                    "candidate_count": len(discovered),
                     "qualified_count": count,
                     "breadth_target": 3,
                     "depth_target": 8 if high_value else None,
@@ -103,6 +110,42 @@ def build_coverage_matrix(repo, folder: str) -> dict:
         "algorithm_version": ALGORITHM_VERSION,
         "round_history": [],
     }
+
+
+def materialize_coverage_matrix(repo, folder: str) -> dict:
+    """Build the user-facing matrix and persist its actionable gap cells."""
+    matrix = build_coverage_matrix(repo, folder)
+    edges = repo.list_chain_edges(folder)
+    for cell in matrix["cells"]:
+        reviewed = int(cell.pop("qualified_count", 0))
+        target = int(cell["target"])
+        relations = [{
+            "edge_id": edge["id"], "relation": edge["relation"],
+            "source_stage": edge["src_name"], "target_stage": edge["dst_name"],
+            "evidence_count": edge["evidence_count"], "evidence": edge["evidence"],
+        } for edge in edges if cell["chain_stage"] in {
+            edge["src_name"], edge["dst_name"]}]
+        cell.update({
+            "current": reviewed,
+            "reviewed_evidence_count": reviewed,
+            "gap": max(0, target - reviewed),
+            "explanation": (
+                f"已发现候选 {cell['candidate_count']}，其中已复核证据覆盖 {reviewed}；"
+                f"目标 {target}，仍缺 {max(0, target-reviewed)}。"),
+            "relation_evidence": relations,
+        })
+        cell["id"] = repo.upsert_coverage_cell(folder, {
+            "region": cell["region"], "subdomain": cell["subdomain"],
+            "chain_stage": cell["chain_stage"], "entity_type": cell["entity_type"],
+            "source_type": cell["source_type"], "event_type": "entity_identity",
+            "time_horizon": "current",
+        }, priority=cell["priority"], status=cell["status"],
+            rationale=cell["explanation"])
+    matrix["candidate_total"] = sum(cell["candidate_count"] for cell in matrix["cells"])
+    matrix["reviewed_evidence_total"] = sum(
+        cell["reviewed_evidence_count"] for cell in matrix["cells"])
+    matrix["next_actions"] = ["sources", "knowledge", "research"]
+    return matrix
 
 
 def _zero_gain(round_record: dict) -> bool:

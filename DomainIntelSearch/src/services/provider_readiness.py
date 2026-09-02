@@ -9,6 +9,7 @@ from pathlib import Path
 from .agent_registry import diagnose_agent
 from .capability_manifest import capability_or_unknown
 from .runtime_credentials import credential_for
+from .llm_service import LLMConfigurationError, validate_model_id
 
 
 def _saved_agent_profile(provider: str, workspace: str | Path) -> dict | None:
@@ -72,6 +73,13 @@ def provider_readiness(provider: str, workspace: str | Path) -> dict:
     auth_type = ((runtime.get("authType") or os.environ.get("INTDOG_LLM_AUTH_TYPE", "")).strip()
                  if selected_here else "") \
         or ("" if spec.auth == "explicit" else spec.auth)
+    try:
+        model = validate_model_id(name, model)
+    except LLMConfigurationError as exc:
+        return {"provider": name, "ready": False, "installed": True,
+                "authenticated": bool(generic_key or provider_key),
+                "status": "invalid_configuration", "failure_code": "invalid_model",
+                "detail": str(exc)}
     result = diagnose_agent({
         "id": name, "api_base": base, "model": model, "auth_type": auth_type,
         "credential_configured": bool(generic_key or provider_key),

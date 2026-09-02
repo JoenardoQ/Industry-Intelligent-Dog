@@ -133,7 +133,7 @@ async function runE2EWorkflow() {
     await new Promise(resolve => setTimeout(resolve, 250))
   }
   if (!industryPreexisting && (!final || final.status !== 'completed')) throw new Error(`first task failed: ${final?.status || 'timeout'} ${final?.error || ''}`)
-  if (!industryPreexisting) await mainWindow.webContents.executeJavaScript(`(async()=>{const end=Date.now()+15000;while(Date.now()<end){const button=[...document.querySelectorAll('button')].find(node=>node.textContent.includes('进入行业概览'));if(button){button.click();return true}await new Promise(r=>setTimeout(r,100))}throw new Error('onboarding completion unavailable')})()`)
+  if (!industryPreexisting) await mainWindow.webContents.executeJavaScript(`(async()=>{const end=Date.now()+15000;while(Date.now()<end){const button=[...document.querySelectorAll('button')].find(node=>node.textContent.includes('返回工作台')||node.textContent.includes('进入行业概览'));if(button){button.click();return true}await new Promise(r=>setTimeout(r,100))}throw new Error('onboarding completion unavailable')})()`)
   const overview = await requestJson('GET', `${backendOrigin}/api/industries/E2E/overview`, headers)
   if (!overview?.industry || !Array.isArray(overview.chain)) throw new Error('first overview contract failed')
   const rendererReady = await mainWindow.webContents.executeJavaScript(`(async()=>{

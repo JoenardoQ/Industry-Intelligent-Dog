@@ -53,6 +53,10 @@ Knowledge structure, industry bootstrap, periodic products, deep research, and I
 
 Execution still uses durable jobs and leases. The initiating page shows semantic stage, elapsed time, heartbeat, representative counters, and artifact links. A percentage is shown only when the total is measurable; otherwise the UI reports indeterminate progress. Task-package creation or an empty artifact cannot masquerade as completed research.
 
+Machine progress is a bounded, line-oriented protocol. Splitting one event across stdout chunks must not lose its stage, checkpoint, or safe error category. A successful first bootstrap immediately exposes candidate coverage, reviewed-evidence coverage, remaining gaps, and direct links to the relevant next action. Follow-up expansion is bounded and user-triggered.
+
+The user workflow is outcome-oriented rather than queue-oriented. Fixing a failed bootstrap connection returns to the same industry and checkpointed task. When a foreground job reaches a terminal state, its initiating page refreshes local data or exposes the artifact and retained partial result directly. Task Center translates internal states and stages, selects a useful task by default, and routes each result to its owning page. Auxiliary panels fail independently: unavailable coverage or history statistics cannot hide already available intelligence or reports.
+
 ## Source, paper, and collection budgets
 
 The complete source catalog is preserved non-destructively. The monitored portfolio selects sources by marginal coverage value: authority, region, topic or value-chain node, independent publisher, valid yield, and update frequency. A category normally monitors 3–10 sources and may expand when a source adds material coverage; volume never proves completeness.
@@ -78,3 +82,5 @@ Source discovery and industry bootstrap reuse one canonical source prompt so the
 The public repository retains only current, necessary, aligned Chinese and English user guides, architecture, source-governance, and release documentation. Approval packets, iteration logs, screenshot evidence, machine-specific paths, and obsolete state snapshots remain in Git-ignored local work directories instead of product documentation.
 
 Verification uses a risk-driven minimal set covering settings inheritance, Agent diagnosis, job state, source and paper budgets, first-run drift semantics, Git data exclusion, Web production build, and desktop contracts. The user performs the real cold-start industry acceptance; the project supplies a repeatable entry point and checklist without creating user industry data.
+
+`VERSION` is the product-version authority. Web, Desktop, installer names, MCP reporting, and the requested release version must match it before packaging. Python distribution metadata uses the explicit PEP 440 projection (`-test.N` → `.devN`) because the product prerelease spelling is not valid PEP 440.

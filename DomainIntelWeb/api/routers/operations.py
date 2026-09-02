@@ -6,7 +6,7 @@ from typing import Callable
 from fastapi import APIRouter, HTTPException
 
 from ..schemas import (CancelState, GenerateRequest, JobAccepted, JobOutputState,
-                       JobState)
+                       JobRetryRequest, JobState)
 from ..commands import search_command, search_cwd
 
 
@@ -74,6 +74,13 @@ def build_operations_router(*, jobs, job_rows: Callable[[], list[dict]],
             (request.action in {"weekly", "monthly", "quarterly"}
              and request.pipeline_mode == "aggregate"))
         if request.execution_mode == "direct" and not model_free:
+            if request.action == "bootstrap":
+                from src.services.capability_manifest import capability
+                spec = capability(request.provider)
+                if spec is not None and spec.connection == "api" and not spec.web_search:
+                    raise HTTPException(
+                        409, f"Provider {request.provider} 未声明初始化所需的联网搜索工具；"
+                        "请改用支持联网搜索的连接、公开免凭据模式或任务包")
             from src.services.provider_readiness import provider_readiness
             readiness = provider_readiness(request.provider, data_root / folder)
             if not readiness.get("ready"):
@@ -135,6 +142,8 @@ def build_operations_router(*, jobs, job_rows: Callable[[], list[dict]],
                                                "--event", request.event.strip()]
         if request.execution_mode == "direct":
             args.extend(["--provider", request.provider])
+        if request.action == "bootstrap" and parent_run_id:
+            args.extend(["--resume-task", parent_run_id])
         args.extend(["--execution-mode", request.execution_mode])
         timeout = 14400 if request.action in {"history", "report", "deep_report"} else 3600
         return jobs.start(
@@ -164,7 +173,7 @@ def build_operations_router(*, jobs, job_rows: Callable[[], list[dict]],
                 "action": request.action}
 
     @router.post("/jobs/{run_id}/retry", status_code=202, response_model=JobAccepted)
-    def retry_job(run_id: str) -> dict:
+    def retry_job(run_id: str, override: JobRetryRequest = JobRetryRequest()) -> dict:
         row = next((item for item in jobs.store.list()
                     if item.get("run_id") == run_id), None)
         authoritative = None
@@ -183,6 +192,13 @@ def build_operations_router(*, jobs, job_rows: Callable[[], list[dict]],
                      row.get("operation"))
         if not isinstance(payload, dict) or not operation:
             raise HTTPException(409, "历史任务缺少可验证的操作元数据，拒绝重放命令")
+        payload = dict(payload)
+        if override.provider:
+            payload["provider"] = override.provider
+        if override.execution_mode:
+            payload["execution_mode"] = override.execution_mode
+            if override.execution_mode == "taskpack":
+                payload["provider"] = "taskpack"
         folder = resolve_folder(str(payload.get("folder") or ""))
         try:
             request = GenerateRequest.model_validate({**payload, "action": operation})

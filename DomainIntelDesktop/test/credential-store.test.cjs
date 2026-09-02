@@ -27,6 +27,35 @@ test('persists only an encrypted API key and returns redaction-safe status', () 
   fs.rmSync(directory, { recursive:true })
 })
 
+test('updates metadata for the same provider without decrypting or replacing its key', t => {
+  const directory = fs.mkdtempSync(path.join(__dirname, '.tmp-credential-'))
+  t.after(() => fs.rmSync(directory, {recursive:true, force:true}))
+  const safeStorage = storage()
+  saveConfig(directory, safeStorage, {provider:'openai',model:'gpt-5',apiKey:'secret',
+    apiBase:'https://api.openai.com/v1',authType:'bearer'})
+  const target = path.join(directory, 'provider-config.json')
+  const before = JSON.parse(fs.readFileSync(target, 'utf8'))
+  safeStorage.decryptString = () => { throw new Error('metadata update must not decrypt') }
+
+  const status = saveConfig(directory, safeStorage, {provider:'openai',model:'gpt-5.1',
+    apiKey:'',apiBase:'https://api.openai.com/v1',authType:'bearer'})
+  const after = JSON.parse(fs.readFileSync(target, 'utf8'))
+
+  assert.equal(after.encryptedKey, before.encryptedKey)
+  assert.equal(status.model, 'gpt-5.1')
+  assert.equal(status.configured, true)
+})
+
+test('requires a new key when changing the configured provider', t => {
+  const directory = fs.mkdtempSync(path.join(__dirname, '.tmp-credential-'))
+  t.after(() => fs.rmSync(directory, {recursive:true, force:true}))
+  saveConfig(directory, storage(), {provider:'openai',model:'gpt-5',apiKey:'secret',
+    apiBase:'https://api.openai.com/v1',authType:'bearer'})
+  assert.throws(() => saveConfig(directory, storage(), {provider:'deepseek',
+    model:'deepseek-chat',apiKey:'',apiBase:'https://api.deepseek.com',authType:'bearer'}),
+  /更换 Provider.*API Key/)
+})
+
 test('reads known legacy v1 providers with manifest-compatible auth without rewriting', t => {
   const directory = fs.mkdtempSync(path.join(__dirname, '.tmp-credential-'))
   t.after(() => fs.rmSync(directory, {recursive:true, force:true}))
@@ -71,6 +100,19 @@ test('refuses storage when OS encryption is unavailable', () => {
     provider:'openai', model:'gpt', apiKey:'secret' }), /安全存储不可用/)
   assert.equal(publicStatus(directory, storage(false)).configured, false)
   fs.rmSync(directory, { recursive:true })
+})
+
+test('does not report an existing encrypted key as usable without OS encryption', t => {
+  const directory = fs.mkdtempSync(path.join(__dirname, '.tmp-credential-'))
+  t.after(() => fs.rmSync(directory, {recursive:true, force:true}))
+  saveConfig(directory, storage(), {provider:'openai',model:'gpt',apiKey:'secret',
+    authType:'bearer'})
+
+  const status = publicStatus(directory, storage(false))
+
+  assert.equal(status.secureStorage, false)
+  assert.equal(status.configured, false)
+  assert.equal(status.provider, 'openai')
 })
 
 test('rejects insecure remote API bases', () => {

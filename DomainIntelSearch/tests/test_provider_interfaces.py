@@ -7,7 +7,12 @@ import pytest
 from src.services.agent_registry import discover_agents
 from src.services.claude_cli_service import ClaudeCLIService
 from src.services.provider_readiness import provider_readiness
-from src.services.llm_service import LLMConfigurationError, LLMService
+from src.services.llm_service import (
+    LLMConfigurationError,
+    LLMService,
+    ProviderRequestError,
+    validate_model_id,
+)
 from src.services import capability_manifest
 from src.services.capability_manifest import AGENT_SPECS, API_SPECS, DIRECT_PROVIDER_IDS
 from src.services.provider_factory import CAPABILITIES, create_provider
@@ -253,3 +258,106 @@ def test_generic_api_key_header_keeps_compatible_chat_path(monkeypatch):
     assert post.call_args.args[0] == "https://models.example/v1/chat/completions"
     assert post.call_args.kwargs["headers"]["api-key"] == "configured-secret"
     assert "Authorization" not in post.call_args.kwargs["headers"]
+
+
+@pytest.mark.parametrize("label", ["OpenAI", "openai api", "DeepSeek API", "Qwen"])
+def test_provider_display_name_is_rejected_as_model_id(label):
+    """Catches a provider label being sent as the API model identifier."""
+    with pytest.raises(LLMConfigurationError, match="模型 ID"):
+        validate_model_id("openai", label)
+
+
+def test_readiness_rejects_provider_name_in_model_field(monkeypatch, tmp_path):
+    """Catches setup declaring an obviously invalid API model ready."""
+    monkeypatch.setenv("INTDOG_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("INTDOG_LLM_API_KEY", "test-secret-value")
+    monkeypatch.setenv("INTDOG_LLM_MODEL", "Openai")
+    result = provider_readiness("openai", tmp_path)
+    assert result["ready"] is False
+    assert result["failure_code"] == "invalid_model"
+    assert "模型 ID" in result["detail"]
+
+
+def test_openai_error_retains_safe_provider_detail_and_redacts_credentials(monkeypatch):
+    """Catches Responses API failures collapsing to a generic HTTP 400."""
+    monkeypatch.setenv("INTDOG_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("INTDOG_LLM_API_KEY", "provider-error-canary-9347")
+    monkeypatch.setenv("INTDOG_LLM_MODEL", "gpt-test")
+
+    class Response:
+        status_code = 400
+        headers = {"x-request-id": "req_safe_123"}
+
+        @staticmethod
+        def json():
+            return {"error": {"message": "The requested model does not exist",
+                              "type": "invalid_request_error", "param": "model",
+                              "code": "model_not_found"}}
+
+    with patch("src.services.llm_service.requests.post", return_value=Response()):
+        with pytest.raises(ProviderRequestError) as caught:
+            LLMService({"llm": {}}, provider="openai").complete("prompt")
+    public = caught.value.public()
+    assert public == {
+        "category": "invalid_model", "status_code": 400,
+        "code": "model_not_found", "param": "model",
+        "request_id": "req_safe_123",
+        "detail": "The requested model does not exist",
+    }
+    rendered = f"{caught.value} {public}"
+    assert "provider-error-canary-9347" not in rendered
+    assert "Authorization" not in rendered
+
+
+def test_openai_unsupported_web_tool_has_distinct_category(monkeypatch):
+    """Catches a required web-search failure being mislabeled as a model error."""
+    monkeypatch.setenv("INTDOG_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("INTDOG_LLM_API_KEY", "test-secret-value")
+    monkeypatch.setenv("INTDOG_LLM_MODEL", "gpt-test")
+
+    class Response:
+        status_code = 400
+        headers = {"x-request-id": "req_tool_123"}
+
+        @staticmethod
+        def json():
+            return {"error": {"message": "Tool web_search is not supported",
+                              "type": "invalid_request_error", "param": "tools",
+                              "code": "unsupported_tool"}}
+
+    with patch("src.services.llm_service.requests.post", return_value=Response()):
+        with pytest.raises(ProviderRequestError) as caught:
+            LLMService({"llm": {}}, provider="openai").probe(required_web_search=True)
+    assert caught.value.category == "unsupported_tool"
+
+
+def test_openai_probe_exercises_required_web_search(monkeypatch):
+    """Catches a connection probe claiming readiness without testing the required tool."""
+    monkeypatch.setenv("INTDOG_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("INTDOG_LLM_API_KEY", "test-secret-value")
+    monkeypatch.setenv("INTDOG_LLM_MODEL", "gpt-test")
+
+    class Response:
+        status_code = 200
+        headers = {"x-request-id": "req_probe_123"}
+
+        @staticmethod
+        def json():
+            return {"id": "resp_probe", "output": [{"type": "message", "content": [
+                {"type": "output_text", "text": "ok"}]}], "usage": {}}
+
+    with patch("src.services.llm_service.requests.post", return_value=Response()) as post:
+        result = LLMService({"llm": {}}, provider="openai").probe(
+            required_web_search=True)
+    assert result == {"ready": True, "provider": "openai", "model": "gpt-test",
+                      "web_search": True, "request_id": "req_probe_123"}
+    assert post.call_args.kwargs["json"]["tools"] == [{"type": "web_search"}]
+
+
+def test_compatible_api_probe_refuses_unavailable_required_web_search(monkeypatch):
+    monkeypatch.setenv("INTDOG_LLM_PROVIDER", "deepseek")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-secret")
+    service = LLMService({"llm": {"provider": "deepseek"}}, "deepseek")
+    with pytest.raises(ProviderRequestError) as caught:
+        service.probe(required_web_search=True)
+    assert caught.value.category == "unsupported_tool"

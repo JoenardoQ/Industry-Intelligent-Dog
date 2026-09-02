@@ -51,6 +51,77 @@ class RuntimeJobTests(unittest.TestCase):
             self.assertEqual(row["artifact_path"], "/tmp/report.md")
             self.assertEqual(row["parent_run_id"], "old-run")
 
+    def test_structured_event_updates_exact_progress_and_checkpoint(self):
+        search_root = Path(__file__).resolve().parents[2] / "DomainIntelSearch"
+        if str(search_root) not in sys.path:
+            sys.path.insert(0, str(search_root))
+        from intdog_core.repository import IntelligenceRepository
+
+        with tempfile.TemporaryDirectory() as temp:
+            repo = IntelligenceRepository(temp); repo.ensure_industry("AI")
+            manager = JobManager(temp, ledger=repo)
+            event = {"stage":"source_gate", "progress":35,
+                     "message":"信息源门槛通过", "checkpoint":{"campaign_id":"scp-1"}}
+            result = manager.run_sync(
+                [sys.executable, "-c", f"print('INTDOG_EVENT '+{json.dumps(json.dumps(event))})"],
+                cwd=temp, title="event", timeout=10,
+                metadata={"folder":"AI", "operation":"bootstrap", "provider":"openai"})
+            task = repo.get_task(result.run_id)
+            self.assertEqual((task["stage"], task["progress"]), ("source_gate", 35))
+            self.assertEqual(task["checkpoint"]["campaign_id"], "scp-1")
+            self.assertIn("信息源门槛通过", result.output)
+            self.assertNotIn("INTDOG_EVENT", result.output)
+
+    def test_structured_event_survives_one_character_stdout_chunks(self):
+        with tempfile.TemporaryDirectory() as temp:
+            manager = JobManager(temp)
+            job = manager.create([sys.executable, "-c", "pass"], cwd=temp,
+                                 title="split event")
+            event = {"stage":"entity_gate", "progress":95,
+                     "message":"实体覆盖门槛通过",
+                     "checkpoint":{"stage_states":{"entities":"passed"}}}
+            wire = "INTDOG_EVENT " + json.dumps(event, ensure_ascii=False) + "\n"
+
+            for character in wire:
+                job._emit(character)
+
+            self.assertEqual(job._manifest["stage"], "entity_gate")
+            self.assertEqual(job._manifest["progress"], .95)
+            self.assertEqual(job._manifest["checkpoint"]["stage_states"]["entities"],
+                             "passed")
+            output = manager.store.read_output(job._manifest)
+            self.assertIn("实体覆盖门槛通过", output)
+            self.assertNotIn("INTDOG_EVENT", output)
+
+    def test_same_industry_jobs_are_fifo_and_queued_job_is_cancellable(self):
+        with tempfile.TemporaryDirectory() as temp:
+            manager = JobManager(temp)
+            slow = [sys.executable, "-u", "-c", "import time;print('start',flush=True);time.sleep(.4)"]
+            first = manager.start(slow, cwd=temp, title="first", timeout=5,
+                                  metadata={"folder":"AI"})
+            second = manager.start(slow, cwd=temp, title="second", timeout=5,
+                                   metadata={"folder":"AI"})
+            other = manager.start(slow, cwd=temp, title="other", timeout=5,
+                                  metadata={"folder":"Chips"})
+            time.sleep(.12)
+            self.assertTrue(first.running)
+            self.assertFalse(second.running)
+            self.assertTrue(other.running)
+            self.assertTrue(second.cancel())
+            self.assertEqual(second.wait(1).status, "cancelled")
+            self.assertEqual(first.wait(3).status, "completed")
+            self.assertEqual(other.wait(3).status, "completed")
+
+    def test_child_error_is_authoritative_over_generic_exit_code(self):
+        with tempfile.TemporaryDirectory() as temp:
+            manager = JobManager(temp)
+            result = manager.run_sync(
+                [sys.executable, "-c", "print('[错误] invalid model: model_not_found');raise SystemExit(2)"],
+                cwd=temp, title="failure", timeout=10)
+            self.assertEqual(result.status, "failed")
+            self.assertIn("invalid model", result.error)
+            self.assertNotEqual(result.error, "Process exited with 2")
+
     def test_missing_required_artifact_is_partial_not_completed(self):
         with tempfile.TemporaryDirectory() as temp:
             manager = JobManager(temp)

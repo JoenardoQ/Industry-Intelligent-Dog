@@ -6,7 +6,7 @@ on:
       version:
         description: Test SemVer without v
         required: true
-        default: 4.1.0-test.2
+        default: 4.1.0-test.3
         type: string
       windows_issue_number:
         description: Existing Windows release Issue number (optional)
@@ -30,12 +30,16 @@ jobs:
   validate:
     runs-on: ubuntu-24.04
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
       - name: Validate test version
         shell: bash
         env:
           VERSION: ${{ inputs.version }}
         run: |
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z.-]+$ ]]
+          test "$VERSION" = "$(tr -d '\r\n' < VERSION)"
 
   build:
     needs: validate

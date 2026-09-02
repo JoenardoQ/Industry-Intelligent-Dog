@@ -21,14 +21,15 @@ function secureStorageAvailable(safeStorage) {
 }
 
 function publicStatus(userData, safeStorage) {
-  const stored = readConfig(userData, safeStorage)
-  return { secureStorage: secureStorageAvailable(safeStorage),
-    configured: Boolean(stored?.apiKey), provider: stored?.provider || '',
+  const stored = readStoredPayload(userData)
+  const secureStorage = secureStorageAvailable(safeStorage)
+  return { secureStorage,
+    configured: Boolean(secureStorage && stored?.encryptedKey), provider: stored?.provider || '',
     model: stored?.model || '', apiBase: stored?.apiBase || '',
     authType: stored?.authType || '' }
 }
 
-function validate(input) {
+function validate(input, {allowMissingKey = false} = {}) {
   const provider = String(input?.provider || '').trim().toLowerCase()
   const model = String(input?.model || '').trim()
   const apiKey = String(input?.apiKey || '').trim()
@@ -36,7 +37,7 @@ function validate(input) {
   const authType = String(input?.authType || '').trim().toLowerCase()
   if (!PROVIDER_ID.test(provider)) throw new Error('API Provider ID 无效')
   if (!model) throw new Error('模型名称不能为空')
-  if (!apiKey) throw new Error('API Key 不能为空')
+  if (!apiKey && !allowMissingKey) throw new Error('API Key 不能为空')
   if (!AUTH_TYPES.has(authType)) throw new Error('认证类型必须是 bearer 或 api_key_header')
   const fixedAuthType = LEGACY_V1_AUTH_TYPE_BY_PROVIDER[provider]
   if (fixedAuthType && authType !== fixedAuthType) {
@@ -54,29 +55,46 @@ function validate(input) {
 
 function saveConfig(userData, safeStorage, input) {
   if (!secureStorageAvailable(safeStorage)) throw new Error('系统安全存储不可用，拒绝保存 API Key')
-  const value = validate(input)
+  const existing = readStoredPayload(userData)
+  const value = validate(input, {allowMissingKey:true})
+  if (!value.apiKey && (!existing || existing.provider !== value.provider)) {
+    throw new Error('更换 Provider 时必须填写新的 API Key')
+  }
   fs.mkdirSync(userData, { recursive: true })
   const target = configPath(userData)
   const temporary = `${target}.tmp`
   const payload = { version: 2, provider: value.provider, model: value.model,
     apiBase: value.apiBase, authType: value.authType,
-    encryptedKey: safeStorage.encryptString(value.apiKey).toString('base64') }
+    encryptedKey: value.apiKey
+      ? safeStorage.encryptString(value.apiKey).toString('base64')
+      : existing.encryptedKey }
   fs.writeFileSync(temporary, JSON.stringify(payload, null, 2), { mode: 0o600 })
   fs.renameSync(temporary, target)
   return publicStatus(userData, safeStorage)
 }
 
-function readConfig(userData, safeStorage) {
+function readStoredPayload(userData) {
   const target = configPath(userData)
-  if (!secureStorageAvailable(safeStorage) || !fs.existsSync(target)) return null
+  if (!fs.existsSync(target)) return null
   try {
     const payload = JSON.parse(fs.readFileSync(target, 'utf8'))
     const authType = AUTH_TYPES.has(payload.authType) ? payload.authType :
       (payload.version === 1 ? LEGACY_V1_AUTH_TYPE_BY_PROVIDER[payload.provider] : '')
     if (!PROVIDER_ID.test(payload.provider) || !payload.model || !payload.encryptedKey ||
         !AUTH_TYPES.has(authType)) return null
+    return {provider:payload.provider,model:String(payload.model),
+      apiBase:String(payload.apiBase || ''),authType,
+      encryptedKey:String(payload.encryptedKey)}
+  } catch { return null }
+}
+
+function readConfig(userData, safeStorage) {
+  if (!secureStorageAvailable(safeStorage)) return null
+  try {
+    const payload = readStoredPayload(userData)
+    if (!payload) return null
     return { provider: payload.provider, model: payload.model,
-      apiBase: String(payload.apiBase || ''), authType,
+      apiBase: payload.apiBase, authType:payload.authType,
       apiKey: safeStorage.decryptString(Buffer.from(payload.encryptedKey, 'base64')) }
   } catch { return null }
 }

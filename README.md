@@ -52,15 +52,15 @@ The three installers are independent artifacts. Any shared code change requires 
 1. Wait until the setup wizard reports a ready local runtime and data directory.
 2. Select a model source:
    - **Local agent:** install and sign in to the Agent CLI under the same operating system and user account as IntDog. IntDog detects it automatically; if discovery fails, select the `codex.exe`, `codex.cmd`, `claude`, or equivalent command file with “Select installed Agent.”
-   - **API:** select a provider and enter a model and key. The desktop stores the key in the operating-system credential vault.
+   - **API:** select a provider and enter an exact model ID and key. The desktop uses operating-system secure storage; the configuration remains editable, testable, and clearable.
    - **Task package:** no key is required, but the result is a task for any agent, not a finished research report.
 3. Create an industry name and data folder.
-4. Select “Initialize industry research.” The job enters the queue directly; the current page shows its real stage and elapsed time, while Task Center exposes logs, cancellation, and retry.
-5. Review source candidates, value-chain order, entity coverage, and evidence gaps before starting daily collection or reports.
+4. Select “Initialize industry research.” Source, value-chain, and entity gates run automatically in order. The page shows real stages and elapsed time; Task Center exposes representative logs, queued cancellation, and checkpoint retry. If the connection fails, edit it and return to the same industry and retained checkpoint instead of creating the industry again.
+5. Open the overview to see candidate/evidence coverage gaps and direct next actions. Review publishers in **Sources**, inspect the graph in **Entities & Relations**, or start a bounded expansion in **Research** before daily collection or reports.
 
 IntDog connects to local Agents in the same operating system; Windows/WSL bridging is not a default product path. A desktop process can still receive a different `PATH` from a terminal, so discovery checks a bounded list of conventional install directories without scanning the disk. Manual selection verifies executable identity, version, and public sign-in status before persisting a local binding. “Test live connection” sends one very short model request and may count against the Agent subscription. Statuses distinguish ready, sign-in required, incompatible, MCP/task-package only, and unsupported.
 
-After onboarding, use “Connection settings” in the top bar to replace an Agent, rerun diagnosis, test the connection, or restore automatic discovery. Global defaults apply to industries that still inherit them; explicit industry overrides remain unchanged. An installed or running GUI is not necessarily callable. Agents without a stable non-interactive CLI use MCP or task-package handoff.
+An API probe checks authentication, model access, and the web-search tool required by bootstrap, and may consume a small amount of quota. Success proves only that the minimal request worked. After onboarding, use “Connection settings” in the top bar to replace an Agent, rerun diagnosis, test the connection, or restore automatic discovery. Global defaults apply to industries that still inherit them; explicit industry overrides remain unchanged. An installed or running GUI is not necessarily callable. Agents without a stable non-interactive CLI use MCP or task-package handoff.
 
 ## Supported agents
 
@@ -85,6 +85,8 @@ After onboarding, use “Connection settings” in the top bar to replace an Age
 4. **Research Products:** continue from the previous successful window. With no full prior period, backfill one complete period from the current time. Long horizons sample across time buckets instead of overloading recent news.
 5. **Research Assistant:** run a documented default in one click, or change task, horizon, event, or one-run agent.
 6. **System Status:** set shared agent and workflow defaults. Industry overrides take precedence and are not overwritten by later global changes.
+
+Tasks remain on the page where they were started. Completion refreshes local data or exposes the new artifact; partial completion keeps its usable result and explains the recovery action. Task Center provides the durable cross-page history and links each result back to Daily Intelligence, Overview, Research Products, or Research Assistant. A failed auxiliary statistic never hides already loaded primary content.
 
 Relative to the previous baseline, default source discovery and general collection budgets are 1.5× and paper collection is 2×. Papers cover both established topics and frontier candidates that may become new industry directions. Frontier candidates remain `candidate` until industry and evidence checks succeed.
 

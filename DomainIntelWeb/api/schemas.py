@@ -769,6 +769,11 @@ class JobAccepted(BaseModel):
     email_delivery: bool = False
 
 
+class JobRetryRequest(BaseModel):
+    provider: str = ""
+    execution_mode: Literal["direct", "taskpack"] | None = None
+
+
 class ChainNodeState(BaseModel):
     model_config = ConfigDict(extra="allow")
     id: str | None = None
@@ -1283,6 +1288,8 @@ class EntityCoverageCellState(BaseModel):
     chain_stage: str
     entity_type: str
     region: Literal["china", "foreign"]
+    candidate_count: int = Field(ge=0)
+    reviewed_evidence_count: int = Field(ge=0)
     current: int = Field(ge=0)
     target: int = Field(ge=1)
     gap: int = Field(ge=0)
@@ -1297,6 +1304,9 @@ class EntityCoverageMatrixState(BaseModel):
     industry: str
     completeness_proven: bool
     gap_count: int = Field(ge=0)
+    candidate_total: int = Field(ge=0)
+    reviewed_evidence_total: int = Field(ge=0)
+    next_actions: list[Literal["sources", "knowledge", "research"]]
     algorithm_version: str
     cells: list[EntityCoverageCellState]
 
@@ -1558,6 +1568,20 @@ class ApiProviderState(BaseModel):
     schedulable: bool = False
 
 
+class ApiProviderProbeState(BaseModel):
+    provider: str
+    ready: bool
+    model: str = ""
+    web_search: bool = False
+    request_id: str = ""
+    category: str = ""
+    detail: str
+    status_code: int = 0
+    code: str = ""
+    param: str = ""
+    latency_ms: int = Field(ge=0)
+
+
 class McpConfigState(BaseModel):
     id: str
     name: str
@@ -1775,6 +1799,7 @@ class JobTimeWindowState(BaseModel):
 class JobState(BaseModel):
     model_config = ConfigDict(extra="forbid")
     run_id: str
+    folder: str = ""
     title: str = ""
     status: str
     updated_at: str = ""

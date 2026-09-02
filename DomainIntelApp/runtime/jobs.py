@@ -36,6 +36,7 @@ TASK_LEASE_TTL_SECONDS = 30
 JOB_OUTPUT_TRUNCATION_NOTICE = "[可审计输出已达到 1 MiB 上限；后续正文未保存或显示]\n"
 JOB_STREAM_SANITIZER_CARRY_CHARS = 256
 JOB_STREAM_STRUCTURE_SPACE_REPORT_LIMIT = 64
+JOB_EVENT_PREFIX = "INTDOG_EVENT "
 
 _QUERY_SECRET_RE = re.compile(
     r"(?i)([?&](?:api_key|apikey|access_token|token|key|secret|password)=)"
@@ -786,6 +787,7 @@ class ManagedJob:
             operation_payload = {}
         folder = str(self.metadata.get("folder") or
                      operation_payload.get("folder") or "").strip()
+        self.folder = folder
         if ledger is not None and folder:
             task = ledger.create_task(
                 folder=folder,
@@ -810,8 +812,10 @@ class ManagedJob:
         self._runner_thread: threading.Thread | None = None
         self.result: JobResult | None = None
         self._output_truncation_notified = False
+        self._progress_line_buffer = ""
         self._manifest = {
             "run_id": self.run_id, "title": title, "status": "queued",
+            "folder": self.folder,
             "command": sanitize_command(self.command), "cwd": self.cwd,
             "timeout": timeout,
             "owner_pid": os.getpid(), "session_id": manager.session_id,
@@ -827,6 +831,7 @@ class ManagedJob:
             "schedule_action": self.metadata.get("schedule_action"),
             "result_kind": self.metadata.get("result_kind", "unknown"),
             "stage": "queued", "progress": 0.0, "artifact_path": None,
+            "checkpoint": {},
         }
         self.manager.store.write(self._manifest)
 
@@ -836,14 +841,19 @@ class ManagedJob:
             return self._process is not None and self._process.poll() is None
 
     def start(self) -> "ManagedJob":
+        self.manager._enqueue(self)
+        return self
+
+    def _start_thread(self) -> None:
         self._thread = threading.Thread(target=self.run, daemon=True,
                                         name=f"intdog-job-{self.run_id[:8]}")
         self._thread.start()
-        return self
 
     def cancel(self) -> bool:
         if self.result is not None:
             return False
+        if self.manager._cancel_queued(self):
+            return True
         self._cancel.set()
         if self._ledger_enabled:
             try:
@@ -901,7 +911,7 @@ class ManagedJob:
                     self.run_id, owner=self.manager.ledger_owner,
                     stage=str(self._manifest.get("stage") or "running"),
                     progress=max(0, min(percent, 100)),
-                    checkpoint={
+                    checkpoint={**(self._manifest.get("checkpoint") or {}),
                         "output_bytes": int(self._manifest.get("output_bytes") or 0),
                         "output_truncated": bool(self._manifest.get("output_truncated")),
                     })
@@ -910,10 +920,47 @@ class ManagedJob:
                 self.run_id, str(changes["artifact_path"]),
                 owner=self.manager.ledger_owner)
 
-    def _emit(self, line: str) -> None:
+    def _emit(self, line: str, *, final: bool = False) -> None:
+        """Consume redacted output without assuming subprocess chunk boundaries."""
+        combined = self._progress_line_buffer + line
+        self._progress_line_buffer = ""
+        parts = combined.splitlines(keepends=True)
+        if parts and not final and not parts[-1].endswith(("\n", "\r")):
+            pending = parts.pop()
+            if len(pending) <= 16_384:
+                self._progress_line_buffer = pending
+            else:
+                parts.append(pending)
+        if final and self._progress_line_buffer:
+            parts.append(self._progress_line_buffer)
+            self._progress_line_buffer = ""
+        if not parts:
+            return
+        self._emit_lines(parts)
+
+    def _emit_lines(self, parts: list[str]) -> None:
         if self._manifest.get("output_truncated"):
             return
-        metadata = self.manager.store.append_output(self.run_id, line)
+        event = None
+        rendered = []
+        for part in parts:
+            raw = part.rstrip("\r\n")
+            if raw.startswith(JOB_EVENT_PREFIX) and len(raw) <= 16_384:
+                try:
+                    candidate = json.loads(raw[len(JOB_EVENT_PREFIX):])
+                    if (isinstance(candidate, dict)
+                            and isinstance(candidate.get("stage"), str)
+                            and isinstance(candidate.get("progress"), int)
+                            and 0 <= candidate["progress"] <= 100
+                            and isinstance(candidate.get("message"), str)
+                            and isinstance(candidate.get("checkpoint", {}), dict)):
+                        event = candidate
+                        rendered.append(sanitize_text(candidate["message"])[:1000] + "\n")
+                        continue
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    pass
+            rendered.append(part)
+        metadata = self.manager.store.append_output(self.run_id, "".join(rendered))
         safe = str(metadata.pop("_accepted_text", ""))
         preview = "\n".join([
             *self._manifest.setdefault("output_tail", []), safe.rstrip("\n"),
@@ -924,6 +971,12 @@ class ManagedJob:
             preview = encoded.decode("utf-8", errors="ignore")
         tail = preview.split("\n")
         changes = {"output_tail": tail, "last_progress_at": _now(), **metadata}
+        if event is not None:
+            changes.update({"stage": event["stage"],
+                            "progress": event["progress"] / 100,
+                            "checkpoint": event.get("checkpoint", {})})
+            if isinstance(event.get("error_category"), str):
+                changes["error_category"] = event["error_category"][:80]
         stage = re.search(r"\[阶段\s*(\d+)\s*/\s*(\d+)\]\s*([^\n]*)", safe)
         if stage:
             current, total = int(stage.group(1)), max(1, int(stage.group(2)))
@@ -973,6 +1026,7 @@ class ManagedJob:
             else:
                 kwargs["start_new_session"] = True
             child_env = dict(self.env or os.environ)
+            child_env["INTDOG_TASK_RUN_ID"] = self.run_id
             credential_payload: dict = {}
             if self.manager.credential_supplier:
                 child_env["INTDOG_CREDENTIAL_PIPE"] = "1"
@@ -1046,6 +1100,7 @@ class ManagedJob:
                         if remainder:
                             emit_sanitized(redactor.feed(remainder))
                         emit_sanitized(redactor.finalize())
+                        self._emit("", final=True)
                         reader_done = True
                     else:
                         decoded = decoder.decode(chunk)
@@ -1079,7 +1134,11 @@ class ManagedJob:
             elif returncode == PARTIAL_EXIT_CODE:
                 status, error = "partial", "One or more collection categories failed"
             else:
-                status, error = "failed", f"Process exited with {returncode}"
+                child_error = next((re.sub(r"^(?:\[错误\]|ERROR:)\s*", "", item).strip()
+                                    for item in reversed(self._manifest.get("output_tail", []))
+                                    if re.match(r"^(?:\[错误\]|ERROR:)", item.strip(), re.I)), "")
+                status = "failed"
+                error = child_error or f"Process exited with {returncode}"
         except Exception as exc:
             lease_lost = isinstance(exc, RuntimeError) and "lease was lost" in str(exc)
             if lease_lost:
@@ -1107,7 +1166,8 @@ class ManagedJob:
                 self.manager.ledger.transition(
                     self.run_id, expected={current}, target=status,
                     owner=self.manager.ledger_owner,
-                    error=({"category": "process_failure", "message": error}
+                    error=({"category": str(self._manifest.get("error_category") or
+                                             "process_failure"), "message": error}
                            if error else None))
             except RuntimeError as exc:
                 if "lease was lost" not in str(exc):
@@ -1131,6 +1191,8 @@ class JobManager:
         self.credential_supplier = credential_supplier
         self.ledger_owner = f"job-manager:{os.getpid()}:{self.session_id}"
         self._active: dict[str, ManagedJob] = {}
+        self._industry_queues: dict[str, list[ManagedJob]] = {}
+        self._running_industries: set[str] = set()
         self._lock = threading.Lock()
         self.recovered = self.store.recover_interrupted()
         self.recovered_ledger = (
@@ -1151,15 +1213,61 @@ class JobManager:
         return self.create(*args, **kwargs).start()
 
     def run_sync(self, *args, **kwargs) -> JobResult:
-        return self.create(*args, **kwargs).run()
+        job = self.create(*args, **kwargs).start()
+        return job.wait()
+
+    def _enqueue(self, job: ManagedJob) -> None:
+        should_start = False
+        with self._lock:
+            self._active[job.run_id] = job
+            if job.folder and job.folder in self._running_industries:
+                self._industry_queues.setdefault(job.folder, []).append(job)
+            else:
+                if job.folder:
+                    self._running_industries.add(job.folder)
+                should_start = True
+        if should_start:
+            job._start_thread()
+
+    def _cancel_queued(self, job: ManagedJob) -> bool:
+        if not job.folder:
+            return False
+        with self._lock:
+            queue_for_industry = self._industry_queues.get(job.folder, [])
+            if job not in queue_for_industry:
+                return False
+            queue_for_industry.remove(job)
+            self._active.pop(job.run_id, None)
+        job._cancel.set()
+        error = "Cancelled by user"
+        if job._ledger_enabled:
+            job.manager.ledger.transition(
+                job.run_id, expected={"queued"}, target="cancelled",
+                error={"category":"cancel_requested", "message":error})
+        job.result = JobResult(job.run_id, "cancelled", None, "", error)
+        job._save(status="cancelled", cancel_requested=True, error=error,
+                  finished_at=_now())
+        if job.on_finish:
+            job.on_finish(job.result)
+        return True
 
     def _register(self, job: ManagedJob) -> None:
         with self._lock:
             self._active[job.run_id] = job
 
     def _finish(self, job: ManagedJob) -> None:
+        next_job = None
         with self._lock:
             self._active.pop(job.run_id, None)
+            if job.folder:
+                queue_for_industry = self._industry_queues.get(job.folder, [])
+                if queue_for_industry:
+                    next_job = queue_for_industry.pop(0)
+                else:
+                    self._industry_queues.pop(job.folder, None)
+                    self._running_industries.discard(job.folder)
+        if next_job is not None:
+            next_job._start_thread()
 
     def cancel_all(self) -> int:
         with self._lock:

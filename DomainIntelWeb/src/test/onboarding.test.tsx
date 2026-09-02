@@ -12,6 +12,7 @@ import OverviewPage from '../features/OverviewPage'
 import SetupWizard from '../features/SetupWizard'
 import SystemPage from '../features/SystemPage'
 import ConnectionStep from '../features/setup/ConnectionStep'
+import BootstrapStep from '../features/setup/BootstrapStep'
 
 const setup: SetupPayload = {
   runtime_ready:true, data_root:'/data', taskpack_ready:true,
@@ -99,13 +100,100 @@ describe('first-run and industry overview loop', () => {
     expect(useSelected).toHaveBeenCalledOnce()
   })
 
+  it('keeps a configured API editable and exposes probe and clear actions', async () => {
+    const saveProvider=vi.fn().mockResolvedValue({configured:true})
+    const clearProvider=vi.fn().mockResolvedValue({configured:false})
+    const relaunch=vi.fn().mockResolvedValue(true)
+    Object.defineProperty(window,'intdogDesktop',{configurable:true,value:{
+      saveProvider,clearProvider,relaunch,
+    }})
+    const configured={...setup,api_providers:[{
+      ...setup.api_providers[0],id:'openai',name:'OpenAI API',configured:true,ready:true,
+      model:'gpt-5.1',default_model:'gpt-5.1',api_base:'https://api.openai.com/v1',
+      key_env:'OPENAI_API_KEY',web_search:true,
+    }]}
+    apiMock.mockResolvedValue({provider:'openai',ready:true,model:'gpt-5.1',
+      web_search:true,request_id:'req-safe',category:'',detail:'真实最小调用成功',
+      status_code:0,code:'',param:'',latency_ms:84})
+    render(<ConnectionStep setup={configured} selected="openai" setSelected={vi.fn()}
+      onBack={vi.fn()} onNext={vi.fn()} onRefresh={vi.fn().mockResolvedValue(undefined)}/> )
+
+    expect(screen.getByLabelText('模型')).toHaveValue('gpt-5.1')
+    expect(screen.getByLabelText('API Key')).not.toBeRequired()
+    fireEvent.click(screen.getByRole('button',{name:'测试 API 连接'}))
+    expect(await screen.findByText(/真实最小调用成功.*84 ms/)).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('模型'),{target:{value:'gpt-5.2'}})
+    fireEvent.click(screen.getByRole('button',{name:'保存配置并重启'}))
+    await waitFor(()=>expect(saveProvider).toHaveBeenCalledWith(expect.objectContaining({
+      provider:'openai',model:'gpt-5.2',apiKey:'',
+    })))
+    fireEvent.click(screen.getByRole('button',{name:'清除 API 配置'}))
+    await waitFor(()=>expect(clearProvider).toHaveBeenCalledOnce())
+  })
+
+  it('shows a gate-partial bootstrap with its retained checkpoint and retry action', async () => {
+    apiMock.mockImplementation((path:string) => {
+      if(path==='/jobs') return Promise.resolve([{run_id:'run-partial',title:'初始化',
+        status:'partial',stage:'value_chain_gate',progress:65,active:false,
+        checkpoint:{stage_states:{sources:'passed',value_chain:'partial',entities:'skipped'},
+          gate_failures:['all_edges_cited']},recovery_actions:['retry'],result_kind:'local_data'}])
+      if(path==='/jobs/run-partial/retry') return Promise.resolve({run_id:'run-retry'})
+      throw new Error(path)
+    })
+    render(<BootstrapStep active={{folder:'AI',runId:'run-partial',provider:'openai'}}
+      onChange={vi.fn()} onComplete={vi.fn()} onEditConnection={vi.fn()}/>)
+
+    expect(await screen.findAllByText('部分完成')).toHaveLength(2)
+    expect(screen.getByText(/all_edges_cited/)).toBeInTheDocument()
+    expect(screen.getByText('未执行')).toBeInTheDocument()
+    expect(screen.getByRole('button',{name:'恢复并重试'})).toBeInTheDocument()
+    expect(screen.getByRole('button',{name:'查看已保留内容'})).toBeInTheDocument()
+  })
+
+  it('repairs a failed bootstrap connection and retries the same industry checkpoint', async () => {
+    localStorage.setItem('intdog.onboarding.active',JSON.stringify({folder:'AI',runId:'run-failed',provider:'codex'}))
+    localStorage.setItem('intdog.provider','claude')
+    const repairedSetup={...setup,agents:[...setup.agents,{...setup.agents[0],id:'claude',name:'Claude Code',authenticated:true,ready:true}]}
+    const complete=vi.fn()
+    apiMock.mockImplementation((path:string,init?:RequestInit) => {
+      if(path==='/jobs') return Promise.resolve([{run_id:'run-failed',title:'初始化',status:'failed',stage:'provider_preflight',progress:5,active:false,error:'登录已失效',error_category:'authentication',checkpoint:{stage_states:{sources:'waiting',value_chain:'waiting',entities:'waiting'}},recovery_actions:['retry'],result_kind:'local_data'}])
+      if(path==='/settings/global/*'&&init?.method==='PUT') return Promise.resolve({})
+      if(path==='/jobs/run-failed/retry'&&init?.method==='POST') return Promise.resolve({run_id:'run-repaired',status:'queued'})
+      throw new Error(`${path} ${String(init?.method)}`)
+    })
+    render(<SetupWizard setup={repairedSetup} hasIndustry onRefresh={async()=>{}} onComplete={complete}/>)
+    fireEvent.click(await screen.findByRole('button',{name:'编辑研究连接'}))
+    expect(screen.queryByText('选择行业')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button',{name:'保存连接并重试原任务'}))
+    await waitFor(()=>expect(apiMock).toHaveBeenCalledWith('/jobs/run-failed/retry',{
+      method:'POST',body:JSON.stringify({provider:'claude',execution_mode:'direct'}),
+    }))
+    expect(await screen.findByRole('heading',{name:'建立首轮行业知识'})).toBeInTheDocument()
+    expect(localStorage.getItem('intdog.onboarding.active')).toContain('run-repaired')
+    expect(complete).not.toHaveBeenCalled()
+  })
+
+  it('never labels a completed task package as completed research', async () => {
+    apiMock.mockImplementation((path:string) => {
+      if(path==='/jobs') return Promise.resolve([{run_id:'run-package',title:'创建行业初始化任务包',
+        status:'completed',stage:'completed',progress:100,active:false,checkpoint:{},
+        recovery_actions:[],result_kind:'task_package'}])
+      throw new Error(path)
+    })
+    render(<BootstrapStep active={{folder:'AI',runId:'run-package',provider:'taskpack'}}
+      onChange={vi.fn()} onComplete={vi.fn()} onEditConnection={vi.fn()}/>)
+
+    expect(await screen.findByText(/任务包已创建，尚未执行研究/)).toBeInTheDocument()
+    expect(screen.queryByText(/行业研究已完成/)).not.toBeInTheDocument()
+  })
+
   it('diagnoses four connection modes and keeps bootstrap gates in the wizard until confirmed', async () => {
     apiMock.mockImplementation((path:string, init?:RequestInit) => {
       if(path==='/industries') return Promise.resolve([])
       if(path==='/industries'&&init?.method==='POST') return Promise.resolve({folder:'AI',name:'人工智能'})
       if(path==='/settings/global/*'&&init?.method==='PUT') return Promise.resolve({provider:'taskpack',execution_mode:'taskpack'})
       if(path==='/industries/AI/generate') return Promise.resolve({run_id:'run-1',status:'queued',title:'行业初始化'})
-      if(path==='/jobs') return Promise.resolve([{run_id:'run-1',title:'行业初始化',status:'running',updated_at:'now',stalled:false,active:true,stage:'entity_gate',progress:70,artifact_path:null,parent_run_id:null,operation:'bootstrap',error:null,error_category:'',origin:'app',provider:'public_sources',model:'',time_window:{},heartbeat_at:'now',heartbeat_age_seconds:0,lease_owner:'app',lease_expires_at:'later',checkpoint:{},recovery_actions:['cancel'],log_tail:[]}])
+      if(path==='/jobs') return Promise.resolve([{run_id:'run-1',title:'行业初始化',status:'running',updated_at:'now',stalled:false,active:true,stage:'entity_request',progress:70,artifact_path:null,parent_run_id:null,operation:'bootstrap',error:null,error_category:'',origin:'app',provider:'public_sources',model:'',time_window:{},heartbeat_at:'now',checkpoint:{stage_states:{sources:'passed',value_chain:'passed',entities:'running'},completed_stages:['sources','value_chain']},recovery_actions:['cancel'],result_kind:'local_data'}])
       if(path==='/industries/AI/overview') return Promise.resolve({industry:{name:'人工智能'},stats:{sources:8,documents:20,entities:12,candidate_entities:0,relations:1,claims:0,verified_claims:0,evidence:0,events:0,chain_nodes:3,empty_chain_nodes:0},chain:[],chain_edges:[],entities:[],source_categories:{official:8},latest_document_date:'2026-09-01'})
       throw new Error(`${path} ${String(init?.method)}`)
     })
@@ -122,19 +210,17 @@ describe('first-run and industry overview loop', () => {
     fireEvent.change(screen.getByLabelText('数据文件夹'),{target:{value:'AI'}})
     fireEvent.click(screen.getByRole('button',{name:'创建并开始研究'}))
     expect(await screen.findByText('信息源门槛')).toBeInTheDocument()
-    expect(await screen.findByText('8 / 8')).toBeInTheDocument()
-    expect(screen.getByText('3 / 1')).toBeInTheDocument()
-    expect(screen.getByText('12 / 1')).toBeInTheDocument()
+    expect(await screen.findAllByText('已通过')).toHaveLength(2)
+    expect(screen.getAllByText('执行中')).toHaveLength(2)
     expect(complete).not.toHaveBeenCalled()
     expect(localStorage.getItem('intdog.onboarding.active')).toContain('run-1')
-    fireEvent.click(screen.getByRole('button',{name:'进入行业概览'}))
-    expect(complete).toHaveBeenCalledWith('taskpack','AI')
-    expect(localStorage.getItem('intdog.onboarding.active')).toBeNull()
+    expect(screen.queryByRole('button',{name:'进入行业概览'})).not.toBeInTheDocument()
   })
 
   it('renders persisted directed edges and linked assertion/fact counts', async () => {
     apiMock.mockImplementation((path:string) => {
       if(path.startsWith('/industries/AI/knowledge/entities')) return Promise.resolve({items:[],total:0,offset:0,limit:50,next_offset:null})
+      if(path==='/industries/AI/coverage-matrix') return Promise.resolve({industry:'AI',completeness_proven:false,gap_count:1,candidate_total:12,reviewed_evidence_total:3,next_actions:['sources','knowledge','research'],algorithm_version:'entity-coverage-v1',cells:[{id:'c1',source_type:'entity_evidence',subdomain:'模型',chain_stage:'模型',entity_type:'company',region:'china',candidate_count:12,reviewed_evidence_count:3,current:3,target:8,gap:5,status:'gap',high_value:true,priority:95,explanation:'仍缺 5',relation_evidence:[]}]})
       if(path==='/industries/AI/overview') return Promise.resolve({industry:{name:'人工智能'},stats:{sources:9,documents:30,entities:4,candidate_entities:1,relations:2,claims:7,verified_claims:3,evidence:8,events:0,chain_nodes:2,empty_chain_nodes:0},chain:[{id:'a',name:'基础模型',description:'',order:1,status:'accepted',coverage_status:'covered',evidence_count:1,entity_count:2,evidenced_entities:2},{id:'b',name:'推理部署',description:'',order:2,status:'accepted',coverage_status:'covered',evidence_count:1,entity_count:2,evidenced_entities:2}],chain_edges:[{id:'e',src_node_id:'a',dst_node_id:'b',src_name:'基础模型',dst_name:'推理部署',relation:'enables',valid_from:null,valid_to:null,confidence:.8,status:'collected',effect:'positive',lag_days:null,evidence_count:1,evidence:[]}],entities:[],source_categories:{official:9},latest_document_date:'2026-09-01'})
       throw new Error(path)
     })
@@ -142,6 +228,22 @@ describe('first-run and industry overview loop', () => {
     expect(await screen.findByText('enables')).toBeInTheDocument()
     expect(screen.getByRole('button',{name:/断言.*7/})).toBeInTheDocument()
     expect(screen.getByRole('button',{name:/正式事实.*3/})).toBeInTheDocument()
+    expect(screen.getByRole('heading',{name:'当前知道多少，还缺什么'})).toBeInTheDocument()
+    expect(screen.getByText('候选覆盖').previousElementSibling).toHaveTextContent('12')
+    expect(screen.getByRole('button',{name:/继续补齐缺口/})).toBeInTheDocument()
+  })
+
+  it('keeps the overview usable when the optional coverage boundary fails', async () => {
+    apiMock.mockImplementation((path:string) => {
+      if(path.startsWith('/industries/AI/knowledge/entities')) return Promise.resolve({items:[],total:0,offset:0,limit:50,next_offset:null})
+      if(path==='/industries/AI/coverage-matrix') return Promise.reject(new Error('coverage offline'))
+      if(path==='/industries/AI/overview') return Promise.resolve({industry:{name:'人工智能'},stats:{sources:1,documents:0,entities:0,relations:0,claims:0,verified_claims:0},chain:[],chain_edges:[],source_categories:{official:1}})
+      throw new Error(path)
+    })
+    render(<OverviewPage industry="AI" navigate={vi.fn()}/>)
+    expect(await screen.findByRole('heading',{name:'人工智能'})).toBeInTheDocument()
+    expect(screen.getByText('覆盖边界暂时无法读取')).toBeInTheDocument()
+    expect(screen.getByRole('button',{name:'重试覆盖边界'})).toBeInTheDocument()
   })
 
   it('exposes import/export beside recoverable archive and restore', async () => {

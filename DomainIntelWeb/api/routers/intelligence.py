@@ -28,35 +28,9 @@ def _child_environment(data_root: Path, project_root: Path) -> dict[str, str]:
 
 
 def _entity_coverage_view(repo, folder: str) -> dict:
-    from src.entity_coverage import build_coverage_matrix
+    from src.entity_coverage import materialize_coverage_matrix
 
-    matrix = build_coverage_matrix(repo, folder)
-    edges = repo.list_chain_edges(folder)
-    for cell in matrix["cells"]:
-        current = int(cell.pop("qualified_count", 0))
-        target = int(cell["target"])
-        relations = [{
-            "edge_id": edge["id"], "relation": edge["relation"],
-            "source_stage": edge["src_name"], "target_stage": edge["dst_name"],
-            "evidence_count": edge["evidence_count"], "evidence": edge["evidence"],
-        } for edge in edges if cell["chain_stage"] in {
-            edge["src_name"], edge["dst_name"]}]
-        cell.update({
-            "current": current,
-            "gap": max(0, target - current),
-            "explanation": (
-                f"当前 {current}，目标 {target}，缺口 {max(0, target-current)}；"
-                "完整性未证明，数量达标只表示已知证据覆盖达到本单元阈值。"),
-            "relation_evidence": relations,
-        })
-        cell["id"] = repo.upsert_coverage_cell(folder, {
-            "region": cell["region"], "subdomain": cell["subdomain"],
-            "chain_stage": cell["chain_stage"], "entity_type": cell["entity_type"],
-            "source_type": cell["source_type"], "event_type": "entity_identity",
-            "time_horizon": "current",
-        }, priority=cell["priority"], status=cell["status"],
-            rationale=cell["explanation"])
-    return matrix
+    return materialize_coverage_matrix(repo, folder)
 
 
 def _query_for(cell: dict) -> str:

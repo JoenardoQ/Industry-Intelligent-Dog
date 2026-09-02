@@ -3486,6 +3486,70 @@
         "title": "ApiFieldLocator",
         "type": "object"
       },
+      "ApiProviderProbeState": {
+        "properties": {
+          "category": {
+            "default": "",
+            "title": "Category",
+            "type": "string"
+          },
+          "code": {
+            "default": "",
+            "title": "Code",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "latency_ms": {
+            "minimum": 0.0,
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "model": {
+            "default": "",
+            "title": "Model",
+            "type": "string"
+          },
+          "param": {
+            "default": "",
+            "title": "Param",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "request_id": {
+            "default": "",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "status_code": {
+            "default": 0,
+            "title": "Status Code",
+            "type": "integer"
+          },
+          "web_search": {
+            "default": false,
+            "title": "Web Search",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "provider",
+          "ready",
+          "detail",
+          "latency_ms"
+        ],
+        "title": "ApiProviderProbeState",
+        "type": "object"
+      },
       "ApiProviderState": {
         "properties": {
           "api_base": {
@@ -5836,6 +5900,11 @@
       },
       "EntityCoverageCellState": {
         "properties": {
+          "candidate_count": {
+            "minimum": 0.0,
+            "title": "Candidate Count",
+            "type": "integer"
+          },
           "chain_stage": {
             "title": "Chain Stage",
             "type": "string"
@@ -5885,6 +5954,11 @@
             "title": "Relation Evidence",
             "type": "array"
           },
+          "reviewed_evidence_count": {
+            "minimum": 0.0,
+            "title": "Reviewed Evidence Count",
+            "type": "integer"
+          },
           "source_type": {
             "title": "Source Type",
             "type": "string"
@@ -5910,6 +5984,8 @@
           "chain_stage",
           "entity_type",
           "region",
+          "candidate_count",
+          "reviewed_evidence_count",
           "current",
           "target",
           "gap",
@@ -5927,6 +6003,11 @@
           "algorithm_version": {
             "title": "Algorithm Version",
             "type": "string"
+          },
+          "candidate_total": {
+            "minimum": 0.0,
+            "title": "Candidate Total",
+            "type": "integer"
           },
           "cells": {
             "items": {
@@ -5947,12 +6028,32 @@
           "industry": {
             "title": "Industry",
             "type": "string"
+          },
+          "next_actions": {
+            "items": {
+              "enum": [
+                "sources",
+                "knowledge",
+                "research"
+              ],
+              "type": "string"
+            },
+            "title": "Next Actions",
+            "type": "array"
+          },
+          "reviewed_evidence_total": {
+            "minimum": 0.0,
+            "title": "Reviewed Evidence Total",
+            "type": "integer"
           }
         },
         "required": [
           "industry",
           "completeness_proven",
           "gap_count",
+          "candidate_total",
+          "reviewed_evidence_total",
+          "next_actions",
           "algorithm_version",
           "cells"
         ],
@@ -6704,6 +6805,32 @@
         "title": "JobOutputState",
         "type": "object"
       },
+      "JobRetryRequest": {
+        "properties": {
+          "execution_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "taskpack",
+                  "direct"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Mode"
+          },
+          "provider": {
+            "default": "",
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "title": "JobRetryRequest",
+        "type": "object"
+      },
       "JobState": {
         "additionalProperties": false,
         "properties": {
@@ -6748,6 +6875,11 @@
           "error_category": {
             "default": "",
             "title": "Error Category",
+            "type": "string"
+          },
+          "folder": {
+            "default": "",
+            "title": "Folder",
             "type": "string"
           },
           "heartbeat_at": {
@@ -14063,6 +14195,18 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobRetryRequest",
+                "default": {
+                  "provider": ""
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -14088,6 +14232,48 @@
         "summary": "Retry Job",
         "tags": [
           "operations"
+        ]
+      }
+    },
+    "/api/providers/{provider}/probe": {
+      "post": {
+        "operationId": "probe_provider_api_providers__provider__probe_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProviderProbeState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Probe Provider",
+        "tags": [
+          "system"
         ]
       }
     },

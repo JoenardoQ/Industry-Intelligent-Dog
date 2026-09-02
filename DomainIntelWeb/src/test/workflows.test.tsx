@@ -17,13 +17,14 @@ vi.mock('../api', async importOriginal => {
 })
 
 import DailyPage from '../features/DailyPage'
+import AgentConversation from '../features/AgentConversation'
 import AgentReviewPanel from '../features/research/AgentReviewPanel'
 import JobsPage from '../features/JobsPage'
 import ResearchPage from '../features/ResearchPage'
 import SourcesPage from '../features/SourcesPage'
 import SystemPage from '../features/SystemPage'
 import SetupWizard from '../features/SetupWizard'
-import { Generate } from '../features/shared'
+import { Generate, RunFeedback } from '../features/shared'
 import WorkflowSettingsPanel from '../features/settings/WorkflowSettingsPanel'
 
 const notify = vi.fn()
@@ -132,6 +133,23 @@ describe('critical workbench workflows', () => {
     expect(screen.getByRole('link',{name:/查看任务详情/})).toHaveAttribute('href','#/jobs')
   })
 
+  it('hands a completed foreground task back to its owning page exactly once', async () => {
+    const terminal=vi.fn()
+    apiMock.mockResolvedValue([{run_id:'run-complete',folder:'AI',title:'Daily',status:'completed',updated_at:'now',stage:'completed',progress:100,progress_mode:'determinate',elapsed_seconds:9,result_kind:'local_data',operation:'daily',artifact_path:null,recovery_actions:[]}])
+    render(<RunFeedback runId="run-complete" onTerminal={terminal}/>)
+    expect(await screen.findByRole('link',{name:'查看每日情报'})).toHaveAttribute('href','#/daily')
+    await waitFor(()=>expect(terminal).toHaveBeenCalledTimes(1))
+    expect(terminal).toHaveBeenCalledWith(expect.objectContaining({run_id:'run-complete'}))
+  })
+
+  it('shows retained partial output and a readable recovery reason', async () => {
+    apiMock.mockResolvedValue([{run_id:'run-partial',folder:'AI',title:'Report',status:'partial',updated_at:'now',stage:'quality_gate',progress:82,progress_mode:'determinate',elapsed_seconds:12,result_kind:'artifact',operation:'report',artifact_path:'/data/report.md',error_category:'artifact_quality',error:'两条结论缺少证据',recovery_actions:['retry']}])
+    render(<RunFeedback runId="run-partial"/>)
+    expect(await screen.findByText(/成品质量检查/)).toBeInTheDocument()
+    expect(screen.getByText(/两条结论缺少证据/)).toBeInTheDocument()
+    expect(screen.getByRole('link',{name:'查看已保留内容'})).toHaveAttribute('href',expect.stringContaining('/artifact?path='))
+  })
+
   it('edits shared defaults without silently replacing an industry override', async () => {
     apiMock.mockImplementation((path:string, options?:RequestInit) => {
       if(path==='/settings/effective?folder=AI&operation=*')return Promise.resolve({
@@ -180,9 +198,12 @@ describe('critical workbench workflows', () => {
         total:21,offset:20,limit:20,next_offset:null},query_ledger:[],source_gaps:[],round_history:[],
       })
       if(path==='/industries/AI/coverage-matrix') return Promise.resolve({
-        industry:'AI',completeness_proven:false,gap_count:1,algorithm_version:'entity-coverage-v1',cells:[{
+        industry:'AI',completeness_proven:false,gap_count:1,candidate_total:4,
+        reviewed_evidence_total:2,next_actions:['sources','knowledge','research'],
+        algorithm_version:'entity-coverage-v1',cells:[{
           id:'ecv_1',source_type:'entity_evidence',subdomain:'Models',chain_stage:'Models',
-          entity_type:'research_group',region:'china',current:2,target:8,gap:6,status:'gap',
+          entity_type:'research_group',region:'china',candidate_count:4,
+          reviewed_evidence_count:2,current:2,target:8,gap:6,status:'gap',
           high_value:true,priority:95,explanation:'当前 2，目标 8，缺口 6；完整性未证明',
           relation_evidence:[{edge_id:'edge1',relation:'supplies',evidence_count:1}],
         }]})
@@ -267,7 +288,7 @@ describe('critical workbench workflows', () => {
       {target:{value:'https://models.example/v1'}})
     fireEvent.change(screen.getByLabelText('认证方式'),{target:{value:'api_key_header'}})
     fireEvent.change(screen.getByLabelText('API Key'),{target:{value:'desktop-secret'}})
-    fireEvent.click(screen.getByRole('button',{name:'安全保存并重启'}))
+    fireEvent.click(screen.getByRole('button',{name:'保存配置并重启'}))
     await waitFor(()=>expect(saveProvider).toHaveBeenCalledWith({
       provider:'compatible_api',model:'custom-model',apiKey:'desktop-secret',
       apiBase:'https://models.example/v1',authType:'api_key_header',
@@ -399,6 +420,63 @@ describe('critical workbench workflows', () => {
     await waitFor(()=>expect(apiMock).toHaveBeenCalledWith('/jobs/r1/retry',{method:'POST'}))
   })
 
+  it('defaults to the newest current-industry job and can reveal all industries', async () => {
+    apiMock.mockImplementation((path:string) => {
+      if(path==='/jobs')return Promise.resolve([
+        {run_id:'ai-new',folder:'AI',title:'AI daily',status:'completed',updated_at:'2026-09-03',stage:'completed',progress:100,progress_mode:'determinate',operation:'daily',result_kind:'local_data',recovery_actions:[]},
+        {run_id:'chips-old',folder:'CHIPS',title:'CHIPS report',status:'failed',updated_at:'2026-09-02',stage:'quality_gate',progress:80,progress_mode:'determinate',operation:'report',result_kind:'artifact',error_category:'artifact_quality',error:'缺少引用',recovery_actions:['retry']},
+      ])
+      if(path==='/jobs/ai-new/output')return Promise.resolve({run_id:'ai-new',output:'done'})
+      if(path==='/jobs/chips-old/output')return Promise.resolve({run_id:'chips-old',output:'failed'})
+      throw new Error(path)
+    })
+    render(<JobsPage industry="AI"/>)
+    expect(await screen.findByRole('heading',{name:'AI daily'})).toBeInTheDocument()
+    expect(screen.queryByText('CHIPS report')).not.toBeInTheDocument()
+    expect(screen.getAllByText('已完成').length).toBeGreaterThan(0)
+    expect(screen.getByRole('link',{name:'查看每日情报'})).toHaveAttribute('href','#/daily')
+    fireEvent.click(screen.getByRole('button',{name:'全部行业'}))
+    expect(await screen.findByText('CHIPS report')).toBeInTheDocument()
+  })
+
+  it('keeps the job list usable and retries only a failed log request', async () => {
+    let outputFails=true
+    apiMock.mockImplementation((path:string) => {
+      if(path==='/jobs')return Promise.resolve([{run_id:'ai-log',folder:'AI',title:'AI research',status:'running',updated_at:'now',stage:'entity_request',progress:70,progress_mode:'determinate',operation:'bootstrap',result_kind:'local_data',recovery_actions:['cancel']}])
+      if(path==='/jobs/ai-log/output'&&outputFails){outputFails=false;return Promise.reject(new Error('log unavailable'))}
+      if(path==='/jobs/ai-log/output')return Promise.resolve({run_id:'ai-log',output:'实体检索恢复'})
+      throw new Error(path)
+    })
+    render(<JobsPage industry="AI"/>)
+    expect(await screen.findByText('日志暂时无法读取')).toBeInTheDocument()
+    expect(screen.getAllByText('AI research').length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByRole('button',{name:'重试读取日志'}))
+    expect(await screen.findByText('实体检索恢复')).toBeInTheDocument()
+  })
+
+  it('keeps research usable when an auxiliary coverage panel fails', async () => {
+    apiMock.mockImplementation((path:string) => {
+      if(path==='/industries/AI/research')return Promise.resolve({agenda:[{id:'a1',question:'模型推理成本如何变化？',status:'open'}],lab:{evidence:{nodes:[]},scenarios:[]},tasks:[],impacts:[]})
+      if(path==='/industries/AI/coverage')return Promise.resolve({summary:{total:0,gaps:0,source_yield:0,entity_yield:0},cells:[]})
+      if(path==='/industries/AI/history')return Promise.reject(new Error('history offline'))
+      if(path.startsWith('/industries/AI/agent-bridge/results'))return Promise.resolve({items:[],total:0,offset:0,limit:50,next_offset:null})
+      throw new Error(path)
+    })
+    render(<ResearchPage industry="AI" notify={notify}/>)
+    expect(await screen.findByText('模型推理成本如何变化？')).toBeInTheDocument()
+    expect(screen.getByText('历史覆盖暂时无法读取')).toBeInTheDocument()
+    expect(screen.queryByText('研究助手不可用')).not.toBeInTheDocument()
+  })
+
+  it('offers connection repair when the industry conversation cannot connect', async () => {
+    apiMock.mockRejectedValue(new Error('agent unavailable'))
+    const repair=vi.fn()
+    render(<AgentConversation industry="AI" provider="codex" providerName="Codex CLI" notify={notify} onOpenConnection={repair}/>)
+    expect(await screen.findByText(/agent unavailable/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button',{name:'检查研究连接'}))
+    expect(repair).toHaveBeenCalledOnce()
+  })
+
   it('shows indeterminate work without inventing a zero-percent completion signal', async () => {
     apiMock.mockImplementation((path:string) => {
       if(path==='/jobs')return Promise.resolve([{run_id:'r-live',title:'Live research',
@@ -429,7 +507,7 @@ describe('critical workbench workflows', () => {
     expect(screen.getByText('后台 Worker')).toBeInTheDocument()
     expect(screen.getByText('public_sources')).toBeInTheDocument()
     expect(screen.getByText(/2026-09-01T04:00:00/)).toBeInTheDocument()
-    expect(screen.getAllByText('partial').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('部分完成').length).toBeGreaterThan(0)
     expect(screen.getByText(/2026-09-02T08:00:30Z/)).toBeInTheDocument()
     expect(screen.getByRole('button',{name:/安全重试/})).toBeInTheDocument()
   })

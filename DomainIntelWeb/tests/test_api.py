@@ -95,6 +95,7 @@ def test_background_state_and_authoritative_job_contract(monkeypatch, tmp_path):
     jobs = _router_endpoint(module.operations_router, "/jobs", "GET")()
     row = next(item for item in jobs if item["run_id"] == task["id"])
     assert row["origin"] == "background_worker"
+    assert row["folder"] == "AI"
     assert row["provider"] == "public_sources"
     assert row["time_window"]["timezone"] == "Asia/Shanghai"
     assert row["recovery_actions"] == ["cancel"]
@@ -129,6 +130,54 @@ def test_setup_contract_is_redaction_safe_and_exposes_bidirectional_agent_bridge
     assert configs["claude"]["value"]["mcpServers"]["intdog"]["command"]
     assert next(row for row in payload["api_providers"] if row["id"] == "deepseek")["ready"]
     assert "must-not-leak" not in str(payload)
+
+
+def test_api_provider_probe_returns_real_safe_diagnostics(monkeypatch, tmp_path):
+    module, _ = load_api(monkeypatch, tmp_path)
+    from src.services import llm_service
+
+    class Provider:
+        def __init__(self, _config, provider):
+            assert provider == "openai"
+
+        def probe(self, required_web_search=False):
+            assert required_web_search is True
+            return {"ready": True, "provider": "openai", "model": "gpt-5.1",
+                    "web_search": True, "request_id": "req-safe"}
+
+    monkeypatch.setattr(llm_service, "LLMService", Provider)
+    endpoint = _router_endpoint(
+        module.system_router, "/providers/{provider}/probe", "POST")
+    result = endpoint("openai")
+    assert result == {"provider": "openai", "ready": True, "model": "gpt-5.1",
+                      "web_search": True, "request_id": "req-safe",
+                      "category": "", "detail": "真实最小调用成功",
+                      "status_code": 0, "code": "", "param": "",
+                      "latency_ms": result["latency_ms"]}
+    assert result["latency_ms"] >= 0
+
+
+def test_api_provider_probe_classifies_failure_without_leaking_secret(monkeypatch, tmp_path):
+    module, _ = load_api(monkeypatch, tmp_path)
+    from src.services import llm_service
+
+    class Provider:
+        def __init__(self, _config, _provider):
+            pass
+
+        def probe(self, required_web_search=False):
+            raise llm_service.ProviderRequestError(
+                category="invalid_model", status_code=400, code="model_not_found",
+                param="model", request_id="req-400", detail="model is unavailable")
+
+    monkeypatch.setattr(llm_service, "LLMService", Provider)
+    endpoint = _router_endpoint(
+        module.system_router, "/providers/{provider}/probe", "POST")
+    result = endpoint("openai")
+    assert result["ready"] is False
+    assert result["category"] == "invalid_model"
+    assert result["request_id"] == "req-400"
+    assert "api_key" not in str(result).casefold()
 
 
 def _bridge_endpoint(module, suffix: str, method: str):
@@ -1682,6 +1731,20 @@ def test_unready_direct_provider_is_rejected_before_job_queue(monkeypatch, tmp_p
     assert len(module.jobs.store.list()) == before
 
 
+def test_bootstrap_rejects_api_without_required_web_search_before_queue(
+        monkeypatch, tmp_path):
+    module, _ = load_api(monkeypatch, tmp_path)
+    generate = next(route.endpoint for route in module.operations_router.routes
+                    if route.path.endswith('/generate'))
+    before = len(module.jobs.store.list())
+    with pytest.raises(HTTPException) as caught:
+        generate('AI', GenerateRequest(action='bootstrap', provider='deepseek',
+                                       execution_mode='direct'))
+    assert caught.value.status_code == 409
+    assert "联网搜索" in caught.value.detail
+    assert len(module.jobs.store.list()) == before
+
+
 def test_generation_can_inherit_execution_mode_and_provider():
     inherited = GenerateRequest(action="report", kind="trend_5y")
     assert inherited.execution_mode is None
@@ -1717,6 +1780,38 @@ def test_generate_resolves_global_workflow_settings_before_queueing(
     assert captured["metadata"]["provider"] == "codex"
     assert captured["metadata"]["execution_mode"] == "direct"
     assert captured["metadata"]["operation_payload"]["provider"] == "codex"
+
+
+def test_retry_can_replace_a_failed_provider_without_losing_bootstrap_parent(
+        monkeypatch, tmp_path):
+    module, service = load_api(monkeypatch, tmp_path)
+    original = service.repo.create_task(
+        folder="AI", operation="bootstrap",
+        input={"folder": "AI", "action": "bootstrap", "provider": "codex",
+               "execution_mode": "direct"},
+        origin="app", provider="codex")
+    assert service.repo.claim_expired(original["id"], "test-worker", 60)
+    service.repo.transition(
+        original["id"], expected={"running"}, target="failed",
+        error={"category": "authentication", "message": "login expired"},
+        owner="test-worker")
+    captured = {}
+    monkeypatch.setattr(
+        "src.services.provider_readiness.provider_readiness",
+        lambda *_args: {"ready": True})
+    monkeypatch.setattr(module.jobs, "start", lambda command, **kwargs: (
+        captured.update({"command": command, **kwargs}) or SimpleNamespace(
+            run_id="run-repaired", title="bootstrap")))
+    retry = next(route.endpoint for route in module.operations_router.routes
+                 if route.path.endswith('/retry'))
+
+    result = retry(original["id"], SimpleNamespace(
+        provider="claude", execution_mode="direct"))
+
+    assert result["run_id"] == "run-repaired"
+    assert captured["metadata"]["parent_run_id"] == original["id"]
+    assert captured["metadata"]["provider"] == "claude"
+    assert "--resume-task" in captured["command"]
 
 
 def test_daily_default_sort_and_category_aware_source_names(monkeypatch, tmp_path):

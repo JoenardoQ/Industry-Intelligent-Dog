@@ -68,6 +68,26 @@ def test_matrix_contains_ten_categories_only_for_applicable_stages_and_both_regi
     assert matrix["completeness_proven"] is False
 
 
+def test_materialized_matrix_separates_candidates_from_reviewed_evidence(tmp_path):
+    from src.entity_coverage import materialize_coverage_matrix
+
+    service = _service(tmp_path)
+    service.repo.upsert_chain_node("AI", {
+        "name": "Models", "applicable_entity_types": ["company"]})
+    service.repo.upsert_entity("AI", {
+        "name": "Candidate Co", "type": "company", "country": "CN",
+        "chain": "Models", "status": "candidate"})
+
+    matrix = materialize_coverage_matrix(service.repo, "AI")
+
+    china = next(cell for cell in matrix["cells"] if cell["region"] == "china")
+    assert china["candidate_count"] == 1
+    assert china["reviewed_evidence_count"] == 0
+    assert china["gap"] == 3
+    assert matrix["next_actions"] == ["sources", "knowledge", "research"]
+    assert len(service.repo.list_coverage("AI")) == 2
+
+
 def test_matrix_enforces_2_3_8_10_breadth_and_high_value_depth_boundaries(tmp_path):
     _, build_matrix, _, _ = _coverage_api()
     service = _service(tmp_path)

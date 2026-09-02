@@ -1,8 +1,10 @@
 from pathlib import Path
 import hashlib
 import json
+import re
 import subprocess
 import sys
+import tomllib
 
 import yaml
 
@@ -10,6 +12,34 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
 VALIDATOR = ROOT / "DomainIntelDesktop" / "scripts" / "validate_release_assets.py"
+
+
+def test_product_version_has_one_authority_and_a_valid_python_projection():
+    product_version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    assert product_version == "4.1.0-test.3"
+    for package in ("DomainIntelWeb", "DomainIntelDesktop"):
+        manifest = json.loads((ROOT / package / "package.json").read_text(encoding="utf-8"))
+        lock = json.loads((ROOT / package / "package-lock.json").read_text(encoding="utf-8"))
+        assert manifest["version"] == product_version
+        assert lock["version"] == product_version
+        assert lock["packages"][""]["version"] == product_version
+
+    server = (ROOT / "DomainIntelSearch/src/mcp_server.py").read_text(encoding="utf-8")
+    assert re.search(rf'^SERVER_VERSION = "{re.escape(product_version)}"$', server, re.M)
+    python_version = tomllib.loads(
+        (ROOT / "DomainIntelSearch/pyproject.toml").read_text(encoding="utf-8")
+    )["project"]["version"]
+    assert python_version == "4.1.0.dev3"
+
+    assert _workflow("release-test.yml")["on"]["workflow_dispatch"]["inputs"]["version"]["default"] == product_version
+    assert _workflow("_native-package.yml")["on"]["workflow_call"]["inputs"]["version"]["default"] == product_version
+
+
+def test_release_dispatch_rejects_a_version_different_from_repository_version():
+    validate = _workflow("release-test.yml")["jobs"]["validate"]
+    assert any(step.get("uses", "").startswith("actions/checkout@")
+               for step in validate["steps"])
+    assert 'test "$VERSION" = "$(tr -d \'\\r\\n\' < VERSION)"' in _run_scripts(validate)
 
 
 def _workflow(name: str) -> dict:

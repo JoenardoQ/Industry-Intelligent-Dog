@@ -3,12 +3,13 @@ from __future__ import annotations
 import threading
 import json
 import os
+import time
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 
-from ..schemas import (BackgroundPermissionMutation, BackgroundPermissionUpdate,
+from ..schemas import (ApiProviderProbeState, BackgroundPermissionMutation, BackgroundPermissionUpdate,
                        BackgroundState, CustomAgentProfile, HealthState,
                        SetupState, ShutdownState, WorkflowSettingsState,
                        WorkflowSettingsUpdate)
@@ -124,6 +125,35 @@ def build_system_router(*, data_root: Path, jobs, automation, repo,
                 "mcp_configs": mcp_configs,
                 "agent_profiles": agent_profiles,
                 "privacy_note": "仅检测 PATH 与公开状态命令；不读取 GUI 私有登录数据"}
+
+    @router.post("/providers/{provider}/probe", response_model=ApiProviderProbeState)
+    def probe_provider(provider: str) -> dict:
+        from src.services.capability_manifest import API_SPECS
+        from src.services.llm_service import (LLMConfigurationError, LLMService,
+                                              ProviderRequestError)
+
+        provider_id = str(provider or "").strip().lower()
+        spec = next((item for item in API_SPECS
+                     if item.id == provider_id and item.execution_level == "direct"), None)
+        if spec is None:
+            raise HTTPException(404, "不支持这个 API Provider")
+        started = time.monotonic()
+        try:
+            checked = LLMService({}, provider_id).probe(
+                required_web_search=bool(spec.web_search))
+            return {**checked, "category": "", "detail": "真实最小调用成功",
+                    "status_code": 0, "code": "", "param": "",
+                    "latency_ms": round((time.monotonic() - started) * 1000)}
+        except ProviderRequestError as exc:
+            return {"provider": provider_id, "ready": False, "model": "",
+                    "web_search": bool(spec.web_search), **exc.public(),
+                    "latency_ms": round((time.monotonic() - started) * 1000)}
+        except LLMConfigurationError as exc:
+            return {"provider": provider_id, "ready": False, "model": "",
+                    "web_search": bool(spec.web_search), "request_id": "",
+                    "category": "configuration", "detail": str(exc),
+                    "status_code": 0, "code": "", "param": "",
+                    "latency_ms": round((time.monotonic() - started) * 1000)}
 
     @router.get("/settings/effective", response_model=WorkflowSettingsState)
     def effective_settings(folder: str = Query(min_length=1, max_length=80),

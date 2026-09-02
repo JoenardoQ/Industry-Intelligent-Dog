@@ -89,6 +89,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="执行 provider（由 capability manifest 定义）")
     common.add_argument("--execution-mode", choices=["taskpack", "direct"], default=None,
                         help="显式执行模式；direct 必须同时提供 --provider")
+    common.add_argument("--resume-task", default="",
+                        help="仅用于安全重试初始化的父任务 ID")
     common.add_argument("--kw", default="", help="查询关键词（query 命令）")
     common.add_argument("--category", default="", help="查询类别（query 命令）")
     common.add_argument("--port", type=int, default=8765, help="服务端口（serve 命令）")
@@ -478,17 +480,30 @@ def main():
                     if not args.provider:
                         parser.error("bootstrap-industry direct mode requires --provider")
                     status = run_bootstrap(pcfg, store, (profile or {}).get("name_en", ""),
-                                           profile, provider=args.provider)
+                                           profile, provider=args.provider,
+                                           resume_task_id=args.resume_task)
                 elif args.execution_mode == "taskpack":
                     status = prepare_bootstrap(store, (profile or {}).get("name_en", ""), profile)
                 else:
                     parser.error("bootstrap-industry requires --execution-mode taskpack|direct")
             except Exception as exc:
+                if hasattr(exc, "public"):
+                    detail = exc.public()
+                    print("INTDOG_EVENT " + __import__("json").dumps({
+                        "stage": "provider_failed", "progress": 5,
+                        "message": str(detail.get("detail") or exc),
+                        "error_category": str(detail.get("category") or "provider_error"),
+                        "checkpoint": {"provider_error": {
+                            key: detail.get(key) for key in
+                            ("status_code", "code", "param", "request_id")}},
+                    }, ensure_ascii=False, separators=(",", ":")))
                 print(f"[错误] 行业研究初始化失败：{type(exc).__name__}: {exc}", file=sys.stderr)
                 sys.exit(2)
             print(f"[完成] 来源优先初始化：{store.name}")
             print("  顺序：信息源门槛 → 产业链门槛 → 实体覆盖门槛")
             print(f"  状态：{status['state']} · 人工复核={status['review_required']}")
+            if args.execution_mode == "direct" and status.get("state") == "partial":
+                sys.exit(4)
 
         elif args.command == "resume-bootstrap":
             from src.research_bootstrap import resume_codex_bootstrap

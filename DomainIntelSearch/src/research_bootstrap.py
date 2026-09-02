@@ -8,6 +8,8 @@ and entity discovery only when the preceding artifact passes its gate.
 from __future__ import annotations
 
 import json
+import hashlib
+import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -111,9 +113,12 @@ def _apply_access_classification(item: dict, access_check: dict) -> None:
     result = dict(access_check)
     code = result.get("status_code")
     declared_access = str(item.get("access") or "").lower()
-    result["reachable"] = (
-        isinstance(code, int) and 200 <= code < 400 and
-        "paywall" not in declared_access)
+    status_reachable = isinstance(code, int) and 200 <= code < 400
+    # A security probe can reject a 2xx response after DNS/peer validation.
+    # Never overwrite that explicit fail-closed result from the status alone.
+    probe_reachable = result.get("reachable", status_reachable)
+    result["reachable"] = bool(probe_reachable and status_reachable and
+                               "paywall" not in declared_access)
     item["access_check"] = result
     if result["reachable"]:
         item["monitoring_status"] = "active"
@@ -148,7 +153,10 @@ def reconcile_source_audit(store) -> dict:
 def check_source_accessibility(sources: dict, timeout: int = 8,
                                workers: int = 8) -> dict:
     """Live-check candidate URLs and distinguish access from mere existence."""
-    import requests
+    # Import lazily because coverage execution also reuses this module's JSON
+    # parser. The shared probe rejects private/metadata targets, validates DNS
+    # against the connected peer, and checks every redirect hop.
+    from .coverage_execution import probe_url
 
     entries = []
     for category, _ in SOURCE_CATEGORIES:
@@ -157,22 +165,10 @@ def check_source_accessibility(sources: dict, timeout: int = 8,
                 entries.append(item)
 
     def probe(item):
-        url = str(item["url"])
-        try:
-            response = requests.head(url, allow_redirects=True, timeout=timeout,
-                                     headers={"User-Agent": "IntDog/2.1 source-audit"})
-            if response.status_code in {405, 501}:
-                response = requests.get(url, allow_redirects=True, timeout=timeout,
-                                        stream=True,
-                                        headers={"User-Agent": "IntDog/2.1 source-audit"})
-            code = response.status_code
-            final_url = response.url
-            response.close()
-            return {"checked_at": _now(), "status_code": code,
-                    "final_url": final_url}
-        except requests.RequestException as exc:
-            return {"checked_at": _now(), "reachable": False,
-                    "error": type(exc).__name__}
+        result = probe_url(str(item["url"]), timeout=timeout)
+        return {"checked_at": _now(), "status_code": result.status_code,
+                "final_url": result.final_url, "reachable": result.reachable,
+                "error": result.reason}
 
     with ThreadPoolExecutor(max_workers=max(1, min(workers, 16))) as pool:
         futures = {pool.submit(probe, item): item for item in entries}
@@ -253,13 +249,21 @@ def discover_rss_endpoints(sources: dict, timeout: int = 8,
     return sources
 
 
-def audit_chains(chains: list[dict]) -> dict:
+def audit_chains(chains: list[dict], edges: list[dict] | None = None) -> dict:
     valid = [c for c in chains if isinstance(c, dict) and c.get("name")]
     cited = [c for c in valid if c.get("references")]
     checks = {"minimum_stages": len(valid) >= 5,
               "all_stages_cited": len(cited) == len(valid),
               "inputs_outputs_defined": all(c.get("inputs") is not None and
                                             c.get("outputs") is not None for c in valid)}
+    if edges is not None:
+        names = {str(item.get("name")) for item in valid}
+        valid_edges = [edge for edge in edges if isinstance(edge, dict)
+                       and edge.get("source") in names and edge.get("target") in names
+                       and edge.get("source") != edge.get("target")]
+        cited_edges = [edge for edge in valid_edges if edge.get("references")]
+        checks["directed_edges"] = len(valid_edges) >= max(1, len(valid) - 1)
+        checks["all_edges_cited"] = len(cited_edges) == len(valid_edges)
     return {"passed": all(checks.values()), "checks": checks,
             "stage_count": len(valid), "cited_stage_count": len(cited)}
 
@@ -370,6 +374,14 @@ def _persist_knowledge(store, industry_en: str, chains: list[dict],
     _write(raw_dir / f"{run_id}_entities.json", persisted_entities)
     status.update({"state": "ready_for_review", "updated_at": _now(),
                    "review_required": True, "artifact_status": "draft"})
+    from .entity_coverage import materialize_coverage_matrix
+    coverage = materialize_coverage_matrix(store.service.repo, store.folder)
+    status["coverage"] = {
+        "cells": len(coverage["cells"]), "gaps": coverage["gap_count"],
+        "candidate_total": coverage["candidate_total"],
+        "reviewed_evidence_total": coverage["reviewed_evidence_total"],
+        "next_actions": coverage["next_actions"],
+    }
     _write(store.root / "bootstrap_status.json", status)
     return status
 
@@ -530,9 +542,11 @@ def _stage_source_payload(store, payload: dict, *, query_text: str,
                         "query_count": 1,
                         "invalid_count": invalid,
                     })))
+    repo.transition_source_campaign(
+        campaign["id"], "paused", reason="awaiting_manual_review")
     return {
         "campaign_id": campaign["id"],
-        "status": "running",
+        "status": "paused",
         "candidate_total": len(saved),
         "invalid_count": invalid,
         "qualified_by_category": qualified_by_category,
@@ -601,33 +615,207 @@ def refresh_sources_with_agent(config: dict, store, industry_en: str = "",
 
 @tracked_function("bootstrap-industry", store_position=1)
 def run_bootstrap(config: dict, store, industry_en: str = "", profile: dict | None = None,
-                  provider: str | None = None, progress=print) -> dict:
-    status = prepare_bootstrap(store, industry_en, profile)
-    status["mode"] = provider or "unconfigured"
-    client = create_provider(config, provider, store.root)
+                  provider: str | None = None, progress=print,
+                  resume_task_id: str = "",
+                  access_checker=check_source_accessibility) -> dict:
+    """Run the direct three-stage candidate workflow without an approval pause."""
     tasks = build_tasks(store.name, industry_en)
-    progress("[1/3] 搜索并审计信息源…")
-    candidate = _extract_json(client.complete(tasks[0]["prompt"]).text)
-    if not isinstance(candidate, dict):
-        raise ValueError("信息源阶段必须返回 JSON 对象")
-    coverage_metrics = _persist_source_coverage(store, candidate)
-    candidate["industry"] = store.name
-    candidate_campaign = _stage_source_payload(
-        store, candidate, query_text=tasks[0]["prompt"],
-        family="provider_batch_candidate")
-    candidate_dir = store.one_time / "research" / "bootstrap"
-    _write(candidate_dir / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_sources_candidate.json",
-           candidate)
-    status["stages"]["sources"] = {
-        "state": "candidate", "candidate_campaign": candidate_campaign,
-        "coverage_planning": coverage_metrics}
-    status["state"] = "awaiting_source_review"
-    status["stages"]["value_chain"] = {
-        "state": "blocked", "requires": "sources:passed"}
-    status["stages"]["entities"] = {
-        "state": "blocked", "requires": "value_chain:passed"}
-    status["updated_at"] = _now()
+    client = create_provider(config, provider, store.root)
+    fingerprint = hashlib.sha256(json.dumps({
+        "industry": store.name, "provider": provider or "",
+        "model": str(getattr(client, "model", "")),
+        "api_base": str(getattr(client, "base", "")),
+        "auth_type": str(getattr(client, "auth_type", "")),
+        "prompts": [task["prompt"] for task in tasks], "workflow_version": 1,
+    }, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+    previous = store._read_json(store.root / "bootstrap_status.json", {})
+    resume_valid = bool(
+        resume_task_id and previous.get("task_run_id") == resume_task_id
+        and previous.get("input_fingerprint") == fingerprint
+        and previous.get("workflow_version") == 1)
+    status = {
+        "industry": store.name, "state": "running", "mode": provider or "unconfigured",
+        "updated_at": _now(), "workflow_version": 1, "review_required": True,
+        "artifact_status": "draft", "completed_stages": [],
+        "task_run_id": os.environ.get("INTDOG_TASK_RUN_ID", ""),
+        "input_fingerprint": fingerprint, "artifact_refs": {},
+        "resume_decision": ("reused_valid_checkpoint" if resume_valid else
+                            "invalid_checkpoint_restarted" if resume_task_id else "new_run"),
+        "stages": {
+            "sources": {"state": "waiting"},
+            "value_chain": {"state": "waiting"},
+            "entities": {"state": "waiting"},
+        },
+    }
+    if resume_valid:
+        status["completed_stages"] = list(previous.get("completed_stages") or [])
+        status["artifact_refs"] = dict(previous.get("artifact_refs") or {})
+        for name in status["completed_stages"]:
+            if name in status["stages"] and isinstance(previous.get("stages", {}).get(name), dict):
+                status["stages"][name] = previous["stages"][name]
     _write(store.root / "bootstrap_status.json", status)
-    progress(f"[暂停] 已保存 {candidate_campaign['candidate_total']} 个候选来源；"
-             "完成来源审查后才能研究产业链。")
+    candidate_dir = store.one_time / "research" / "bootstrap"
+
+    def load_artifact(name: str) -> dict | None:
+        raw = str(status["artifact_refs"].get(name) or "")
+        if not raw:
+            return None
+        path = Path(raw).resolve()
+        try:
+            path.relative_to(candidate_dir.resolve())
+        except ValueError:
+            return None
+        payload = store._read_json(path, {})
+        return payload if isinstance(payload, dict) else None
+
+    def complete_json(prompt: str, *, stage: str) -> dict:
+        text = str(client.complete(prompt).text or "")
+        if len(text.encode("utf-8")) > 2_000_000:
+            raise ValueError(f"{stage} 阶段响应超过 2 MB 上限")
+        value = _extract_json(text)
+        if not isinstance(value, dict):
+            raise ValueError(f"{stage} 阶段必须返回 JSON 对象")
+        return value
+
+    def persist_status() -> None:
+        status["updated_at"] = _now()
+        _write(store.root / "bootstrap_status.json", status)
+
+    def event(stage: str, percent: int, message: str) -> None:
+        checkpoint = {
+            "workflow_version": status["workflow_version"],
+            "completed_stages": list(status["completed_stages"]),
+            "campaign_id": (status["stages"].get("sources", {})
+                            .get("candidate_campaign", {}).get("campaign_id", "")),
+            "gate_failures": list(status.get("gate_failures", [])),
+            "stage_states": {name: str(value.get("state") or "waiting")
+                             for name, value in status["stages"].items()},
+        }
+        progress("INTDOG_EVENT " + json.dumps({
+            "stage": stage, "progress": percent, "message": message,
+            "checkpoint": checkpoint,
+        }, ensure_ascii=False, separators=(",", ":")))
+
+    def partial(stage: str, audit: dict, skipped: tuple[str, ...]) -> dict:
+        status["state"] = "partial"
+        status["stages"][stage] = {**status["stages"][stage], "state": "partial",
+                                    "audit": audit}
+        for name in skipped:
+            status["stages"][name] = {"state": "skipped",
+                                       "reason": f"{stage} gate did not pass"}
+        status["gate_failures"] = [name for name, passed in audit.get("checks", {}).items()
+                                   if not passed]
+        persist_status()
+        percentages = {"sources": 35, "value_chain": 65, "entities": 95}
+        event(f"{stage}_gate", percentages[stage],
+              f"{stage} 未通过：{', '.join(status['gate_failures'])}")
+        return status
+
+    if hasattr(client, "probe"):
+        event("provider_preflight", 5, "Provider 预检")
+        client.probe(required_web_search=True)
+
+    candidate = load_artifact("sources") if "sources" in status["completed_stages"] else None
+    if candidate is None:
+        status["completed_stages"] = []
+        event("source_request", 10, "请求信息源候选")
+        status["stages"]["sources"] = {"state": "running"}
+        persist_status()
+        candidate = complete_json(tasks[0]["prompt"], stage="信息源")
+        # The provider is untrusted at this boundary: an ``access_check`` in its
+        # JSON is a claim, not evidence that IntDog performed a live request.
+        event("source_validation", 25, "核验信息源可达性")
+        candidate = access_checker(candidate)
+        source_audit = audit_sources(candidate)
+        coverage_metrics = _persist_source_coverage(store, candidate)
+        candidate["industry"] = store.name
+        candidate_campaign = _stage_source_payload(
+            store, candidate, query_text=tasks[0]["prompt"],
+            family="provider_batch_candidate")
+        source_path = candidate_dir / f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_sources_candidate.json"
+        _write(source_path, candidate)
+        status["artifact_refs"]["sources"] = str(source_path)
+        status["stages"]["sources"] = {
+            "state": "passed" if source_audit["passed"] else "partial",
+            "audit": source_audit, "candidate_campaign": candidate_campaign,
+            "coverage_planning": coverage_metrics}
+        if not source_audit["passed"]:
+            return partial("sources", source_audit, ("value_chain", "entities"))
+        status["completed_stages"].append("sources")
+        persist_status()
+        event("source_gate", 35, f"信息源门槛通过 · {source_audit['total']} 个候选")
+    else:
+        event("source_gate", 35, "复用已通过的信息源检查点")
+
+    source_context = json.dumps(candidate, ensure_ascii=False, separators=(",", ":"))
+    if len(source_context) > 120_000:
+        raise ValueError("合格信息源上下文超过 120000 字符，拒绝静默截断")
+    chain_prompt = f"{tasks[1]['prompt']}\n\n阶段 01 合格候选来源：\n{source_context}"
+    chain_result = (load_artifact("value_chain")
+                    if "value_chain" in status["completed_stages"] else None)
+    if chain_result is None:
+        status["completed_stages"] = ["sources"]
+        status["stages"]["value_chain"] = {"state": "running"}
+        persist_status()
+        event("chain_request", 40, "请求产业链候选")
+        chain_result = complete_json(chain_prompt, stage="产业链")
+        chains = chain_result.get("chains")
+        edges = chain_result.get("edges")
+        if not isinstance(chains, list) or not isinstance(edges, list):
+            raise ValueError("产业链阶段必须包含 chains 与 edges 数组")
+        event("chain_validation", 55, "核验产业链节点、方向与引用")
+        chain_audit = audit_chains(chains, edges)
+        chain_path = candidate_dir / f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_chains_candidate.json"
+        _write(chain_path, chain_result)
+        status["artifact_refs"]["value_chain"] = str(chain_path)
+        status["stages"]["value_chain"] = {
+            "state": "passed" if chain_audit["passed"] else "partial",
+            "audit": chain_audit}
+        if not chain_audit["passed"]:
+            return partial("value_chain", chain_audit, ("entities",))
+        status["completed_stages"].append("value_chain")
+        persist_status()
+        event("chain_gate", 65, f"产业链门槛通过 · {len(chains)} 个环节")
+    else:
+        chains = chain_result.get("chains")
+        edges = chain_result.get("edges")
+        if not isinstance(chains, list) or not isinstance(edges, list):
+            raise ValueError("产业链检查点已损坏")
+        event("chain_gate", 65, "复用已通过的产业链检查点")
+
+    chain_context = json.dumps(chain_result, ensure_ascii=False, separators=(",", ":"))
+    if len(chain_context) > 120_000:
+        raise ValueError("产业链上下文超过 120000 字符，拒绝静默截断")
+    entity_prompt = f"{tasks[2]['prompt']}\n\n阶段 02 合格产业链：\n{chain_context}"
+    status["stages"]["entities"] = {"state": "running"}
+    persist_status()
+    event("entity_request", 70, "请求实体候选")
+    entity_result = complete_json(entity_prompt, stage="实体")
+    raw_entities = entity_result.get("entities")
+    if not isinstance(raw_entities, list):
+        raise ValueError("实体阶段必须包含 entities 数组")
+    entities = normalize_entities(raw_entities, {chain.get("name") for chain in chains})
+    event("entity_validation", 85, "核验实体引用与产业链覆盖")
+    entity_result = {**entity_result, "entities": entities}
+    entity_audit = audit_entities(entities, chains)
+    entity_path = candidate_dir / f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_entities_candidate.json"
+    _write(entity_path, entity_result)
+    status["artifact_refs"]["entities"] = str(entity_path)
+    status["stages"]["entities"] = {
+        "state": "passed" if entity_audit["passed"] else "partial",
+        "audit": entity_audit}
+    if not entity_audit["passed"]:
+        return partial("entities", entity_audit, ())
+    status["completed_stages"].append("entities")
+    persist_status()
+    event("entity_gate", 95, f"实体覆盖门槛通过 · {len(entities)} 个实体")
+
+    status = _persist_knowledge(store, industry_en, chains, entities,
+                                chain_result, entity_result, status)
+    status["completed_stages"] = ["sources", "value_chain", "entities"]
+    status["state"] = "ready_for_review"
+    status["artifact_status"] = "draft"
+    persist_status()
+    event("draft_publish", 100,
+          f"已发布待复核草稿：{store.root / 'one_time' / 'knowledge'}")
     return status

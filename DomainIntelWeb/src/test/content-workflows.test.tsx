@@ -114,6 +114,20 @@ describe('reader-facing intelligence workflows',()=>{
     for(const label of ['周报','月报','季报','半年','两年','五年'])expect(screen.getByRole('button',{name:new RegExp(label)})).toBeInTheDocument()
   })
 
+  it('keeps existing products readable when history coverage is unavailable',async()=>{
+    apiTextMock.mockResolvedValue('# 已有周报')
+    apiMock.mockImplementation((path:string)=>{
+      if(path.endsWith('/products'))return Promise.resolve({periodic:{weekly:[{id:'weekly-1',title:'已有周报',status:'completed',report_file:'/data/weekly.md',visualization:{}}],monthly:[],quarterly:[]},reports:[],deep_reports:[],impacts:[]})
+      if(path.endsWith('/history'))return Promise.reject(new Error('history unavailable'))
+      throw new Error(path)
+    })
+    render(<ProductsPage industry="AI" notify={notify}/>)
+    expect(await screen.findAllByText('已有周报')).not.toHaveLength(0)
+    expect(screen.getByText('历史覆盖暂时无法读取')).toBeInTheDocument()
+    expect(screen.getByRole('button',{name:'重试历史覆盖'})).toBeInTheDocument()
+    expect(screen.queryByText('研究产物不可用')).not.toBeInTheDocument()
+  })
+
   it('uses one research workbench for direct generation and existing artifact reading',async()=>{
     apiTextMock.mockResolvedValue('# 行业报告\n\n这是可核验的长中文与 English evidence summary。')
     const artifact={id:'report-1',title:'人工智能行业报告',status:'completed',report_file:'/data/report.md',visualization:{}}

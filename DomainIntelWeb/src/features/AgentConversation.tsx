@@ -8,11 +8,12 @@ type Props = {
   provider:string
   providerName:string
   notify:(value:Toast)=>void
+  onOpenConnection?:()=>void
 }
 
 const actionNames:Record<string,string>={daily:'每日情报',weekly:'周报',monthly:'月报',quarterly:'季报',report:'行业报告',deep_report:'深度研究',impact:'影响分析',lab:'Intelligence Lab',bootstrap:'初始化研究',coverage:'覆盖搜索',history:'历史回填'}
 
-export default function AgentConversation({industry,provider,providerName,notify}:Props){
+export default function AgentConversation({industry,provider,providerName,notify,onOpenConnection}:Props){
   const [collapsed,setCollapsed]=useState(localStorage.getItem('intdog.chat.collapsed')==='true')
   const [state,setState]=useState<Conversation|null>(null)
   const [message,setMessage]=useState('')
@@ -63,7 +64,7 @@ export default function AgentConversation({industry,provider,providerName,notify
       {provider&&!state&&!error&&<div className="agent-chat-loading"><LoaderCircle/> 正在读取本地对话…</div>}
       {state?.messages.map(item=><article key={item.id} className={`chat-message ${item.role}`}><span>{item.role==='user'?'你':'Agent'}</span><p>{item.content}</p></article>)}
       {state?.proposals.filter(item=>item.status==='pending').map(item=><article className="action-proposal" key={item.id}><header><span>待确认操作</span><strong>{actionNames[item.action]||item.action}</strong></header><p>{String(item.payload.summary||'Agent 建议执行此任务')}</p><dl><div><dt>行业</dt><dd>{industry}</dd></div><div><dt>Provider</dt><dd>{String(item.payload.provider||provider)}</dd></div><div><dt>执行方式</dt><dd>{String(item.payload.execution_mode||'direct')}</dd></div></dl><footer><button className="button ghost" onClick={()=>void decide(item,'reject')} disabled={busy}><X/>拒绝</button><button className="button primary" onClick={()=>void decide(item,'confirm')} disabled={busy}>确认并执行</button></footer></article>)}
-      {error&&<p className="agent-chat-error" role="alert">{error}</p>}
+      {error&&<div className="agent-chat-error" role="alert"><p>{error}</p>{onOpenConnection&&<button className="button secondary" onClick={onOpenConnection}>检查研究连接</button>}</div>}
       <div ref={endRef}/>
     </div>
     <form className="agent-chat-composer" onSubmit={send}><label htmlFor="agent-message">给 Agent 发消息</label><textarea id="agent-message" value={message} onChange={event=>setMessage(event.target.value)} placeholder="提问、分析，或让 Agent 提议一项研究任务…" rows={3} disabled={!provider||busy}/><button className="button primary" disabled={!message.trim()||!provider||busy}>{busy?<LoaderCircle className="spin"/>:<Send/>}发送</button></form>

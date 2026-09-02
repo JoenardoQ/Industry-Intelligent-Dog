@@ -37,6 +37,19 @@ installer.
 4. The no-model flow must produce a deterministic useful minimum; creating only a task package is not research success.
 5. A real signed-in Agent first passes the UI fixed-marker minimal call and then completes a deep job without credential leakage. Static MCP configuration is not sufficient evidence. Unavailable hosts or external-network gates remain explicitly unverified.
 6. A direct research job that does not publish its required artifact ends `partial` or `failed`, never `completed`.
+7. `VERSION`, Web, Desktop, MCP, installer names, and the requested release version match; Python metadata uses the documented PEP 440 projection.
+8. Split progress events preserve task state, and bootstrap completion exposes coverage gaps and direct next actions.
+
+### First-run traceability
+
+| Requirement | Deterministic evidence | Native/live evidence |
+| --- | --- | --- |
+| BW-01–03 · API setup and diagnostics | Provider/onboarding tests | Authorized live probe |
+| BW-04–07 · bootstrap, gates, retry | Bootstrap/API tests | Real-provider run |
+| BW-08 · queue and cancellation | Runtime job tests | Foreground/background collision |
+| BW-09 · accessible first-run states | Web tests | Installed renderer journey |
+| BW-10 · credentials and lifecycle | Desktop contract tests | Three native platforms |
+| BW-11–12 · honest result and compatibility | Web/Python regressions | Existing-data cold start |
 
 ## Security and data boundary
 
