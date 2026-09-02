@@ -5,8 +5,10 @@ const { spawnSync } = require('node:child_process')
 
 const temporary = process.platform === 'win32' ? join(tmpdir(), 'intdog-vitest') : '/tmp/intdog-vitest'
 mkdirSync(temporary, { recursive: true })
-const executable = join(__dirname, '..', 'node_modules', '.bin', process.platform === 'win32' ? 'vitest.cmd' : 'vitest')
-const result = spawnSync(executable, ['run'], {
+const webRoot = join(__dirname, '..')
+const executable = join(webRoot, 'node_modules', 'vitest', 'vitest.mjs')
+const result = spawnSync(process.execPath, [executable, 'run'], {
+  cwd: webRoot,
   stdio: 'inherit',
   env: { ...process.env, TMPDIR: temporary, TMP: temporary, TEMP: temporary },
 })
