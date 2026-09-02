@@ -111,13 +111,17 @@ def build_intelligence_router(*, data_root: Path, service,
             raise HTTPException(404, "coverage round not found")
         if jobs is None or search_root is None or project_root is None:
             raise HTTPException(503, "本地任务运行时未配置")
+        provider = request.provider or service.repo.effective_workflow_settings(
+            folder, "coverage_expansion")["provider"]
+        if provider == "taskpack":
+            raise HTTPException(409, "覆盖扩展需要可直接运行的智能体；请在智能体设置中选择本机 Agent 或 API")
         from src.services.provider_readiness import provider_readiness
-        readiness = provider_readiness(request.provider, data_root / folder)
+        readiness = provider_readiness(provider, data_root / folder)
         if not readiness.get("ready"):
             raise HTTPException(
-                409, f"Provider {request.provider} 未就绪：{readiness.get('detail', '请检查连接设置')}")
+                409, f"Provider {provider} 未就绪：{readiness.get('detail', '请检查连接设置')}")
         args = ["execute-coverage", "--folder", folder,
-                "--coverage-round-id", round_id, "--provider", request.provider]
+                "--coverage-round-id", round_id, "--provider", provider]
         job = jobs.start(
             search_command(args), cwd=search_cwd(search_root),
             title=f"实体与关系覆盖扩展 · {folder}", timeout=3600,
@@ -125,7 +129,7 @@ def build_intelligence_router(*, data_root: Path, service,
             metadata={"operation": "coverage_expansion",
                       "operation_payload": {"folder": folder,
                                             "round_id": round_id,
-                                            "provider": request.provider}})
+                                            "provider": provider}})
         return {"run_id": job.run_id, "status": "queued", "title": job.title,
                 "action": "coverage_expansion"}
 

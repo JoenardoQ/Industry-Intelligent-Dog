@@ -12,22 +12,18 @@ IntDog 的本地桌面工作台，用于管理行业、启动采集和研究、�
 
 ## 启动
 
-生产环境在 WSL home 中从仓库根目录运行：
+从仓库根目录运行：
 
 ```bash
-cd "/home/joenardo/My Projects/IntDog"
+cd Industry-Intelligent-Dog
 ./run_intdog.sh
 ```
 
-首次启动会创建 `.intdog-runtime/venv-linux-*`、安装锁定的前端依赖并生成生产构建；Windows 与 Linux 环境分开保存，
-不会误用从旧盘复制来的虚拟环境。WSL 启动脚本会优先选择带 `tkinter` 的 Python；
-当前机器使用 `$HOME/miniconda3/bin/python`。其他机器需安装 `python3-tk`，或设置
-`INTDOG_BOOTSTRAP_PYTHON` 指向带 Tk 的 Python。
+首次启动会创建隔离运行环境、安装锁定依赖并生成生产构建；Windows 与 Linux 环境分开保存，不复用从其他平台复制的虚拟环境。
 
 ### Windows 入口
 
-当前生产环境在 WSL home，WSL home 首选桌面快捷方式；它固定启动 `/home` 中的
-`run_intdog.sh`。需要重建快捷方式时，在 Windows PowerShell 运行：
+WSL 快捷方式仅用于开发兼容。需要重建时，在 Windows PowerShell 从当前仓库运行：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\create_shortcut.ps1
@@ -53,7 +49,7 @@ Linux 卸载程序默认保留用户数据；当前 Beta 卸载前应先停用�
 
 ## 工作台导航
 
-默认主界面使用固定侧边栏；全局行业选择是唯一上下文，七个功能页面按需加载。宽屏使用
+默认主界面使用固定侧边栏；全局行业选择是唯一上下文，八个功能页面按需加载。宽屏使用
 研究工作台布局，窄屏收起侧边栏并让表格、图谱和阅读器在各自区域滚动。
 
 | 页面 | 主要职责 |
@@ -142,7 +138,7 @@ Web 通过 `runtime/jobs.py` 使用持久任务目录和 Search 命令契约，
 
 ## 常见问题
 
-- **界面文字或边框发糊**：优先使用系统推荐缩放；若只在快捷方式启动时出现，检查 WSL 快捷方式是否调用当前 `/home` 下的 `run_intdog.sh`，不要使用旧版打包 EXE。
+- **界面文字或边框发糊**：优先使用系统推荐缩放；若只在快捷方式启动时出现，检查它是否指向当前仓库或当前安装版本。
 - **一直显示 Planning**：初始化是多阶段任务。查看系统日志中的当前门槛和 `bootstrap_status.json`；明确失败后使用“继续初始化”，不要反复重建行业。
 - **401 Unauthorized**：Codex 套餐模式需要在启动 App 的同一环境完成 Codex 登录；API 模式需要把 Key 注入 App 启动进程。
 - **行业报告不显示**：任务 JSON 和 bootstrap 日志不是报告。先点击对应报告的“直接生成”，成功后刷新列表。

@@ -14,7 +14,6 @@
 | `research-domain.md` | 深度研究 | 生成"模型无关研究任务包"，由任意 LLM/agent 执行并回写知识库 |
 | `knowledge-graph.md` | 知识图谱 | 把研究产物结构化为实体/关系/事件图谱，支持邻居查询 |
 | `save-format.md` | 保存格式契约 | 如何读 spec.md，并按约定格式把结果写进 DomainIntelData（含引用溯源） |
-| `setup-email.md` | 已退役邮件能力 | 说明本地-only、不可由配置或环境变量启用的边界 |
 
 ## agent 如何使用（通用三步）
 

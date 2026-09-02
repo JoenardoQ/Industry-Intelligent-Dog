@@ -15,7 +15,7 @@ from datetime import datetime
 from .base import MODULE_REGISTRY, ModuleContext, ModuleResult, get_module, list_modules
 from ..profiles import apply_profile
 
-PHASE_ORDER = {"collect": 10, "report": 20, "deliver": 30, "research": 40, "graph": 50}
+PHASE_ORDER = {"collect": 10, "report": 20, "research": 30, "graph": 40}
 
 RESEARCH_AGENT_MODULES = {
     "research_industry": "industry",

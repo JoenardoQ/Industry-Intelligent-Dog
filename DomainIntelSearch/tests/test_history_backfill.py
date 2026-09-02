@@ -71,8 +71,8 @@ def test_report_context_samples_across_months_not_only_recent_items():
 
 def test_policy_targets_match_documented_horizons():
     assert {name: policy.target for name, policy in POLICIES.items()} == {
-        "weekly": 28, "monthly": 120, "quarterly": 360,
-        "semiannual": 720, "biennial": 3000, "fiveyear": 8000,
+        "weekly": 42, "monthly": 180, "quarterly": 540,
+        "semiannual": 1080, "biennial": 4500, "fiveyear": 12000,
     }
 
 

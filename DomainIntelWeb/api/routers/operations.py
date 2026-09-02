@@ -54,6 +54,19 @@ def build_operations_router(*, jobs, job_rows: Callable[[], list[dict]],
     def submit(folder: str, request: GenerateRequest, *, parent_run_id: str = "",
                origin: str = "app"):
         from src.background_worker import _safe_environment
+        effective = repo.effective_workflow_settings(folder, request.action)
+        provider = request.provider.strip() or str(effective["provider"])
+        execution_mode = request.execution_mode or str(effective["execution_mode"])
+        pipeline_mode = request.pipeline_mode or str(effective["pipeline_mode"])
+        if provider == "taskpack":
+            provider, execution_mode = "", "taskpack"
+        if execution_mode == "direct" and not provider:
+            raise HTTPException(409, "全局设置缺少可直接执行的 Agent 或 API")
+        request = request.model_copy(update={
+            "provider": provider,
+            "execution_mode": execution_mode,
+            "pipeline_mode": pipeline_mode,
+        })
         taskpack = request.execution_mode == "taskpack"
         public_direct = request.execution_mode == "direct" and request.provider == "public_sources"
         model_free = public_direct and (
@@ -133,6 +146,13 @@ def build_operations_router(*, jobs, job_rows: Callable[[], list[dict]],
                       "origin": origin,
                       "provider": ("taskpack" if taskpack else request.provider),
                       "execution_mode": request.execution_mode,
+                      "requires_artifact": bool(
+                          request.execution_mode == "direct" and
+                          request.action in {"report", "deep_report", "impact", "lab"}),
+                      "result_kind": ("task_package" if taskpack else
+                                      "local_data" if request.action in {
+                                          "daily", "history", "coverage", "bootstrap"}
+                                      else "artifact"),
                       "parent_run_id": parent_run_id or None})
 
     @router.post("/industries/{folder}/generate", status_code=202,

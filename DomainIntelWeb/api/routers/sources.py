@@ -156,13 +156,17 @@ def build_sources_router(*, data_root: Path, dataio, service,
             raise HTTPException(409, "终态来源活动不能再次执行")
         if jobs is None or search_root is None or project_root is None:
             raise HTTPException(503, "本地任务运行时未配置")
+        provider = request.provider or service.repo.effective_workflow_settings(
+            folder, "source_campaign")["provider"]
+        if provider == "taskpack":
+            raise HTTPException(409, "来源检索需要可直接运行的智能体；请在智能体设置中选择本机 Agent 或 API")
         from src.services.provider_readiness import provider_readiness
-        readiness = provider_readiness(request.provider, data_root / folder)
+        readiness = provider_readiness(provider, data_root / folder)
         if not readiness.get("ready"):
             raise HTTPException(
-                409, f"Provider {request.provider} 未就绪：{readiness.get('detail', '请检查连接设置')}")
+                409, f"Provider {provider} 未就绪：{readiness.get('detail', '请检查连接设置')}")
         args = ["run-source-campaign", "--folder", folder,
-                "--campaign-id", campaign_id, "--provider", request.provider]
+                "--campaign-id", campaign_id, "--provider", provider]
         job = jobs.start(
             search_command(args), cwd=search_cwd(search_root),
             title=f"来源检索活动 · {folder}", timeout=3600,
@@ -170,7 +174,7 @@ def build_sources_router(*, data_root: Path, dataio, service,
             metadata={"operation": "source_campaign",
                       "operation_payload": {"folder": folder,
                                             "campaign_id": campaign_id,
-                                            "provider": request.provider}})
+                                            "provider": provider}})
         return {"run_id": job.run_id, "status": "queued", "title": job.title,
                 "action": "source_campaign"}
 

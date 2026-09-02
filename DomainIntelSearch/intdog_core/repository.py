@@ -22,9 +22,10 @@ from .evidence_repository import EvidenceRepositoryMixin
 from .source_repository import SourceRepositoryMixin
 from .observability_repository import ObservabilityRepositoryMixin
 from .task_repository import TaskRepositoryMixin
+from .settings_repository import SettingsRepositoryMixin
 
 
-SCHEMA_VERSION = 21
+SCHEMA_VERSION = 22
 
 
 def _execute_script(con: sqlite3.Connection, script: str) -> None:
@@ -41,7 +42,7 @@ def _execute_script(con: sqlite3.Connection, script: str) -> None:
 
 
 class IntelligenceRepository(
-        TaskRepositoryMixin, ObservabilityRepositoryMixin, SourceRepositoryMixin, EvidenceRepositoryMixin, WorkbenchRepositoryMixin,
+        SettingsRepositoryMixin, TaskRepositoryMixin, ObservabilityRepositoryMixin, SourceRepositoryMixin, EvidenceRepositoryMixin, WorkbenchRepositoryMixin,
         AnalysisRepositoryMixin, ChainRepositoryMixin):
     """One repository per DomainIntelData root.
 
@@ -1032,6 +1033,18 @@ class IntelligenceRepository(
                 """)
                 con.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)",
                             (21, utc_now()))
+            if not con.execute(
+                    "SELECT 1 FROM schema_migrations WHERE version=22").fetchone():
+                _execute_script(con, """
+                    CREATE TABLE IF NOT EXISTS workflow_settings (
+                        scope_key TEXT NOT NULL,
+                        operation TEXT NOT NULL,
+                        settings_json TEXT NOT NULL DEFAULT '{}',
+                        updated_at TEXT NOT NULL,
+                        PRIMARY KEY(scope_key,operation));
+                """)
+                con.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)",
+                            (22, utc_now()))
 
 
     def ensure_industry(self, folder: str, name: str = "") -> str:

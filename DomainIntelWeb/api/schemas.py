@@ -103,8 +103,8 @@ class GenerateRequest(BaseModel):
     kind: str = Field(default="", max_length=80)
     event: str = Field(default="", max_length=1000)
     provider: str = Field(default="", max_length=80)
-    execution_mode: Literal["taskpack", "direct"]
-    pipeline_mode: Literal["aggregate", "generate"] = "generate"
+    execution_mode: Literal["taskpack", "direct"] | None = None
+    pipeline_mode: Literal["aggregate", "generate"] | None = None
 
     @model_validator(mode="after")
     def validate_execution(self):
@@ -655,7 +655,7 @@ class ScheduleUpdate(BaseModel):
     timezone: str = Field(default="Asia/Shanghai", min_length=1, max_length=100)
     catch_up: bool = True
     pipeline_mode: Literal["aggregate", "generate"] = "generate"
-    provider: str = Field(default="codex", min_length=1, max_length=80)
+    provider: str = Field(default="", max_length=80)
 
 
 class StoryMergeRequest(BaseModel):
@@ -842,7 +842,7 @@ class ScheduleState(BaseModel):
     timezone: str
     catch_up: bool
     pipeline_mode: Literal["aggregate", "generate"] = "generate"
-    provider: str = "codex"
+    provider: str = ""
     last_period_key: str | None = None
     next_run_at: str | None = None
     last_attempt_at: str | None = None
@@ -1064,7 +1064,7 @@ SourceCandidateStatus = Literal[
 class SourceCampaignCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     targets: list[str] = Field(min_length=1, max_length=9)
-    budget: int = Field(default=80, ge=1, le=10_000)
+    budget: int = Field(default=120, ge=1, le=10_000)
 
 
 class SourceCandidateReview(BaseModel):
@@ -1083,7 +1083,7 @@ class SourceReassessmentRequest(BaseModel):
 
 class SourceCampaignExecutionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    provider: str = Field(default="codex", min_length=1, max_length=80)
+    provider: str | None = Field(default=None, min_length=1, max_length=80)
 
 
 class CoverageExpansionRequest(BaseModel):
@@ -1094,7 +1094,7 @@ class CoverageExpansionRequest(BaseModel):
 
 class CoverageExpansionExecutionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    provider: str = Field(default="codex", min_length=1, max_length=80)
+    provider: str | None = Field(default=None, min_length=1, max_length=80)
 
 
 class EntityCandidateReview(BaseModel):
@@ -1365,6 +1365,27 @@ class HealthState(BaseModel):
     active_jobs: int
     automation_running: bool
     session_required: bool
+
+
+class WorkflowSettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    provider: str | None = Field(default=None, min_length=1, max_length=80)
+    execution_mode: Literal["taskpack", "direct"] | None = None
+    pipeline_mode: Literal["aggregate", "generate"] | None = None
+
+    @model_validator(mode="after")
+    def require_change(self):
+        if not self.model_fields_set:
+            raise ValueError("at least one workflow setting is required")
+        return self
+
+
+class WorkflowSettingsState(BaseModel):
+    provider: str
+    execution_mode: Literal["taskpack", "direct"]
+    pipeline_mode: Literal["aggregate", "generate"]
+    provenance: dict[str, str]
+    layers: list[dict[str, Any]]
 
 
 class BackgroundServiceState(BaseModel):
@@ -1692,6 +1713,9 @@ class JobState(BaseModel):
     active: bool = False
     stage: str | None = None
     progress: int = Field(default=0, ge=0, le=100)
+    progress_mode: Literal["determinate", "indeterminate"] = "indeterminate"
+    elapsed_seconds: int = Field(default=0, ge=0)
+    result_kind: Literal["artifact", "local_data", "task_package", "unknown"] = "unknown"
     artifact_path: str | None = None
     parent_run_id: str | None = None
     operation: str | None = None

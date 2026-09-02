@@ -10,10 +10,8 @@
 
 from __future__ import annotations
 
-import html
 import copy
 import math
-import os
 from datetime import datetime
 
 from .crawlers.news_crawler import NewsAggregator
@@ -94,27 +92,6 @@ class PeriodicScheduler:
                                "publisher_country": entry.get("publisher_country", "")})
                 seen.add(url)
         return merged
-
-    def _send_digest(self, subject: str, items: list[dict]) -> bool:
-        if os.environ.get("INTDOG_DISABLE_EMAIL") == "1":
-            return False
-        email_cfg = self.config.get("email", {}) or {}
-        if not (email_cfg.get("enabled") and email_cfg.get("send_on_periodic", True)):
-            return False
-        from .services.email_service import EmailService
-        ordered = sorted(items, key=lambda item: (
-            item.get("credibility", 0), item.get("source_count", 0)), reverse=True)
-        rows = []
-        for item in ordered[:30]:
-            rows.append(
-                f'<li><a href="{html.escape(item.get("url", ""))}">'
-                f'{html.escape(item.get("title", ""))}</a> '
-                f'<small>{html.escape(item.get("source", ""))} · '
-                f'{item.get("credibility_label", "待评估")}</small><br>'
-                f'{html.escape((item.get("abstract") or "")[:240])}</li>')
-        body = (f'<h2>{html.escape(subject)}</h2><p>共 {len(items)} 条，按可信度排序。</p>'
-                f'<ol>{"".join(rows)}</ol>')
-        return EmailService(self.config).send_html(subject, body)
 
     # ------------------------------------------------------------------
     # 每日：六类
@@ -197,15 +174,6 @@ class PeriodicScheduler:
                                      f"低{stats['low']}")
         except Exception as e:
             result["verify_error"] = str(e)
-
-        # Deterministic delivery works without an LLM.  Research commentary
-        # remains a separate reviewed artifact.
-        try:
-            digest_items = self.store.list_daily(date=date)
-            result["email_sent"] = self._send_digest(
-                f"{self.store.name} 每日情报 · {date}", digest_items)
-        except Exception as e:
-            result["email_error"] = str(e)
 
         # 抓取源健康汇总：失败源写入当天 _crawl_log.json，并在结果里报数
         failures = http_utils.feed_failures()
@@ -314,14 +282,9 @@ class PeriodicScheduler:
                    "summary": "本周行业总结（数据已汇总，LLM 任务包见 task.prompt）"}
         path = self.store.save_period("weekly", payload)
         print(f"[阶段 2/3] 周报数据与任务包已写入：{path}", flush=True)
-        week_items = self.store.list_daily_window(window)
-        email_sent = self._send_digest(
-            f"{self.store.name} 每周行业与政策总结 · {self.store._period_key('weekly')}",
-            week_items)
         self._save_period_window("weekly", window)
         print("[阶段 3/3] completed：周报 checkpoint 已更新", flush=True)
-        return {"weekly": str(path), "counts": counts, "email_sent": email_sent,
-                **window.as_dict()}
+        return {"weekly": str(path), "counts": counts, **window.as_dict()}
 
     # ------------------------------------------------------------------
     # 每月：产业分析

@@ -1,63 +1,76 @@
 # IntDog 当前架构
 
-[English](DESIGN.md) · [用户指南](README.zh-CN.md) · [当前状态](IMPLEMENTATION_STATUS.zh-CN.md)
+[English](DESIGN.md) · [用户指南](README.zh-CN.md)
 
 ## 产品边界
 
-IntDog 是本地优先的桌面行业情报工作台。Electron 管理原生生命周期和加密凭据边界；冻结的 Python sidecar 提供唯一的 localhost FastAPI 应用；React 是正式发布 UI。Windows、macOS、Linux 共享同一套源码，但分别生成并验证原生安装包。
+IntDog 是本地优先的桌面行业情报工作台。它建立开放世界的行业知识体系，持续发现来源、产业链、实体、事件与前沿方向，并生成带证据状态的研究产物。模型输出默认是待复核草稿，不是已确认事实或投资建议。
 
-它不内置大语言模型，不附带商业数据库权限，也不会把“检测到桌面 Agent”误报为“账户已登录”。任务包模式无需模型。直接生成必须使用已登录的 Codex/Claude CLI，或用户明确配置的 API Provider。
+正式产品采用 Electron + React + FastAPI + SQLite。三个桌面平台共享业务源码，分别生成原生安装包。行业数据、数据库、日志和生成产物只保存在用户本机，并被 Git 排除。
 
-## 运行结构
+## 运行与依赖方向
 
 ```text
-Electron
-  ├─ safeStorage + 最小 preload IPC
-  ├─ 在 127.0.0.1:随机端口启动冻结 Python sidecar
-  └─ React renderer
-       └─ 受会话保护的 FastAPI/OpenAPI
-            ├─ intdog_core SQLite 事实与审计库
-            ├─ 采集、研究、报告、调度和任务
-            ├─ 只读 MCP
-            └─ 受复核约束的 Agent Bridge
+Electron：窗口、生命周期、系统安全存储
+  └─ React：唯一正式用户界面
+      └─ 会话保护的 localhost FastAPI
+          ├─ intdog_core：SQLite、Schema、证据、任务和审计
+          ├─ Search：来源连接器、检索、研究和报告
+          └─ Agent/Provider adapters：本机 CLI、API、MCP、任务包
 ```
 
-Electron 每次启动生成随机会话能力。Renderer 永远拿不到 API Key。Key 只通过 preload IPC 接收，由操作系统安全存储加密，再经有界的一次性匿名管道传给 sidecar；系统无法提供安全加密时拒绝保存。
+- SQLite 是业务状态的唯一写入权威。
+- JSON、Markdown 和单文件 HTML 是可移植视图与产物，不是第二套数据库。
+- Electron 不写业务事实；React 没有文件系统或凭据访问权。
+- API Key 只进入操作系统安全存储，经一次性匿名管道传给本地 sidecar。
 
-后台执行是独立、可撤销的当前用户权限。平台任务计划/LaunchAgent/systemd 入口启动同一个冻结
-Worker，不拥有计划权威，也不扩大 Provider 授权。可变数据位于操作系统用户数据目录，卸载应用时默认保留。
+## 设置继承
 
-## 数据与证据
+所有行业默认共享任务设置和 Agent/Provider。只保存用户真正修改的覆盖项：
 
-SQLite 与 `intdog_core` 是唯一业务写入权威。兼容 JSON/Markdown 继续作为可移植视图和产物。事实、主张、关系、来源、文档、Story、任务、运行和审计均使用稳定 ID。模型与外部 Agent 输出默认是 `draft_review_required`；没有证据时必须明确显示未知。
+```text
+系统默认 → 全局设置 → 全局任务覆盖 → 行业覆盖 → 行业内任务覆盖
+```
 
-行业覆盖采用开放世界模型：子领域、产业链端点、地区、实体类型、来源类别、事件和时间跨度以缺口衡量，不把固定 Top 10 假设成完整。长周期采集同时受数量、时间桶和发布者多样性门槛约束。
+全局修改只影响仍在继承的行业。每个覆盖项均显示来源范围，并可恢复为“继承全局”。工作流设置只保存 Provider、执行方式和周期产物模式；密钥不进入 SQLite，由桌面安全存储单独管理。
 
-## Agent 与 Provider 架构
+## Agent 与 Provider
 
-`DomainIntelSearch/src/services/capability_manifest.py` 是国内外 Agent 与 API Provider 的唯一能力清单，统一定义 ID、地区、连接/执行方式、公开命令、认证、Web 能力、默认配置和可调度性。Provider 工厂继续使用显式、失败即拒绝的 adapter map。
+能力目录是 Agent/API 的唯一清单。所有本机 Agent 统一经过候选发现、路径规范化、有界指纹、版本探测、认证探测和能力判定。大型合法 CLI 不能因固定 64 MiB 上限被误判；执行前仍重新校验绑定。
 
-- Codex CLI 与 Claude Code 有受限直接执行适配器。
-- OpenAI、DeepSeek、Qwen、Azure OpenAI 使用显式 API 配置。
-- DeepSeek Harness、Work Buddy、Qwen Code、CodeBuddy、Kimi CLI、Gemini CLI、OpenCode 和未知 Agent，在没有已验证适配器时使用只读 MCP 或任务包交接。
-- Agent Bridge 导出任务，并把通过校验的结果原子写入待复核区；导入断言绝不直接写入事实库。
+- Codex CLI 与 Claude Code只有在稳定的非交互适配器和公开登录探针通过后才能直接执行。
+- DeepSeek Harness、Work Buddy、Qwen Code、CodeBuddy、Kimi、Gemini CLI、OpenCode及后续 Agent 使用同一诊断管线；没有直接适配器时只提供 MCP、任务包或结果导入。
+- GUI 正在运行不等于可调用，未知 Agent 不自动获得直接执行权限。
+- OpenAI、DeepSeek、Qwen、Azure OpenAI及兼容 API 必须显式配置；远程端点必须使用 HTTPS。
 
-## 依赖方向
+## 一键工作流与进度
 
-- `intdog_core`：Schema、Repository、确定性领域规则。
-- `DomainIntelSearch/src`：采集和研究服务；依赖 core。
-- `DomainIntelApp/runtime`：供应用使用的中立数据/任务兼容层。
-- `DomainIntelWeb/api`：受保护应用边界；依赖 service/runtime。
-- `DomainIntelWeb/src`：使用生成契约的 React 客户端；无文件系统权限。
-- `DomainIntelDesktop`：只负责生命周期和打包；不写业务事实。
+知识结构、行业初始化、周期产物、深度研究与 Intelligence Lab 均提供文档化默认值。主按钮点击一次即执行；高级设置可以事前展开，但不再要求先生成任务包再二次确认。
 
-旧 v2 设计保存在[历史归档](docs/archive/DESIGN-v2-legacy.md)，不再是实施合同。
+后台仍使用持久任务和租约。当前页面显示语义阶段、已用时间、心跳、代表性计数和产物链接。只有存在可计算总量时才显示百分比；否则显示“不确定进度”，不得用伪造百分比掩盖任务包或空产物。
 
-## 发行门禁
+## 来源、论文与采集预算
 
-每个平台都必须运行完整 Python 套件、Web DOM 测试与生产构建、OpenAPI 漂移检查、仓库检查、桌面测试、冻结 sidecar 烟雾、renderer 首次工作流、重开持久化，以及安全存储可用时的凭据生命周期。未签名测试包只能作为 Pre-release。Windows 稳定版必须签名，macOS 稳定版必须签名并公证。
+完整来源目录非破坏性保留。重点监控池根据边际覆盖价值选择来源：权威性、地区、主题/产业链节点、独立发布者、有效产出和更新频率。每类通常保留 3–10 个重点来源；有新增覆盖价值时可继续扩展，不以数量证明完整性。
 
-当前就绪结论和证据限制记录在 [IMPLEMENTATION_STATUS.zh-CN.md](IMPLEMENTATION_STATUS.zh-CN.md)；旧提交的通过记录不能证明已变化的工作树。
+相对上一基线：
 
-`NOM-01`、原生安装/服务/卸载生命周期与真实已登录 Agent 深度 smoke 在对应环境产生证据前
-均为外部缺口。SP4 与 SP5 A 本地冻结报告是必要证据，但不能替代这些外部门槛。
+- 来源发现与检索候选预算提高 50%；
+- 一般采集条目上限提高 50%；
+- 论文采集目标提高 100%。
+
+论文不仅补充已知行业关键词，还用于发现潜在新子领域、跨学科迁移、尚未产业化方向和最前沿技术。探索条目必须标记为候选方向，不能自动写成产业事实。扩容服从去重、独立发布者、时间窗口、速率限制和成品质量门；如果没有有效新增，允许提前停止。
+
+## 证据、漂移与 Prompt
+
+事实、主张、关系、来源、文档、Story、任务和审核使用稳定 ID。链接可达不等于支持断言；事实准入还需要证据定位、语义支持、数字/单位一致性和声明类型要求的独立佐证。
+
+首次运行或没有同版本基线时，漂移状态是“未发现漂移；数据不足以判断趋势”，不产生警告。完整指标只在详情中显示。
+
+来源发现与行业初始化复用同一份来源 Prompt，避免最关键的门槛发生漂移。报告、研究助手和 Agent 模块仍各自拥有领域模板；它们共享证据状态与产物质量门，但尚未迁移到统一 `PromptSpec`。在完成 Prompt 快照、输出 Schema 兼容和回归评估前，不把它们机械合并。
+
+## 文档与发行
+
+公开仓库只保留当前、必要、双语对齐的用户指南、架构、来源治理和发行说明。审批包、迭代日志、截图证据、本机路径和旧状态快照不属于产品文档，后续只保存在 Git 忽略的本地工作目录。
+
+测试采用风险驱动的最小集合：设置继承、Agent 诊断、任务状态、来源/论文预算、漂移首日语义、数据不入 Git、Web 构建和桌面契约。真正的冷启动行业验收由用户执行，项目提供可重复入口和清单，不替用户创建行业数据。

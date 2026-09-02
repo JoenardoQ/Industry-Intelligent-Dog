@@ -1,4 +1,4 @@
-"""摘要生成器：将抓取数据渲染为邮件 HTML / Markdown."""
+"""摘要生成器：将抓取数据渲染为本地 HTML / Markdown."""
 
 from typing import List
 from ..crawlers.base import Article
@@ -145,7 +145,7 @@ class DigestGenerator:
         body = ""
         for month in sorted(by_month.keys(), reverse=True):
             body += f'<div class="section"><h2>📅 {month}</h2>'
-            body += self.render_articles(by_month[month], max_items=20)
+            body += self.render_articles(by_month[month], max_items=30)
             body += '</div>'
         body += self._references_html(list(by_month.values()))
         html = self._wrap_html(

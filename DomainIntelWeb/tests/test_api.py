@@ -7,6 +7,7 @@ import json
 import sqlite3
 import tomllib
 import threading
+from types import SimpleNamespace
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -142,6 +143,24 @@ def _router_endpoint(router, suffix: str, method: str):
                 and method in getattr(route, "methods", set()))
 
 
+def test_workflow_settings_api_preserves_industry_overrides(monkeypatch, tmp_path):
+    module, service = load_api(monkeypatch, tmp_path)
+    service.create_industry("Chips", "芯片")
+    put_global = _router_endpoint(module.system_router, "/settings/global/{operation}", "PUT")
+    put_industry = _router_endpoint(
+        module.system_router, "/industries/{folder}/settings/{operation}", "PUT")
+    effective = _router_endpoint(module.system_router, "/settings/effective", "GET")
+
+    put_global("*", schemas.WorkflowSettingsUpdate(provider="codex"))
+    put_industry("Chips", "*", schemas.WorkflowSettingsUpdate(provider="claude"))
+    put_global("*", schemas.WorkflowSettingsUpdate(provider="deepseek"))
+
+    assert effective(folder="AI", operation="report")["provider"] == "deepseek"
+    chips = effective(folder="Chips", operation="report")
+    assert chips["provider"] == "claude"
+    assert chips["provenance"]["provider"] == "industry"
+
+
 def test_source_campaign_and_entity_coverage_workbench_contract(monkeypatch, tmp_path):
     module, service = load_api(monkeypatch, tmp_path)
     create_campaign = _router_endpoint(
@@ -246,6 +265,27 @@ def test_source_campaign_and_entity_coverage_workbench_contract(monkeypatch, tmp
                                       path.endswith("coverage-matrix") else "post"]
         response = operation["responses"]["200"]["content"]["application/json"]["schema"]
         assert response == {"$ref": f"#/components/schemas/{schema_name}"}
+
+
+def test_source_campaign_execution_inherits_the_shared_agent(monkeypatch, tmp_path):
+    module, service = load_api(monkeypatch, tmp_path)
+    service.repo.put_workflow_settings(None, "*", {
+        "provider": "claude", "execution_mode": "direct"})
+    campaign = service.repo.create_source_campaign(
+        "AI", targets=["official"], budget=10)
+    captured = {}
+    monkeypatch.setattr(
+        "src.services.provider_readiness.provider_readiness",
+        lambda *_args: {"ready": True})
+    monkeypatch.setattr(module.jobs, "start", lambda *_args, **kwargs: (
+        captured.update(kwargs) or SimpleNamespace(
+            run_id="run-source", title="source campaign")))
+    execute = _router_endpoint(
+        module.sources_router, "/source-campaigns/{campaign_id}/execute", "POST")
+
+    execute("AI", campaign["id"], schemas.SourceCampaignExecutionRequest())
+
+    assert captured["metadata"]["operation_payload"]["provider"] == "claude"
 
 
 def test_story_momentum_and_quality_drift_typed_api_contract(monkeypatch, tmp_path):
@@ -1640,9 +1680,10 @@ def test_unready_direct_provider_is_rejected_before_job_queue(monkeypatch, tmp_p
     assert len(module.jobs.store.list()) == before
 
 
-def test_generation_requires_explicit_execution_mode_and_direct_provider():
-    with pytest.raises(ValidationError):
-        GenerateRequest(action="report", kind="trend_5y")
+def test_generation_can_inherit_execution_mode_and_provider():
+    inherited = GenerateRequest(action="report", kind="trend_5y")
+    assert inherited.execution_mode is None
+    assert inherited.provider == ""
     with pytest.raises(ValidationError):
         GenerateRequest(action="report", kind="trend_5y", execution_mode="direct")
     taskpack = GenerateRequest(action="report", kind="trend_5y",
@@ -1651,6 +1692,29 @@ def test_generation_requires_explicit_execution_mode_and_direct_provider():
     direct = GenerateRequest(action="report", kind="trend_5y",
                              execution_mode="direct", provider="claude")
     assert direct.provider == "claude"
+
+
+def test_generate_resolves_global_workflow_settings_before_queueing(
+        monkeypatch, tmp_path):
+    module, service = load_api(monkeypatch, tmp_path)
+    service.repo.put_workflow_settings(None, "*", {
+        "provider": "codex", "execution_mode": "direct"})
+    captured = {}
+    monkeypatch.setattr(
+        "src.services.provider_readiness.provider_readiness",
+        lambda *_args: {"ready": True})
+    monkeypatch.setattr(module.jobs, "start", lambda *_args, **kwargs: (
+        captured.update(kwargs) or SimpleNamespace(
+            run_id="run-settings", title="report")))
+    generate = next(route.endpoint for route in module.operations_router.routes
+                    if route.path.endswith('/generate'))
+
+    result = generate("AI", GenerateRequest(action="report", kind="trend_5y"))
+
+    assert result["run_id"] == "run-settings"
+    assert captured["metadata"]["provider"] == "codex"
+    assert captured["metadata"]["execution_mode"] == "direct"
+    assert captured["metadata"]["operation_payload"]["provider"] == "codex"
 
 
 def test_daily_default_sort_and_category_aware_source_names(monkeypatch, tmp_path):
@@ -1737,6 +1801,6 @@ def test_history_status_exposes_all_horizons_without_creating_manifest(monkeypat
 
     assert [item["horizon"] for item in payload["items"]] == [
         "weekly", "monthly", "quarterly", "semiannual", "biennial", "fiveyear"]
-    assert payload["items"][-1]["target"] == 8000
+    assert payload["items"][-1]["target"] == 12000
     assert all(item["status"] == "not_started" for item in payload["items"])
     assert not (tmp_path / "AI/one_time/research/history").exists()

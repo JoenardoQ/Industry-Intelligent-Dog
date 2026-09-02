@@ -7,12 +7,11 @@ DomainIntelData/skill/spec.md 规定的格式写入 DomainIntelData。
 也可自带联网 LLM（见 config/settings.yaml 的 llm.provider）。
 
 用法：
-  python -m src.main daily              # 运行每日情报（抓取+推送）
+  python -m src.main daily              # 运行每日情报采集
   python -m src.main weekly             # 运行每周金融政策简报
   python -m src.main timeline           # 生成近一年发展轨迹
   python -m src.main brief              # 生成一次性研究任务简报（模型无关任务包）
   python -m src.main collect --days 3   # 仅抓取原始数据（JSON）
-  python -m src.main test-email         # 测试邮件配置
   python -m src.main query --kw 芯片    # 查询 DomainIntelData（SQLite）
   python -m src.main serve              # 启动只读局域网服务，分享 DomainIntelData
 
@@ -86,7 +85,6 @@ def build_parser() -> argparse.ArgumentParser:
     common.add_argument("--config", default=None, help="配置文件路径")
     common.add_argument("--folder", default="", help="数据文件夹名（默认取行业档案 data_folder）")
     common.add_argument("--days", type=int, default=1, help="抓取天数窗口")
-    common.add_argument("--no-send", action="store_true", help="不发送邮件")
     common.add_argument("--provider", default=None,
                         help="执行 provider（由 capability manifest 定义）")
     common.add_argument("--execution-mode", choices=["taskpack", "direct"], default=None,
@@ -183,13 +181,13 @@ def main():
         orch = None
 
     if args.command == "daily":
-        r = orch.run_daily(since_days=args.days, send=not args.no_send)
+        r = orch.run_daily(since_days=args.days)
         print(f"[完成] 每日情报：新闻 {r['news_count']} | 学术 {r['academic_count']} "
               f"| 金融 {r['finance_count']} | 政策 {r['policy_count']}")
         print(f"  报告: {r['html_path']}")
 
     elif args.command == "weekly":
-        r = orch.run_weekly(since_days=args.days, send=not args.no_send)
+        r = orch.run_weekly(since_days=args.days)
         print(f"[完成] 每周简报：金融 {r['finance_count']} | 政策 {r['policy_count']} "
               f"| 市场 {r['market_count']}")
         print(f"  报告: {r['html_path']}")
@@ -352,7 +350,7 @@ def main():
     elif args.command == "modules":
         from src.modules import list_modules
         from src.modules.runner import resolve_selection
-        cat_label = {"collect": "数据采集", "report": "报告生成", "deliver": "推送",
+        cat_label = {"collect": "数据采集", "report": "报告生成",
                      "research": "深度研究(LLM任务包)", "graph": "知识图谱"}
         grouped = {}
         for s in list_modules():

@@ -25,9 +25,9 @@ export default function SetupWizard({setup,onRefresh,onComplete,hasIndustry=true
   const [active,setActive]=useState<ActiveBootstrap|null>(resumed)
 
   const provider=()=>selected==='taskpack'||setup.agents.some(item=>item.id===selected&&item.execution==='native')||setup.api_providers.some(item=>item.id===selected)?selected:'taskpack'
-  const remember=(value:string)=>{localStorage.setItem('intdog.provider',value);localStorage.setItem('intdog.agent',selected)}
-  const returnToWorkbench=()=>{const value=provider();remember(value);localStorage.setItem('intdog.onboarding.v1','complete');void onComplete(value)}
-  const begin=async(folder:string)=>{const value=provider();remember(value);const taskpack=value==='taskpack';const result=await api<GenerateResult>(`/industries/${encodeURIComponent(folder)}/generate`,{method:'POST',body:JSON.stringify({action:'bootstrap',kind:'',event:'',provider:taskpack?'':value,execution_mode:taskpack?'taskpack':'direct',pipeline_mode:'generate'})});const next={folder,runId:result.run_id,provider:value};localStorage.setItem(ACTIVE_KEY,JSON.stringify(next));setActive(next);setStep(4)}
+  const remember=async(value:string)=>{await api('/settings/global/*',{method:'PUT',body:JSON.stringify({provider:value,execution_mode:value==='taskpack'?'taskpack':'direct'})});localStorage.setItem('intdog.provider',value);localStorage.setItem('intdog.agent',selected);dispatchEvent(new Event('intdog:settings-changed'))}
+  const returnToWorkbench=()=>{const value=provider();void remember(value).then(()=>{localStorage.setItem('intdog.onboarding.v1','complete');return onComplete(value)})}
+  const begin=async(folder:string)=>{const value=provider();await remember(value);const result=await api<GenerateResult>(`/industries/${encodeURIComponent(folder)}/generate`,{method:'POST',body:JSON.stringify({action:'bootstrap'})});const next={folder,runId:result.run_id,provider:value};localStorage.setItem(ACTIVE_KEY,JSON.stringify(next));setActive(next);setStep(4)}
   const finish=()=>{if(!active)return;localStorage.removeItem(ACTIVE_KEY);localStorage.setItem('intdog.industry',active.folder);localStorage.setItem('intdog.onboarding.v1','complete');void onComplete(active.provider,active.folder)}
 
   return <div className="setup-overlay"><section className="setup-dialog" role="dialog" aria-modal="true" aria-labelledby="setup-title">

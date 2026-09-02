@@ -20,7 +20,7 @@ from .capability_manifest import AGENT_SPECS, capability_or_unknown
 
 AGENTS = AGENT_SPECS  # compatibility alias
 MAX_DIAGNOSTIC_OUTPUT_BYTES = 16 * 1024
-MAX_EXECUTABLE_FINGERPRINT_BYTES = 64 * 1024 * 1024
+MAX_EXECUTABLE_FINGERPRINT_BYTES = 512 * 1024 * 1024
 MAX_CONCURRENT_DIAGNOSES = 4
 _DIAGNOSIS_SLOTS = threading.BoundedSemaphore(MAX_CONCURRENT_DIAGNOSES)
 COMMAND = re.compile(r"^[A-Za-z0-9._-]{1,120}$")
@@ -305,7 +305,7 @@ def executable_fingerprint(executable: str, *, deadline: float | None = None) ->
             "executable_not_regular", "Selected executable is not a regular file")
     if metadata.st_size > MAX_EXECUTABLE_FINGERPRINT_BYTES:
         raise ExecutableFingerprintError(
-            "executable_too_large", "Selected executable exceeds the 64 MiB fingerprint limit")
+            "executable_too_large", "Selected executable exceeds the 512 MiB fingerprint limit")
     check_deadline()
     flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_CLOEXEC", 0)
     try:
@@ -322,7 +322,7 @@ def executable_fingerprint(executable: str, *, deadline: float | None = None) ->
         if opened.st_size > MAX_EXECUTABLE_FINGERPRINT_BYTES:
             raise ExecutableFingerprintError(
                 "executable_too_large",
-                "Selected executable exceeds the 64 MiB fingerprint limit")
+                "Selected executable exceeds the 512 MiB fingerprint limit")
         if ((opened.st_dev, opened.st_ino) != (metadata.st_dev, metadata.st_ino)):
             raise ExecutableFingerprintError(
                 "executable_changed", "Selected executable changed during fingerprinting")

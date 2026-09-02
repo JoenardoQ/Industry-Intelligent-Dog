@@ -24,7 +24,7 @@ class ModuleSpec:
 
     id: str
     name: str
-    category: str            # collect | report | deliver | research | graph
+    category: str            # collect | report | research | graph
     description: str = ""
     kind: str = "code"       # code（确定性代码） | llm_task（产出 LLM 任务包）
     requires: list = field(default_factory=list)   # 硬依赖：自动补全
@@ -109,7 +109,7 @@ def get_module(module_id: str) -> type[BaseModule] | None:
 
 def list_modules() -> list[ModuleSpec]:
     """按 分类→声明顺序 返回全部模块规格."""
-    order = {"collect": 0, "report": 1, "deliver": 2, "research": 3, "graph": 4}
+    order = {"collect": 0, "report": 1, "research": 2, "graph": 3}
     specs = [cls.spec for cls in MODULE_REGISTRY.values()]
     specs.sort(key=lambda s: (order.get(s.category, 9), list(MODULE_REGISTRY).index(s.id)))
     return specs

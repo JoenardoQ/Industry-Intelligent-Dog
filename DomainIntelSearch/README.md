@@ -53,7 +53,7 @@ python -m src.main backfill-history --folder AI --kind biennial
 python -m src.main backfill-history --folder AI --kind fiveyear
 ```
 
-GDELT and dated Google News RSS are built-in historical providers. OpenAlex enrichment is optional and reads `OPENALEX_API_KEY`. See [history collection](../docs/history-collection-method.md).
+GDELT and dated Google News RSS are built-in historical providers. OpenAlex enrichment is optional and reads `OPENALEX_API_KEY`. The current quotas and completeness boundary are documented in [the architecture contract](../DESIGN.md#source-paper-and-collection-budgets).
 
 ## Research method
 
@@ -122,7 +122,7 @@ Scores retain components, algorithm version, and thresholds. Conflicting evidenc
 - Planning does not finish: inspect `bootstrap_status.json`, then resume the saved stage.
 - Codex `401`: authenticate in the same host environment.
 - Provider key: use the provider variable or `INTDOG_LLM_API_KEY`; remote API bases require HTTPS.
-- Collection keys: `NEWSAPI_KEY`, `GNEWS_API_KEY`, `SEMANTIC_SCHOLAR_API_KEY`; email compatibility uses `INTDOG_SMTP_PASSWORD`.
+- Optional collection keys: `NEWSAPI_KEY`, `GNEWS_API_KEY`, and `SEMANTIC_SCHOLAR_API_KEY`.
 - `403`, `429`, timeout: keep the failed observation, apply bounded retry, and continue other sources.
 - Task exists but report does not: collection/task metadata is not prose; run a generation command.
 - Low domestic recall: inspect reachability, enrich authoritative domestic sources, then run `doctor`.

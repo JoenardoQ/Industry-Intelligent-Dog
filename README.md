@@ -1,193 +1,112 @@
-# IntDog Industry Intelligence System
+# IntDog Industry Intelligence Workbench
 
-[中文文档](README.zh-CN.md) · [Source-governance contract](docs/source-governance.md)
+[中文](README.zh-CN.md)
 
-> Version 4.0 Preview. Model output is review-required draft material, not confirmed fact or investment advice.
+IntDog is a local-first desktop application for building and continuously updating an industry knowledge system. It starts with sources and a value chain, collects news, papers, GitHub activity, funding, hiring, and leadership posts, and produces cited research artifacts with explicit status and visualizations.
 
-Beta status: the current working tree is not ready for public distribution until
-the same-revision native and external gates pass.
+> Version 4.0 is a test release. Model output is review-required draft material, not confirmed fact, legal advice, or investment advice.
 
-IntDog is a local-first industry-intelligence workbench. It maps sources and value chains, continuously collects news, papers, GitHub activity, funding, hiring, and leadership posts, and produces cited periodic and industry research.
+## Capabilities
 
-## System goal
+- Manage multiple industries and inspect knowledge, value chain, entities, sources, and documents from the overview.
+- Discover and review nine source classes: government/regulatory/standards, associations, institutional blogs, professional platforms, independent publishers, news, papers, company disclosures, and financial data.
+- Persist directed upstream/downstream relationships and evidence links for companies, labs, people, technologies, products, and policies.
+- Search, sort, filter, bulk-select, and recoverably delete daily intelligence; stories expose first appearance, momentum, and seven-day changes.
+- Generate weekly, monthly, quarterly, six-month, two-year, and five-year artifacts, plus value-chain, competition, market, and event-impact research.
+- Export a self-contained HTML briefing with local search, filters, bookmarks, printing, and PDF support; no IntDog backend is required to open it.
+- Use a signed-in local agent, a model API, or a generic task package. Agent results must pass evidence gates before entering the fact store.
+- Optionally run local background schedules. Email delivery, cloud sync, and collaboration are disabled by default.
 
-IntDog does not require the user to begin with a fixed question set. Its default goal is a broad, traceable, continuously expanding industry knowledge system that exposes both established knowledge and the current boundary of discovery.
+## Installation
 
-- Discover subfields, value-chain activities, products, technologies, companies, research groups, people, standards, policy, and capital activity.
-- Treat the database as an incomplete observation of an open world.
-- Make smaller companies, startups, labs, and uncovered nodes visible alongside leaders.
-- Attach conclusions to sources, dates, scope, and conflicting evidence.
-- Reuse canonical entities across industries while preserving industry-specific roles.
-
-## Components
-
-| Component | Responsibility | Network access |
-| --- | --- | --- |
-| `DomainIntelSearch` | Discovery, collection, verification, knowledge modeling, and reports | Yes |
-| `intdog_core` | Canonical schema, SQLite, evidence, tasks, locks, and migrations | No |
-| `DomainIntelData` | Structured facts and portable JSON/Markdown artifacts | No |
-| `DomainIntelWeb` | React workbench and local FastAPI boundary | Existing data works offline |
-| `DomainIntelApp` | Startup, isolated runtime, shortcuts, and shared job runtime | No |
-| `DomainIntelDesktop` | Electron shell and native packaging | No |
-
-```text
-source adapters → normalization → intdog_core → intelligence/knowledge engines
-                → queries and reports → desktop app / agents
-```
-
-`Intelligence Lab` adds deterministic evidence-gap compilation, source observation, explainable value-chain scenarios, and a research-boundary agenda. Its outputs are analyses, not automatically accepted facts. See [Intelligence Lab](DomainIntelSearch/INTELLIGENCE_LAB.md).
-
-SQLite is the canonical store for entities, documents, Stories, relations, claims, evidence, source health, schedules, and jobs. The filesystem stores raw material, portable views, Markdown, and charts. Business writes pass through the application service.
-
-## Execution modes
-
-| Mode | Authentication and cost | Result |
-| --- | --- | --- |
-| Local agent | Signed-in Codex CLI or Claude Code; other agents use MCP/task packages | Direct output or handoff |
-| Provider API | OpenAI, DeepSeek, Qwen, or Azure OpenAI key; API charges may apply | Draft output |
-| Task package | No model call | JSON prompt/task, not a report |
-
-The desktop accepts secrets only through system credential storage and transfers
-them to the sidecar through an anonymous pipe. Developer CLI runs may use explicit
-process environment variables. Secrets must not be committed to YAML or the data
-directory. Remote model endpoints must use HTTPS.
-
-## User installation and first run
-
-> Known issue: `4.0.0-test.1` does not satisfy this onboarding and provider-connectivity
-> contract and is not recommended for non-developer installation. A replacement ships
-> only after the install → onboarding → provider → first-job gates pass.
-
-The IntDog installer contains the app and local backend, but **no model account or
-quota**. Existing-data browsing, industry management, and task packages need no
-model. Research generation requires one separately configured provider.
-
-No-model has two distinct meanings: task-package handoff creates no finished
-research, while the `NOM-01` public credential-free collector must meet its live
-source/document/entity/value-chain oracle before it is called useful. The current
-working tree has not closed that external network gate.
+An installer contains the desktop UI and local backend, but no model account, API quota, or paid third-party data.
 
 ### Windows 10/11 x64
 
-1. Download `IntDog-<version>-windows-x64.exe` from GitHub Releases, not a Source code archive.
-2. Run the installer, select the destination, and use the desktop or Start-menu shortcut.
-3. The test build is unsigned. If SmartScreen warns, verify the release filename and SHA-256 before deciding whether to run it.
-4. On first launch, wait for Local runtime and Data directory to become ready.
-5. Choose one provider:
-   - **Local agent:** Codex CLI and Claude Code can execute directly. DeepSeek Harness,
-     Work Buddy, Qwen Code, CodeBuddy, Kimi, Gemini CLI, and OpenCode use MCP/task-package handoff;
-   - **API:** choose OpenAI, DeepSeek, Qwen, or Azure OpenAI and enter a key and model; the key uses operating-system encrypted storage;
-   - **Task package:** no key, but produces a prompt rather than a completed report.
-6. Create an industry, run Initialize industry research, and inspect stage, logs, and result in Task center.
-7. For any other agent, copy its MCP configuration in Connection settings or export a task from Research Studio; imported results remain review-required.
+1. Download `IntDog-<version>-windows-x64.exe` from the matching GitHub Release. Do not download “Source code.”
+2. Run the installer and launch IntDog from the desktop or Start menu.
+3. A test build may be unsigned. If SmartScreen warns, verify the filename and SHA-256 on the release page before deciding to continue.
+4. The first launch prepares the local runtime and data directory; duration depends on disk performance.
+5. If no window appears, inspect `%APPDATA%\intdog-desktop\logs\backend.log`. Remove tokens, keys, and personal paths before sharing logs.
 
-If no window appears, inspect `%APPDATA%/intdog-desktop/logs/backend.log`. Do not
-publicly upload logs containing API keys, tokens, or personal paths.
+Copying a repository `.exe`, backend file, or WSL shortcut is not a substitute for an installer. All packaged components must come from the same build revision.
 
-### macOS and Linux
+### macOS Apple Silicon
 
-- The macOS test build supports Apple Silicon arm64 only. Drag IntDog from the DMG
-  into Applications; an unsigned test build may trigger Gatekeeper.
-- On Linux x64, make the AppImage executable: `chmod +x IntDog-*.AppImage`.
-- Local-agent mode still requires the corresponding CLI and its public sign-in flow.
-  API and task-package modes are alternatives.
+1. Download `IntDog-<version>-macos-arm64.dmg`.
+2. Open the DMG and drag IntDog into Applications.
+3. Gatekeeper may block an unsigned test build. Verify its checksum before allowing it in Privacy & Security.
 
-The optional background schedule is installed only after the user enables it in
-System Status. It uses Task Scheduler on Windows, a user LaunchAgent on macOS, or a
-user systemd timer on Linux. Disable/revoke it before uninstalling. Closing the
-window does not grant new network or model permissions. Provider keys use OS secure
-storage and an anonymous one-shot pipe; they are never placed in child-process
-environment variables. Uninstall removes the application but retains user data by
-design; delete that data directory only after making a backup.
+### Linux x64
 
-See the complete [installation and agent-connection guide](docs/onboarding-and-installation.md).
+1. Download `IntDog-<version>-linux-x64.AppImage`.
+2. Run `chmod +x IntDog-*.AppImage`.
+3. Double-click or execute the AppImage from a terminal.
 
-### Start from source (developers)
+The three installers are independent artifacts. Any shared code change requires the Windows, macOS, and Linux gates to run again. See the [release contract](docs/release-readiness.md).
+
+## First run
+
+1. Wait until the setup wizard reports a ready local runtime and data directory.
+2. Select a model source:
+   - **Local agent:** install and sign in through the agent’s official CLI first. IntDog runs public diagnostics and does not read private GUI sessions.
+   - **API:** select a provider and enter a model and key. The desktop stores the key in the operating-system credential vault.
+   - **Task package:** no key is required, but the result is a task for any agent, not a finished research report.
+3. Create an industry name and data folder.
+4. Select “Initialize industry research.” The job enters the queue directly; the current page shows its real stage and elapsed time, while Task Center exposes logs, cancellation, and retry.
+5. Review source candidates, value-chain order, entity coverage, and evidence gaps before starting daily collection or reports.
+
+If a signed-in agent is not detected, rerun diagnosis in Connection settings and verify that its CLI is executable in the environment that launches IntDog. Windows, WSL, and macOS/Linux can have different PATH values. IntDog applies the same executable, version, authentication, and capability checks to every registered agent. Tools without direct execution can use MCP or task-package handoff.
+
+## Daily workflow
+
+1. **Overview:** inspect the knowledge structure, directed value chain, and linked counts.
+2. **Daily Intelligence:** collect from 04:00 on the previous day to the current system time; sort by title, category, or source and review evidence.
+3. **Sources:** retain the complete directory. Stable sources enter automatic monitoring; login-walled, paywalled, or anti-bot sources remain recommended for manual reading.
+4. **Research Products:** continue from the previous successful window. With no full prior period, backfill one complete period from the current time. Long horizons sample across time buckets instead of overloading recent news.
+5. **Research Assistant:** run a documented default in one click, or change task, horizon, event, or one-run agent.
+6. **System Status:** set shared agent and workflow defaults. Industry overrides take precedence and are not overwritten by later global changes.
+
+Relative to the previous baseline, default source discovery and general collection budgets are 1.5× and paper collection is 2×. Papers cover both established topics and frontier candidates that may become new industry directions. Frontier candidates remain `candidate` until industry and evidence checks succeed.
+
+## Data, privacy, and states
+
+- SQLite is authoritative for entities, evidence, sources, jobs, reviews, and schedules. Raw material, Markdown, HTML, and charts remain in the local data directory.
+- Industry data, generated artifacts, logs, credentials, build output, and runtime caches are ignored by Git and must not be committed.
+- Deleted industries and daily items first enter recoverable trash. Stop active jobs and back up the complete data directory before permanent deletion.
+- `candidate` is unverified; `collected` means retrieved; `verified/corroborated` has passed the applicable evidence policy; `draft_review_required` is model-written but still needs human review.
+- A reachable URL is not sufficient evidence. Accepted assertions also require semantic support, reproducible locators, numeric/unit consistency, claim-type policy, required independent corroboration, and conflict checks.
+- “Not observed” does not mean “does not exist.” Coverage gaps, failed sources, and uncertainty remain visible. A first run with no stable baseline reports insufficient data, not false drift.
+
+## Run from source (developers)
+
+Git, Python 3.11+, Node.js 20+, and npm are required:
 
 ```bash
-cd "/home/joenardo/My Projects/IntDog"
+git clone https://github.com/JoenardoQ/Industry-Intelligent-Dog.git
+cd Industry-Intelligent-Dog
 ./run_intdog.sh
 ```
 
-The source launcher prepares an isolated Python/Web runtime. The repository can move
-and does not depend on a fixed drive path.
+The launcher prepares an isolated runtime in an ignored local location. Do not use a read-only source directory. Windows developers may run the script through WSL; end users should use the Windows installer.
 
-### Command line
-
-```bash
-cd DomainIntelSearch
-python -m pip install -e .
-python -m src.main init-industry --industry semiconductor
-python -m src.main bootstrap-industry --industry semiconductor --provider codex
-python -m src.main crawl-daily --industry semiconductor
-python -m src.main run-lab --industry semiconductor
-```
-
-Use `--industry` for a name or alias and `--folder` for an exact data folder.
-
-## Native distribution boundary
-
-The approved package is an Electron shell plus one PyInstaller API/CLI sidecar. Each installer contains only its native runtime:
-
-- Windows x64: NSIS `.exe`
-- macOS Apple Silicon arm64: `.dmg`
-- Linux x64: `.AppImage`
-
-Every shared architecture, API, schema, runtime, or UI change triggers all three native package gates. Test builds use `4.0.0-test.*`, are marked GitHub Pre-release, and are unsigned. Windows SmartScreen or macOS Gatekeeper may therefore require manual approval. Stable Windows and macOS releases require signing; macOS also requires notarization. See the aligned [release contract](docs/release-readiness.md) and [Chinese release contract](docs/release-readiness.zh-CN.md).
-
-## Main artifacts
-
-| Path | Content |
-| --- | --- |
-| `sources.json` | Nine source classes, reachability, region, and monitoring role |
-| `one_time/knowledge/` | Industry, value chain, entities, and learning structure |
-| `periodic/daily/` | News, papers, GitHub, funding, hiring, and leadership posts |
-| `periodic/{weekly,monthly,quarterly}/` | Aggregates, Markdown, and chart metadata |
-| `one_time/reports/` | Five-year, two-year, six-month, and deep reports |
-| `one_time/research/history/` | Resumable time-bucket history manifests |
-| `one_time/intelligence/` | Evidence, source observation, scenarios, and research agenda |
-
-Artifact states are distinct: `candidate`, `collected`, `verified/corroborated`, `draft_review_required`, and human-only `reviewed/published`. A generated task or report is never silently presented as reviewed fact.
-
-## Workbench and scheduling
-
-The workbench provides Overview, Daily Intelligence, Research Products, Sources, Research Assistant, Task Center, and System Status. Lists are server-paginated; bulk selection applies to the loaded page. Industry and daily-item deletion is recoverable through `_trash/`.
-
-The Web scheduler is the only schedule owner. It persists daily/weekly/monthly/quarterly schedules, leases, period keys, next run, last success, and errors. Restart catch-up is idempotent. Email is always disabled in the default workbench path.
-
-## Trust boundaries
-
-- Source volume does not prove collection balance or claim quality.
-- Government, regulatory, statistical, standards, corporate disclosure, and peer-reviewed sources take priority.
-- Media corroborates; social/self-media content is a lead until verified.
-- Paywalled or non-machine-readable sources may remain manual recommendations and must not be reported as collected.
-- A competition landscape is an evidence skeleton; weakly supported entities remain on a Watchlist.
-- “Not observed” never means “does not exist.” Report coverage gaps and failed sources.
-- The project does not claim commercial-database coverage for global funding, customs, hiring, real-time markets, or social platforms.
-
-## Evolution priorities
-
-1. Strengthen the trusted data kernel, migration audit, schema validation, and recovery tools.
-2. Improve entity resolution, republication detection, event clustering, claim/evidence links, and coverage matrices.
-3. Expand temporal value chains, cross-industry entities, long-tail research groups and companies, learning dependencies, and impact propagation.
-
-New reports and connectors must build on these foundations instead of using more model text to hide evidence or coverage gaps.
-
-## Documentation
-
-- [Search engine](DomainIntelSearch/README.md) · [中文](DomainIntelSearch/README.zh-CN.md)
-- [Data contract](DomainIntelData/README.md) · [中文](DomainIntelData/README.zh-CN.md)
-- [Application guide](DomainIntelApp/README.md) · [中文](DomainIntelApp/README.zh-CN.md)
-- [Implementation status](IMPLEMENTATION_STATUS.md)
-- [Current architecture](DESIGN.md)
-
-## Verification
+Common verification commands:
 
 ```bash
-python -m pytest DomainIntelSearch/tests DomainIntelApp/tests DomainIntelWeb/tests -q
+.venv/bin/python -m pytest -q DomainIntelSearch/tests DomainIntelApp/tests DomainIntelWeb/tests
 npm test --prefix DomainIntelWeb
 npm run build --prefix DomainIntelWeb
 npm test --prefix DomainIntelDesktop
 ```
 
-Local databases, generated intelligence, build outputs, runtimes, dependencies, logs, and secrets are ignored by Git. Back up the complete `DomainIntelData/` directory only after stopping active collection and scheduling.
+## Repository layout
+
+| Directory | Responsibility |
+| --- | --- |
+| `DomainIntelSearch` | Search, collection, deduplication, evidence/knowledge algorithms, reports |
+| `DomainIntelWeb` | React workbench and local FastAPI |
+| `DomainIntelApp` | Startup, job runtime, and environment management |
+| `DomainIntelDesktop` | Electron shell and three-platform packaging |
+| `DomainIntelData` | Local-data templates; generated industry data stays out of Git |
+
+Further reading: [architecture](DESIGN.md) · [installation and agent connections](docs/onboarding-and-installation.md) · [source policy](docs/source-governance.md) · [release gates](docs/release-readiness.md).

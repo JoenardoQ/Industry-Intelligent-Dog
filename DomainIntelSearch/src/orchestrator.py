@@ -6,7 +6,6 @@ from pathlib import Path
 
 from .utils import load_config, ensure_dir, save_json, today_str
 from .generators.digest_generator import DigestGenerator
-from .services.email_service import EmailService
 from .services.archive_store import ArchiveStore
 from .analyzers.prompts import PromptTemplates
 from .spec_loader import load_spec, summarize
@@ -23,7 +22,6 @@ class Orchestrator:
         # settings 用 output.dir 表示报告目录（兼容旧的 output_dir 键名）
         self.output_dir = ensure_dir(out.get("dir") or out.get("output_dir", "./output"))
         self.prompts = PromptTemplates(self.config)
-        self.email = EmailService(self.config)
         self.digest = DigestGenerator(self.config)
         self.archive = ArchiveStore(self.config)
         # 读取 DomainIntelData/skill/spec.md：抓取领域 + 保存格式（agent 中立驱动）
@@ -99,7 +97,7 @@ class Orchestrator:
     # ===================================================================
     # 阶段二：持续监控（每日/每周推送）
     # ===================================================================
-    def run_daily(self, since_days: int = 1, send: bool = True) -> dict:
+    def run_daily(self, since_days: int = 1) -> dict:
         """执行每日情报收集."""
         from .crawlers.news_crawler import NewsAggregator
         from .crawlers.academic_crawler import AcademicAggregator
@@ -148,11 +146,9 @@ class Orchestrator:
             "policy_count": len(cats.get("policy", [])),
             "html_path": str(path),
         }
-        if send:
-            self.email.send_html(f"{self.domain.get('name')} 每日情报 · {today_str()}", html)
         return result
 
-    def run_weekly(self, since_days: int = 7, send: bool = True) -> dict:
+    def run_weekly(self, since_days: int = 7) -> dict:
         """执行每周金融政策简报."""
         from .crawlers.finance_crawler import FinanceAggregator
         fin_agg = FinanceAggregator(self.config)
@@ -181,8 +177,6 @@ class Orchestrator:
             "market_count": len(market_data),
             "html_path": str(path),
         }
-        if send:
-            self.email.send_html(f"{self.domain.get('name')} 每周简报 · {today_str()}", html)
         return result
 
     def run_timeline(self, since_days: int = 365) -> dict:

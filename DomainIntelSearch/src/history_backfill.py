@@ -30,16 +30,16 @@ class HorizonPolicy:
 
 
 POLICIES = {
-    "weekly": HorizonPolicy("weekly", 7, 1, 28, 21, 35),
-    "monthly": HorizonPolicy("monthly", 30, 7, 120, 90, 150),
-    "quarterly": HorizonPolicy("quarterly", 90, 30, 360, 270, 450,
+    "weekly": HorizonPolicy("weekly", 7, 1, 42, 32, 53),
+    "monthly": HorizonPolicy("monthly", 30, 7, 180, 135, 225),
+    "quarterly": HorizonPolicy("quarterly", 90, 30, 540, 405, 675,
                                 bucket_mode="calendar_month"),
-    "semiannual": HorizonPolicy("semiannual", 183, 30, 720, 549, 915,
+    "semiannual": HorizonPolicy("semiannual", 183, 30, 1080, 824, 1373,
                                  bucket_mode="calendar_month"),
-    "biennial": HorizonPolicy("biennial", 730, 30, 3000, 2400, 3600,
+    "biennial": HorizonPolicy("biennial", 730, 30, 4500, 3600, 5400,
                                minimum_total_ratio=.80,
                                bucket_mode="calendar_month"),
-    "fiveyear": HorizonPolicy("fiveyear", 1826, 30, 8000, 7000, 9000,
+    "fiveyear": HorizonPolicy("fiveyear", 1826, 30, 12000, 10500, 13500,
                                minimum_total_ratio=.875,
                                bucket_mode="calendar_month"),
 }
@@ -464,7 +464,7 @@ def backfill_history(config: dict, store, horizon: str, *, target: int | None = 
         # A healthy primary provider can satisfy the bucket by itself. Papers
         # enrich the mix up to roughly 35%; they are never a mathematical
         # dependency for the coverage gate.
-        paper_quota = min(len(papers), math.ceil(per_bucket * .35))
+        paper_quota = min(len(papers), math.ceil(per_bucket * .70))
         chosen_papers = papers[:paper_quota]
         chosen_news = news[:max(0, per_bucket - len(chosen_papers))]
         if len(chosen_news) + len(chosen_papers) < per_bucket:

@@ -103,11 +103,11 @@ def test_report_graph_uses_only_persisted_evidence_edges():
     assert graph["gap"] == "no_persisted_evidence_edges"
 
 
-def test_email_is_hard_disabled_even_when_environment_or_config_enables_it(monkeypatch):
-    monkeypatch.setenv("INTDOG_DISABLE_EMAIL", "0")
-    monkeypatch.setenv("INTDOG_SMTP_PASSWORD", "secret")
-    from src.services.email_service import EmailService
+def test_email_delivery_is_not_part_of_the_runtime_interface():
+    import inspect
+    from src.orchestrator import Orchestrator
+    from src.scheduler import PeriodicScheduler
 
-    service = EmailService({"email": {"enabled": True, "server": "smtp.example"}})
-    assert service.enabled is False
-    assert service.send_html("subject", "body") is False
+    assert "send" not in inspect.signature(Orchestrator.run_daily).parameters
+    assert "send" not in inspect.signature(Orchestrator.run_weekly).parameters
+    assert not hasattr(PeriodicScheduler, "_send_digest")

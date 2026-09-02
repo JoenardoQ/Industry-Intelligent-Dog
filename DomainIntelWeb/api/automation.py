@@ -163,7 +163,8 @@ class AutomationScheduler:
             title, args = f"自动聚合{action}情报", [f"crawl-{action}", "--folder", folder]
         else:
             title = f"自动生成{action}报告"
-            provider = str(schedule.get("provider") or "")
+            provider = str(schedule.get("provider") or
+                           self.repo.effective_workflow_settings(folder, action)["provider"])
             if not provider:
                 raise SchedulePaused("provider_required", "生成计划必须显式选择 Provider")
             ready = self.readiness(provider, self.data_root / folder)

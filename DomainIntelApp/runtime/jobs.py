@@ -825,6 +825,7 @@ class ManagedJob:
             "operation_payload": self.metadata.get("operation_payload", {}),
             "parent_run_id": self.metadata.get("parent_run_id"),
             "schedule_action": self.metadata.get("schedule_action"),
+            "result_kind": self.metadata.get("result_kind", "unknown"),
             "stage": "queued", "progress": 0.0, "artifact_path": None,
         }
         self.manager.store.write(self._manifest)
@@ -1070,6 +1071,9 @@ class ManagedJob:
                 status, error = "failed", f"Timeout after {self.timeout:g}s"
             elif self._cancel.is_set():
                 status, error = "cancelled", "Cancelled by user"
+            elif returncode == 0 and self.metadata.get("requires_artifact") and not \
+                    self._manifest.get("artifact_path"):
+                status, error = "partial", "Required artifact was not published"
             elif returncode == 0:
                 status, error = "completed", ""
             elif returncode == PARTIAL_EXIT_CODE:

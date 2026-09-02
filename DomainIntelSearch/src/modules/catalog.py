@@ -239,33 +239,6 @@ class ResearchBriefModule(BaseModule):
 
 
 # ======================================================================
-# 推送模块（deliver）
-# ======================================================================
-@register
-class EmailSendModule(BaseModule):
-    spec = ModuleSpec(
-        id="email_send", name="邮件推送", category="deliver",
-        description="把本次生成的报告通过 SMTP 发送给收件人（需在 settings.yaml 配置 email 段）",
-        kind="code", after=["daily_report", "weekly_report", "timeline_report"],
-    )
-
-    def run(self, ctx: ModuleContext) -> ModuleResult:
-        reports = ctx.state.get("reports", {})
-        if not reports:
-            return ModuleResult(ok=False, message="本次运行未生成任何报告，跳过邮件")
-        sent, failed = [], []
-        for rtype, path in reports.items():
-            html = Path(path).read_text(encoding="utf-8")
-            ok = ctx.orch.email.send_html(
-                f"{ctx.industry} {rtype} 报告 · {today_str()}", html)
-            (sent if ok else failed).append(rtype)
-        ctx.log(f"[email_send] 成功 {len(sent)} / 失败 {len(failed)}")
-        return ModuleResult(ok=bool(sent) or not failed,
-                            message=f"邮件成功 {len(sent)}，失败 {len(failed)}（未配置 SMTP 记为失败）",
-                            data={"sent": sent, "failed": failed})
-
-
-# ======================================================================
 # 研究模块（research，LLM 任务包）
 # ======================================================================
 class _AgentModule(BaseModule):

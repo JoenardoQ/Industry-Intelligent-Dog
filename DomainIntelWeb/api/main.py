@@ -177,6 +177,15 @@ def _job_rows() -> list[dict]:
         except (TypeError, ValueError):
             return None
 
+    def elapsed_seconds(started, finished=None) -> int:
+        try:
+            start = datetime.fromisoformat(str(started).replace("Z", "+00:00"))
+            end = (datetime.fromisoformat(str(finished).replace("Z", "+00:00"))
+                   if finished else datetime.now(timezone.utc))
+            return max(0, int((end - start).total_seconds()))
+        except (TypeError, ValueError):
+            return 0
+
     for task in service.repo.list_tasks(limit=500):
         run_id = task["id"]
         manifest = manifests.pop(run_id, {})
@@ -184,6 +193,10 @@ def _job_rows() -> list[dict]:
         heartbeat = task.get("heartbeat_at") or task.get("updated_at")
         age = heartbeat_age(heartbeat)
         status = str(task["status"])
+        progress = max(0, min(100, int(task.get("progress") or 0)))
+        task_input = task.get("input") if isinstance(task.get("input"), dict) else {}
+        execution_mode = str(task_input.get("execution_mode") or "")
+        operation = str(task.get("operation") or "")
         recovery = []
         if status in {"queued", "running", "cancelling", "paused"}:
             recovery.append("cancel")
@@ -197,7 +210,14 @@ def _job_rows() -> list[dict]:
                             and age is not None and age > 45),
             "active": run_id in active_ids,
             "stage": str(task.get("stage") or "queued"),
-            "progress": max(0, min(100, int(task.get("progress") or 0))),
+            "progress": 100 if status == "completed" else progress,
+            "progress_mode": ("determinate" if progress > 0 or status == "completed"
+                              else "indeterminate"),
+            "elapsed_seconds": elapsed_seconds(task.get("started_at"), task.get("finished_at")),
+            "result_kind": ("task_package" if execution_mode == "taskpack" else
+                            "local_data" if operation in {
+                                "daily", "history", "coverage", "bootstrap"} else
+                            "artifact" if operation else "unknown"),
             "artifact_path": task.get("output_path") or
                              manifest.get("artifact_path") or None,
             "parent_run_id": task.get("parent_run_id"),
@@ -229,6 +249,11 @@ def _job_rows() -> list[dict]:
             "active": manifest.get("run_id") in active_ids,
             "stage": manifest.get("stage"),
             "progress": max(0, min(100, progress)),
+            "progress_mode": ("determinate" if progress > 0 or status == "completed"
+                              else "indeterminate"),
+            "elapsed_seconds": elapsed_seconds(
+                manifest.get("started_at"), manifest.get("finished_at")),
+            "result_kind": str(manifest.get("result_kind") or "unknown"),
             "artifact_path": manifest.get("artifact_path"),
             "parent_run_id": manifest.get("parent_run_id"),
             "operation": manifest.get("operation"),

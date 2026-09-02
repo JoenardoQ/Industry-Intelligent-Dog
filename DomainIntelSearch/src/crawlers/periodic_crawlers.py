@@ -59,7 +59,7 @@ def _matches(text: str, keywords: list[str]) -> list[str]:
     return hits
 
 
-def _search_terms(keywords: list[str], limit: int = 8) -> list[str]:
+def _search_terms(keywords: list[str], limit: int = 12) -> list[str]:
     """Prefer discriminative English technical terms for global search APIs."""
     unique = list(dict.fromkeys(str(value).strip() for value in keywords if str(value).strip()))
     def rank(value: str):
@@ -130,7 +130,7 @@ def fetch_github(keywords: list[str], per_kw: int = 5, days: int = 30) -> list[d
 # 基于新闻 RSS 的关键词过滤（融资 / 招聘 / CEO）
 # ----------------------------------------------------------------------
 def _fetch_rss(feeds: list[dict], kw_include: list[str], category: str,
-               domain_keywords: list[str], max_items: int = 20,
+               domain_keywords: list[str], max_items: int = 30,
                since_days: int = 7) -> list[dict]:
     from .http_utils import parse_feed
     out, seen = [], set()
@@ -138,7 +138,7 @@ def _fetch_rss(feeds: list[dict], kw_include: list[str], category: str,
         parsed = parse_feed(feed["url"], name=feed.get("name", "RSS"))
         if parsed is None:
             continue  # 失败已登记到 http_utils.feed_failures()
-        for e in parsed.entries[:30]:
+        for e in parsed.entries[:45]:
             title = e.get("title", "")
             summary = e.get("summary", "") or e.get("description", "")
             text = title + " " + summary
@@ -179,18 +179,18 @@ CEO_KW = ["ceo", "首席执行官", "总裁", "创始人", "董事长", "founder
 
 
 def fetch_funding(feeds: list[dict], domain_keywords: list[str],
-                  max_items: int = 20, since_days: int = 7) -> list[dict]:
+                  max_items: int = 30, since_days: int = 7) -> list[dict]:
     return _fetch_rss(feeds, FUNDING_KW, "funding", domain_keywords,
                       max_items, since_days)
 
 
 def fetch_hiring(feeds: list[dict], domain_keywords: list[str],
-                 max_items: int = 20, since_days: int = 7) -> list[dict]:
+                 max_items: int = 30, since_days: int = 7) -> list[dict]:
     return _fetch_rss(feeds, HIRING_KW, "hiring", domain_keywords,
                       max_items, since_days)
 
 
 def fetch_ceo(feeds: list[dict], domain_keywords: list[str],
-              max_items: int = 20, since_days: int = 7) -> list[dict]:
+              max_items: int = 30, since_days: int = 7) -> list[dict]:
     return _fetch_rss(feeds, CEO_KW, "ceo", domain_keywords,
                       max_items, since_days)

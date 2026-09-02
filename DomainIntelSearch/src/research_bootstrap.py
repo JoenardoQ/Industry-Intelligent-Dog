@@ -21,7 +21,8 @@ from .services.provider_factory import create_provider
 
 from .knowledge_model import KnowledgeModel
 from .source_discovery import (SOURCE_CATEGORIES, balance_source_origins,
-                               merge_sources, seed_sources, source_origin)
+                               build_discovery_task, merge_sources, seed_sources,
+                               source_origin)
 
 
 PRIMARY_CATEGORIES = {"official", "associations", "financials", "journals"}
@@ -411,21 +412,7 @@ def build_tasks(industry: str, industry_en: str = "") -> list[dict]:
         "admission": "candidate_only",
         "allowed_statuses": ["candidate"],
         "depends_on": [],
-        "prompt": f"""为“{industry} / {industry_en or industry}”建立全面的信息源地图。先搜索再作答。
-只输出 JSON 对象；类别必须包含 official, associations, blogs, platforms, self_media,
-news, journals, financials, finance。不要设置总量、每类数量或 Top 10 配额；先建立
-region × subdomain × value_chain_stage × entity_type × source_type × event_type ×
-time_horizon 覆盖单元，按缺口和边际新增搜索。不设中外比例硬限制，但要尽可能提高
-中国发布者原生来源覆盖，尤其是政府/监管、官方媒体、垂直媒体与可靠行业自媒体。每项字段：
-name,url,note,tier,coverage,publisher_country,language(zh/en),
-	origin(china/international),access,selection_reason,monitoring_status(candidate),
-access_note。中文源必须是中国发布者原生网站，
-不得用外站中文翻译页充数。优先政府/监管/统计、标准组织、公司披露、同行评审论文；
-媒体用于交叉验证，社交媒体只能作为线索。优质但因登录、付费墙、反爬或无 RSS 而无法
-自动抓取的来源仍应推荐，标为 recommended_manual 并说明接入障碍。禁止虚构 URL。
-	所有发现项只能是待审查 candidate；URL 可访问、模型评分或搜索排名都不能直接产生 active/trusted。
-	另输出 coverage_ledger、query_ledger 和 stopping_reason；每条 query 记录 dimensions、
-实际查询词、选择理由、discovered_urls 与停止理由。这些记录一律视为待验证线索。""",
+        "prompt": build_discovery_task(industry, industry_en)["prompt"],
     }
     chain_task = {
         "stage": "value_chain", "title": "02 基于合格来源重建产业链",

@@ -9,6 +9,35 @@ from .base import BaseCrawler, Article
 from ..utils import days_ago, article_id, SeenStore
 
 
+DEFAULT_PAPERS_PER_DAY = 40
+
+
+def select_paper_portfolio(items: list, *, limit: int, matches) -> list:
+    """Reserve half of the paper budget for adjacent frontier candidates."""
+    limit = max(1, int(limit))
+    core = [item for item in items if matches(item)]
+    frontier = [item for item in items if not matches(item)]
+    core_target = (limit + 1) // 2
+    selected = core[:core_target]
+    selected.extend(frontier[:max(0, limit - len(selected))])
+    if len(selected) < limit:
+        selected.extend(core[core_target:core_target + limit - len(selected)])
+    for item in selected:
+        frontier_item = not matches(item)
+        if isinstance(item, dict):
+            item["discovery_mode"] = "frontier_candidate" if frontier_item else "core"
+            item["fact_status"] = "candidate" if frontier_item else "collected"
+            if frontier_item:
+                item["selection_reason"] = "category_frontier_expansion"
+        else:
+            item.extra["discovery_mode"] = (
+                "frontier_candidate" if frontier_item else "core")
+            item.extra["fact_status"] = "candidate" if frontier_item else "collected"
+            if frontier_item:
+                item.extra["selection_reason"] = "category_frontier_expansion"
+    return selected
+
+
 class ArxivCrawler(BaseCrawler):
     """arXiv 论文爬虫（无需 API Key）."""
 
@@ -32,7 +61,8 @@ class ArxivCrawler(BaseCrawler):
         params = {
             "search_query": query,
             "start": 0,
-            "max_results": self.academic_cfg.get("max_papers_per_day", 20) * 3,
+            "max_results": self.academic_cfg.get(
+                "max_papers_per_day", DEFAULT_PAPERS_PER_DAY) * 3,
         }
         try:
             resp = fetch_url(self.BASE, params=params, timeout=25,
@@ -60,7 +90,8 @@ class ArxivCrawler(BaseCrawler):
             # 修复：行业关键词多为中文，英文论文几乎不命中 → 只用 ASCII 关键词过滤；
             # 若命中过少，保留分类内最新 N 条（arXiv 分类本身即行业方向，属合理兜底），
             # 并标注 keyword_match=False 保持诚实。
-            max_n = self.academic_cfg.get("max_papers_per_day", 20)
+            max_n = self.academic_cfg.get(
+                "max_papers_per_day", DEFAULT_PAPERS_PER_DAY)
             en_kw = [k for k in self.domain_cfg.get("keywords", [])
                      if k and k.isascii()]
             matched = [a for a in articles
@@ -69,11 +100,8 @@ class ArxivCrawler(BaseCrawler):
                 a.extra["keyword_match"] = a in matched
             # Profiles with searchable English terms must not silently fall
             # back to unrelated category-wide papers.
-            if en_kw:
-                return matched[:max_n]
-            for article in articles:
-                article.extra["selection_reason"] = "category_only_no_ascii_keywords"
-            return articles[:max_n]
+            return select_paper_portfolio(
+                articles, limit=max_n, matches=lambda article: article in matched)
         except Exception as e:
             print(f"[Arxiv] 抓取失败: {e}")
             return []
@@ -99,7 +127,8 @@ class SemanticScholarCrawler(BaseCrawler):
         params = {
             "query": query,
             "fields": "title,url,abstract,authors,publicationDate,venue",
-            "limit": self.academic_cfg.get("max_papers_per_day", 20),
+            "limit": self.academic_cfg.get(
+                "max_papers_per_day", DEFAULT_PAPERS_PER_DAY),
             "year": datetime.now().year,
         }
         headers = {}

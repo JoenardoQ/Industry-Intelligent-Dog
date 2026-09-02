@@ -10,7 +10,8 @@ from fastapi.responses import FileResponse
 
 from ..schemas import (BackgroundPermissionMutation, BackgroundPermissionUpdate,
                        BackgroundState, CustomAgentProfile, HealthState,
-                       SetupState, ShutdownState)
+                       SetupState, ShutdownState, WorkflowSettingsState,
+                       WorkflowSettingsUpdate)
 from ..lifecycle import request_shutdown
 
 
@@ -123,6 +124,45 @@ def build_system_router(*, data_root: Path, jobs, automation, repo,
                 "mcp_configs": mcp_configs,
                 "agent_profiles": agent_profiles,
                 "privacy_note": "仅检测 PATH 与公开状态命令；不读取 GUI 私有登录数据"}
+
+    @router.get("/settings/effective", response_model=WorkflowSettingsState)
+    def effective_settings(folder: str = Query(min_length=1, max_length=80),
+                           operation: str = Query(default="*", max_length=64)) -> dict:
+        try:
+            return repo.effective_workflow_settings(folder, operation)
+        except (FileNotFoundError, ValueError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @router.put("/settings/global/{operation}", response_model=dict)
+    def put_global_settings(operation: str, request: WorkflowSettingsUpdate) -> dict:
+        try:
+            return repo.put_workflow_settings(
+                None, operation, request.model_dump(exclude_unset=True))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @router.delete("/settings/global/{operation}", response_model=dict)
+    def delete_global_settings(operation: str) -> dict:
+        try:
+            return {"deleted": repo.delete_workflow_settings(None, operation)}
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @router.put("/industries/{folder}/settings/{operation}", response_model=dict)
+    def put_industry_settings(folder: str, operation: str,
+                              request: WorkflowSettingsUpdate) -> dict:
+        try:
+            return repo.put_workflow_settings(
+                folder, operation, request.model_dump(exclude_unset=True))
+        except (FileNotFoundError, ValueError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @router.delete("/industries/{folder}/settings/{operation}", response_model=dict)
+    def delete_industry_settings(folder: str, operation: str) -> dict:
+        try:
+            return {"deleted": repo.delete_workflow_settings(folder, operation)}
+        except (FileNotFoundError, ValueError) as exc:
+            raise HTTPException(400, str(exc)) from exc
 
     @router.get("/background", response_model=BackgroundState)
     def background() -> dict:

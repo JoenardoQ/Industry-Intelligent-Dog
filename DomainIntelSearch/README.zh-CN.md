@@ -39,7 +39,7 @@ python -m src.main backfill-history --folder AI --kind fiveyear
 支持 checkpoint 续跑与供应商熔断。OpenAlex 的正式规模使用需通过环境变量
 `OPENALEX_API_KEY` 提供免费 Key；不配置时其他新闻源仍可独立满足时间覆盖门槛。
 生成器检查总量、时间桶覆盖率与发布者多样性；不达标时拒绝伪装成完整报告。
-完整方法见 [`docs/history-collection-method.md`](../docs/history-collection-method.md)。
+当前配额与完整性边界见[架构合同](../DESIGN.zh-CN.md#来源论文与采集预算)。
 
 ```bash
 # 1. 创建目录、种子来源和研究任务；不联网、不调用模型
@@ -107,11 +107,10 @@ python -m src.main verify --industry 人工智能
 
 `crawl-daily` 使用可机读结果契约：六类均成功为 `completed`，部分失败为
 `partial`，全部失败为 `failed`。`partial/failed` 会返回非零退出码，App 不会推进
-调度 checkpoint，下次 tick 可重试。邮件、验证和日志是后处理，不会把六类采集失败
+调度 checkpoint，下次 tick 可重试。验证和日志是后处理，不会把六类采集失败
 伪装成成功。
 
-默认 Web 调度不会调用邮件后处理；它为每个任务显式设置 `INTDOG_DISABLE_EMAIL=1`。
-CLI 的可选邮件能力为兼容用途保留，但不属于当前 App 工作流。
+IntDog 不提供邮件投递；周期结果保存在本地工作台和便携 HTML 中。
 
 历史 `reports_event` 主张只追加/更新同一主张；离开近期验证窗口不会被标记为
 superseded。
@@ -174,7 +173,7 @@ degraded / failed`，人工源记录 `manual`，未配置源记录 `unconfigured
 - **API 密钥**：只从供应商环境变量或 `INTDOG_LLM_API_KEY` 读取；不把真实密钥写入
   受版本控制的 YAML。非本机 API Base 必须使用 HTTPS。
 - **采集 API**：NewsAPI、GNews 和 Semantic Scholar 密钥分别使用 `NEWSAPI_KEY`、
-  `GNEWS_API_KEY`和 `SEMANTIC_SCHOLAR_API_KEY`；SMTP 使用 `INTDOG_SMTP_PASSWORD`。
+  `GNEWS_API_KEY` 和 `SEMANTIC_SCHOLAR_API_KEY`。
 - **本地分享**：`serve` 默认只监听 `127.0.0.1`；只有确认局域网可见风险后才使用
   `--host 0.0.0.0`。该简易服务没有身份认证。
 - **403/429/超时**：通常是目标站反爬、限流或网络限制。系统应保留失败记录并继续其他来源，不把失败页当正文。

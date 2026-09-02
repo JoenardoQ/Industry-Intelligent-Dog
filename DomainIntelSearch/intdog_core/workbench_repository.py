@@ -18,7 +18,7 @@ class WorkbenchRepositoryMixin:
         with self.transaction() as con:
             con.execute("""INSERT OR IGNORE INTO automation_schedules
                 (industry_id,action,enabled,local_time,weekday,monthday,timezone,
-                 catch_up,updated_at) VALUES(?,?,0,'08:00',0,1,'Asia/Shanghai',1,?)""",
+                 catch_up,provider,updated_at) VALUES(?,?,0,'08:00',0,1,'Asia/Shanghai',1,'',?)""",
                         (iid, action, now))
         return self.get_schedule(folder, action)
 
@@ -48,7 +48,7 @@ class WorkbenchRepositoryMixin:
                         local_time: str, weekday: int = 0, monthday: int = 1,
                         timezone_name: str = "Asia/Shanghai",
                         catch_up: bool = True, pipeline_mode: str = "generate",
-                        provider: str = "codex") -> dict:
+                        provider: str = "") -> dict:
         if action not in {"daily", "weekly", "monthly", "quarterly"}:
             raise ValueError("不支持的调度动作")
         try:
@@ -77,7 +77,7 @@ class WorkbenchRepositoryMixin:
                 updated_at=excluded.updated_at""",
                 (iid, action, int(enabled), f"{hour:02d}:{minute:02d}", int(weekday),
                  int(monthday), timezone_name, int(catch_up), pipeline_mode,
-                 provider or "codex", now))
+                 provider, now))
         return self.get_schedule(folder, action)
 
     def claim_schedule(self, folder: str, action: str, period_key: str,

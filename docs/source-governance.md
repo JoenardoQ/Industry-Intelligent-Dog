@@ -25,27 +25,13 @@ The source catalog may be larger than the automatic monitoring portfolio. Status
 - `reserve`: valid but redundant with a stronger source or currently adds no regional, value-chain, topical, or publisher coverage.
 - `quarantined`: invalid URL, conflicting publisher identity, or another high-risk condition; excluded from automatic collection.
 
-The system neither pads categories to a fixed count nor deletes sources for exceeding a count. Each automatic monitoring category uses a dynamic target:
-
-| Category | Minimum | Baseline | Maximum | Rationale |
-| --- | ---: | ---: | ---: | --- |
-| Official, regulatory, statistics | 4 | 6 | 12 | Cover major jurisdictions and standards bodies |
-| Associations and standards bodies | 3 | 5 | 9 | Prevent multiple endpoints from one body consuming the portfolio |
-| Company and institutional blogs | 3 | 5 | 9 | Add first-party technology and product information |
-| Data and developer platforms | 3 | 5 | 9 | Track datasets, code, and product signals |
-| High-quality self-media | 2 | 4 | 6 | Leads only, never sole factual evidence |
-| News media | 5 | 8 | 14 | Require publisher and regional diversity |
-| Journals, conferences, preprints | 4 | 6 | 12 | Cover core research branches |
-| Filings and disclosures | 4 | 6 | 12 | Cover major listing venues and company groups |
-| Financial and policy analysis | 3 | 5 | 9 | Add market and policy interpretation |
-
-The dynamic target is the baseline plus a value-chain complexity increment, clamped to the bounds. Six, twelve, and twenty-four chain nodes add one, two, and three slots respectively. After the target is reached, a candidate becomes active only if it fills a missing region or automated access method, or the coverage ledger explicitly marks it as filling a critical gap. A source's self-declared new label cannot trigger expansion by itself; otherwise the source becomes reserve. China-native sources receive coverage priority without a hard ratio; geography never overrides authority and verifiability.
+The system neither lowers the admission bar to meet a count nor deletes valid catalog entries above it. Each of the nine automatic-monitoring categories has a minimum coverage target of eight and a target and hard cap of ten. A shortage remains explicit; additional valid sources stay available as manual recommendations or reserve entries. China-native sources receive coverage priority without a hard ratio; geography never overrides authority and verifiability.
 
 ## Ranking and Stop Conditions
 
 Candidates receive an auditable score from code-verified publisher trust, primary or authoritative tier, RSS/API accessibility, coverage gain, China-native coverage, and manual addition history. By default, only one core endpoint per publisher may occupy a category; an additional endpoint is allowed only for distinct topical coverage.
 
-Portfolio growth stops when the dynamic target is met and every remaining candidate adds no topic, region, publisher, or automated-access coverage, or when the category maximum is reached. If the minimum cannot be met, governance reports the gap and never promotes low-quality candidates merely to reach a number.
+Portfolio growth stops at ten active sources, when every remaining candidate adds no topic, region, publisher, or automated-access coverage, or when the search budget is exhausted. If eight cannot be reached, governance reports the gap and never promotes low-quality candidates merely to reach a number.
 
 ## Acceptance and Risk Coverage
 

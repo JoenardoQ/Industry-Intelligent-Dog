@@ -51,6 +51,17 @@ class RuntimeJobTests(unittest.TestCase):
             self.assertEqual(row["artifact_path"], "/tmp/report.md")
             self.assertEqual(row["parent_run_id"], "old-run")
 
+    def test_missing_required_artifact_is_partial_not_completed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            manager = JobManager(temp)
+            result = manager.run_sync(
+                [sys.executable, "-c", "print('research text only')"],
+                cwd=temp, title="report", timeout=10,
+                metadata={"operation": "report", "requires_artifact": True},
+            )
+            self.assertEqual(result.status, "partial")
+            self.assertIn("artifact", result.error.lower())
+
     def test_cancel_kills_process_and_timeout_is_terminal(self):
         with tempfile.TemporaryDirectory() as temp:
             manager = JobManager(temp)

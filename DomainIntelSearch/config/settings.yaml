@@ -16,20 +16,6 @@ domain:
     - "LLM"
     - "大模型"
 
-# ---------- 已退役邮件字段（仅供旧配置迁移） ----------
-email:
-  enabled: false                    # 产品级硬禁用；配置或环境变量均不能开启
-  smtp_server: "smtp.qq.com"     # QQ邮箱: smtp.qq.com | 163: smtp.163.com | Gmail: smtp.gmail.com | Outlook: smtp-mail.outlook.com
-  smtp_port: 465                 # SSL端口: QQ/163=465, Gmail=465, Outlook=587
-  use_ssl: true
-  sender: "your_email@qq.com"    # 发件人邮箱
-  # 旧授权码变量不会被运行时读取
-  recipients:                    # 收件人列表
-    - "recipient@example.com"
-  daily_time: "08:00"            # 每日推送时间
-  weekly_day: "monday"           # 每周推送日
-  send_on_periodic: true          # crawl-daily / crawl-weekly 完成后发送
-
 # ---------- 新闻源设置 ----------
 news:
   # 国内源更新频率较低：日更时最多回看 3 天，seen 去重避免重复推送。
@@ -83,7 +69,7 @@ academic:
   semantic_scholar_fields:       # Semantic Scholar 领域
     - "Computer Science"
     - "Machine Learning"
-  max_papers_per_day: 20
+  max_papers_per_day: 40
 
 # ---------- LLM / Agent 设置（可选） ----------
 # 重要：DomainIntelSearch 不绑定任何特定 agent 平台（WorkBuddy / Codex / Claude Code 皆可）。
@@ -152,4 +138,3 @@ iios:
 # ---------- 桌面启动设置 ----------
 desktop:
   crawl_interval_hours: 4        # 后台爬虫抓取间隔（小时）
-  send_email: false              # 后台抓取完成后是否发邮件（需先配置 email 段）

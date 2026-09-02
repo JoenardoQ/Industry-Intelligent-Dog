@@ -1,66 +1,77 @@
-# IntDog Architecture
+# IntDog Current Architecture
 
-[中文](DESIGN.zh-CN.md) · [User guide](README.md) · [Current status](IMPLEMENTATION_STATUS.md)
+[中文](DESIGN.zh-CN.md) · [User guide](README.md)
 
 ## Product boundary
 
-IntDog is a local-first desktop industry-intelligence workbench. Electron owns the native lifecycle and encrypted credential boundary; a frozen Python sidecar serves one localhost FastAPI application; React is the released user interface. Windows, macOS, and Linux share the same source and have independent native artifacts and gates.
+IntDog is a local-first desktop industry-intelligence workbench. It builds an open-world knowledge system, continuously discovers sources, value chains, entities, events, and emerging directions, and produces research artifacts with explicit evidence status. Model output is review-required draft material, not confirmed fact or investment advice.
 
-It is not a bundled language model, a commercial-data entitlement, or a promise that a detected desktop agent is authenticated. Task-package mode works without a model. Direct generation requires an authenticated Codex/Claude CLI or an explicitly configured API provider.
+The released product uses Electron, React, FastAPI, and SQLite. The three desktop platforms share business source code and produce separate native packages. Industry data, databases, logs, and generated artifacts remain on the user's machine and are excluded from Git.
 
-## Runtime
+## Runtime and dependency direction
 
 ```text
-Electron
-  ├─ safeStorage + minimal preload IPC
-  ├─ starts one frozen Python sidecar on 127.0.0.1:random-port
-  └─ React renderer
-       └─ session-protected FastAPI/OpenAPI
-            ├─ intdog_core SQLite fact and audit store
-            ├─ collection, research, reports, scheduling, jobs
-            ├─ read-only MCP
-            └─ review-gated Agent Bridge
+Electron: window, lifecycle, operating-system secure storage
+  └─ React: the only released user interface
+      └─ session-protected localhost FastAPI
+          ├─ intdog_core: SQLite, schema, evidence, jobs, and audit
+          ├─ Search: source connectors, retrieval, research, and reports
+          └─ Agent/provider adapters: local CLI, API, MCP, task packages
 ```
 
-Electron generates a random session capability on every launch. The renderer never receives API keys. Keys are accepted only through preload IPC, encrypted with the operating-system secure store, and transferred through a bounded anonymous one-shot pipe. If secure encryption is unavailable, storage is refused.
+- SQLite is the sole business-state write authority.
+- JSON, Markdown, and portable single-file HTML are views and artifacts, not a second database.
+- Electron does not write domain facts; React has no filesystem or credential access.
+- API keys enter only operating-system secure storage and reach the sidecar through a one-shot anonymous pipe.
 
-Background execution is a separate, revocable per-user permission. Platform Task
-Scheduler/LaunchAgent/systemd entries launch the same frozen Worker; they do not own
-schedules or broaden provider authorization. Mutable data lives in the OS user-data
-directory and is retained when the application is uninstalled.
+## Settings inheritance
 
-## Data and evidence
+Industries inherit shared task and Agent/provider defaults. Only actual user overrides are persisted:
 
-SQLite through `intdog_core` is the sole business-write authority. Compatibility JSON and Markdown remain portable views and artifacts. Facts, claims, relations, sources, documents, Stories, tasks, runs, and audits use stable identifiers. Model and external-agent output defaults to `draft_review_required`; absence of evidence remains explicit.
+```text
+system default → global setting → global task override
+               → industry override → industry-task override
+```
 
-Industry coverage is open-world: subdomain, chain stage, region, entity kind, source class, event, and time horizon are measured as gaps instead of assuming a fixed Top 10 is complete. Long-history acquisition is bounded by count, time-bucket, and publisher-diversity gates.
+A global change affects inherited values only. Every override reports its scope and can be reset to “inherit global.” Workflow settings persist only the provider, execution mode, and periodic pipeline mode. Secrets remain outside SQLite in desktop secure storage.
 
-## Agent and provider architecture
+## Agents and providers
 
-`DomainIntelSearch/src/services/capability_manifest.py` is the authoritative catalog for domestic and international agents and API providers. It owns IDs, region, connection and execution modes, public commands, authentication, Web capability, defaults, and scheduling eligibility. Provider construction remains an explicit fail-closed adapter map.
+The capability manifest is the sole Agent/API catalog. Every local Agent uses one diagnosis pipeline: candidate discovery, path normalization, bounded fingerprinting, version probe, authentication probe, and capability decision. A legitimate large CLI must not fail solely because it exceeds a fixed 64 MiB threshold; the executable binding is still revalidated before execution.
 
-- Codex CLI and Claude Code have bounded direct adapters.
-- OpenAI, DeepSeek, Qwen, and Azure OpenAI use explicit API configuration.
-- DeepSeek Harness, Work Buddy, Qwen Code, CodeBuddy, Kimi CLI, Gemini CLI, OpenCode, and unknown agents use read-only MCP or task-package handoff unless a verified adapter exists.
-- Agent Bridge exports tasks and imports validated results atomically into a review-required area. It never writes imported assertions directly into the fact store.
+- Codex CLI and Claude Code execute directly only when their stable non-interactive adapters and public login probes pass.
+- DeepSeek Harness, Work Buddy, Qwen Code, CodeBuddy, Kimi, Gemini CLI, OpenCode, and future Agents use the same diagnosis pipeline. Without a direct adapter they expose MCP, task-package, or result-import workflows only.
+- A running GUI is not a callable Agent. Unknown Agents never gain direct execution implicitly.
+- OpenAI, DeepSeek, Qwen, Azure OpenAI, and compatible APIs require explicit configuration. Remote endpoints require HTTPS.
 
-## Dependency direction
+## One-click workflows and progress
 
-- `intdog_core`: schema, repositories, deterministic domain rules.
-- `DomainIntelSearch/src`: collection and research services; depends on core.
-- `DomainIntelApp/runtime`: neutral data/job compatibility used by applications.
-- `DomainIntelWeb/api`: protected application boundary; depends on services/runtime.
-- `DomainIntelWeb/src`: generated-contract React client; no filesystem access.
-- `DomainIntelDesktop`: lifecycle and packaging only; no domain writes.
+Knowledge structure, industry bootstrap, periodic products, deep research, and Intelligence Lab expose documented defaults. The primary action starts immediately; advanced options may be expanded before execution, but task-package creation is not an implicit second-confirmation step.
 
-The older v2 design is preserved as [historical material](docs/archive/DESIGN-v2-legacy.md). It is not an implementation contract.
+Execution still uses durable jobs and leases. The initiating page shows semantic stage, elapsed time, heartbeat, representative counters, and artifact links. A percentage is shown only when the total is measurable; otherwise the UI reports indeterminate progress. Task-package creation or an empty artifact cannot masquerade as completed research.
 
-## Release gates
+## Source, paper, and collection budgets
 
-Every native host must run the complete Python suite, Web DOM tests and production build, generated OpenAPI drift check, repository check, desktop tests, frozen-sidecar smoke, renderer first-run workflow, restart persistence, and secure-credential lifecycle where available. Unsigned test builds are Pre-releases. Windows signing and macOS signing/notarization are mandatory for stable release.
+The complete source catalog is preserved non-destructively. The monitored portfolio selects sources by marginal coverage value: authority, region, topic or value-chain node, independent publisher, valid yield, and update frequency. A category normally monitors 3–10 sources and may expand when a source adds material coverage; volume never proves completeness.
 
-Current readiness and evidence limitations are recorded in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md); evidence from an older commit never proves a changed working tree.
+Relative to the previous baseline:
 
-`NOM-01`, native installation/service/uninstall lifecycle, and real logged-in Agent
-deep smoke are external gaps until their matching environment produces evidence.
-The SP4 and SP5 A local freeze reports are necessary local evidence, not substitutes.
+- source-discovery and retrieval-candidate budgets increase by 50%;
+- general collection limits increase by 50%;
+- paper targets increase by 100%.
+
+Paper retrieval is also a frontier-discovery channel for possible new subfields, cross-disciplinary transfer, pre-commercial directions, and leading-edge technology. Such observations remain direction candidates and never become industry facts automatically. Expansion remains bounded by deduplication, publisher independence, time windows, rate limits, and artifact quality gates; it may stop early when marginal yield is exhausted.
+
+## Evidence, drift, and prompts
+
+Facts, claims, relations, sources, documents, Stories, jobs, and reviews use stable IDs. Reachable URLs do not prove a claim. Fact admission also requires evidence localization, semantic support, numeric and unit consistency, and claim-type corroboration.
+
+On first run or without a same-version baseline, the summary reads “no drift detected; insufficient data for a trend” and does not raise an alert. Full metrics live in a details view.
+
+Source discovery and industry bootstrap reuse one canonical source prompt so their primary gate cannot drift. Report, research-assistant, and Agent modules still own domain-specific templates. They share evidence states and artifact-quality gates but have not yet migrated to one `PromptSpec`; consolidation must wait for prompt snapshots, output-schema compatibility checks, and regression evaluation.
+
+## Documentation and release
+
+The public repository retains only current, necessary, aligned Chinese and English user guides, architecture, source-governance, and release documentation. Approval packets, iteration logs, screenshot evidence, machine-specific paths, and obsolete state snapshots remain in Git-ignored local work directories instead of product documentation.
+
+Verification uses a risk-driven minimal set covering settings inheritance, Agent diagnosis, job state, source and paper budgets, first-run drift semantics, Git data exclusion, Web production build, and desktop contracts. The user performs the real cold-start industry acceptance; the project supplies a repeatable entry point and checklist without creating user industry data.

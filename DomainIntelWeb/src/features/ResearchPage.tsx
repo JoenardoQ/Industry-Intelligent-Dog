@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Compass, Download, FlaskConical, Play, RefreshCw, Upload } from 'lucide-react'
 import { api, type AgentResult, type AgentResultsPage, type CoveragePayload, type GenerateResult, type HistoryCoveragePayload, type ResearchPayload, type SetupPayload } from '../api'
-import { Empty, Header, Loading, type Toast } from './shared'
+import { Empty, Header, Loading, RunFeedback, type Toast } from './shared'
 import AgentReviewPanel from './research/AgentReviewPanel'
 import ArtifactWorkbench from './research/ArtifactWorkbench'
 
@@ -10,15 +10,15 @@ const reportKinds = [
 ]
 const deepKinds = [['quarterly','季度全景'],['chain','产业链深研'],['landscape','竞争格局'],['market','市场研究']]
 const historyKinds = [
-  ['weekly','周 · 目标 28'],['monthly','月 · 目标 120'],
-  ['quarterly','季 · 目标 360'],['semiannual','半年 · 目标 720'],
-  ['biennial','两年 · 目标 2,800'],['fiveyear','五年 · 目标 7,200'],
+  ['weekly','周 · 目标 42'],['monthly','月 · 目标 180'],
+  ['quarterly','季 · 目标 540'],['semiannual','半年 · 目标 1,080'],
+  ['biennial','两年 · 目标 4,500'],['fiveyear','五年 · 目标 12,000'],
 ]
 const horizonLabels: Record<string,string> = {weekly:'周',monthly:'月',quarterly:'季',semiannual:'半年',biennial:'两年',fiveyear:'五年'}
 
 export default function ResearchPage({ industry, notify, setup=null }: { industry: string; notify: (t: Toast) => void; setup?: SetupPayload|null }) {
   const [data, setData] = useState<ResearchPayload | null>(null); const [coverage, setCoverage] = useState<CoveragePayload | null>(null); const [history, setHistory] = useState<HistoryCoveragePayload | null>(null)
-  const [error, setError] = useState(''); const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(''); const [busy, setBusy] = useState(false);const [runId,setRunId]=useState('')
   const [action, setAction] = useState('bootstrap')
   const [kind, setKind] = useState('')
   const [importText,setImportText]=useState('')
@@ -38,7 +38,7 @@ export default function ResearchPage({ industry, notify, setup=null }: { industr
     api<HistoryCoveragePayload>(`/industries/${industry}/history`,options),
   ]); const resultRequest=api<AgentResultsPage>(`/industries/${industry}/agent-bridge/results?limit=50&offset=0`,options); const [core,result]=await Promise.allSettled([coreRequest,resultRequest]); if(!isCurrent(request.generation,request.controller))return; if(core.status==='fulfilled'){const [research,frontier,historical]=core.value;setData(research);setCoverage(frontier);setHistory(historical)}else{const detail=String(core.reason);setError(detail);notify({kind:'error',text:detail})} if(result.status==='fulfilled'){setAgentResults(result.value.items);setAgentResultsTotal(result.value.total);setAgentResultsNextOffset(result.value.next_offset??null)}else{const detail=String(result.reason);setAgentResultsError(detail);notify({kind:'error',text:detail})} if(isCurrent(request.generation,request.controller))setAgentResultsLoading(false) }, [beginRequest,industry,isCurrent,notify])
   useEffect(() => { setData(null); setCoverage(null); setHistory(null); setAgentResults([]); setAgentResultsTotal(0); setAgentResultsNextOffset(null); setAgentResultsLoading(true); void load(); return()=>{requestGeneration.current+=1;activeRequest.current?.abort()} }, [load])
-  const generate = async (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); setBusy(true); const values=Object.fromEntries(new FormData(event.currentTarget));const publicAction=['daily','history'].includes(String(values.action));const provider=publicAction?'public_sources':String(values.provider||'');const payload={...values,provider,execution_mode:provider?'direct':'taskpack'}; try { const result=await api<GenerateResult>(`/industries/${industry}/generate`,{method:'POST',body:JSON.stringify(payload)}); notify({kind:'ok',text:`任务已进入队列 · ${result.run_id.slice(0,12)}`}); location.hash='/jobs' } catch(e) { notify({kind:'error',text:String(e)}) } finally { setBusy(false) } }
+  const generate = async (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); setBusy(true); const values=Object.fromEntries(new FormData(event.currentTarget));const payload={action:values.action,kind:values.kind,event:values.event,...(values.provider?{provider:String(values.provider),execution_mode:'direct'}:{})}; try { const result=await api<GenerateResult>(`/industries/${industry}/generate`,{method:'POST',body:JSON.stringify(payload)}); setRunId(result.run_id);notify({kind:'ok',text:`任务已进入队列 · ${result.run_id.slice(0,12)}`}) } catch(e) { notify({kind:'error',text:String(e)}) } finally { setBusy(false) } }
   const initialize = async () => { await api(`/industries/${industry}/coverage/initialize`,{method:'POST'}); notify({kind:'ok',text:'覆盖地图已按产业链端点建立'}); await load() }
   const plan = async () => { const result=await api<{items:{query:string}[]}>(`/industries/${industry}/coverage/plan`,{method:'POST'}); notify({kind:'ok',text:`已生成 ${result.items.length} 条待验证搜索计划`}); await load() }
   const exportTask=async(taskId:string)=>{try{const value=await api(`/industries/${industry}/agent-bridge/tasks/${taskId}`);const blob=new Blob([JSON.stringify(value,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=`intdog-${industry}-${taskId}.json`;link.click();URL.revokeObjectURL(url)}catch(e){notify({kind:'error',text:String(e)})}}
@@ -51,9 +51,9 @@ export default function ResearchPage({ industry, notify, setup=null }: { industr
       <label><span>任务类型</span><select name="action" required value={action} onChange={event=>{setAction(event.target.value);setKind('')}}><option value="bootstrap">初始化行业研究</option><option value="coverage">执行覆盖搜索</option><option value="history">长周期历史证据</option><option value="report">行业报告</option><option value="deep_report">深度研究</option><option value="impact">事件影响分析</option><option value="lab">Intelligence Lab</option><option value="daily">每日采集</option><option value="weekly">每周产物</option><option value="monthly">每月产物</option><option value="quarterly">季度产物</option></select></label>
       <label><span>周期 / 报告类型</span><select name="kind" value={kind} onChange={event=>setKind(event.target.value)} required={['report','deep_report','history'].includes(action)} disabled={!['report','deep_report','history'].includes(action)}><option value="">{['report','deep_report','history'].includes(action)?'请选择类型':'当前任务不需要'}</option>{action==='report'?reportKinds.map(([value,label])=><option key={value} value={value}>{label}</option>):action==='deep_report'?deepKinds.map(([value,label])=><option key={value} value={value}>{label}</option>):action==='history'?historyKinds.map(([value,label])=><option key={value} value={value}>{label}</option>):null}</select></label>
       <label className="studio-event"><span>事件描述</span><input name="event" required={action==='impact'} disabled={action!=='impact'} placeholder={action==='impact'?'例如：先进制程设备出口管制升级':'仅事件影响分析需要'}/></label>
-      <label><span>模型提供方式</span><select name="provider" defaultValue={localStorage.getItem('intdog.provider')==='taskpack'?'':localStorage.getItem('intdog.provider')||''}><option value="">通用任务包</option>{setup?.agents.filter(item=>item.execution==='native').map(item=><option key={item.id} value={item.id}>{item.name}</option>)}{setup?.api_providers.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+      <label><span>仅本次更改智能体</span><select name="provider" defaultValue=""><option value="">使用行业 / 全局默认</option>{setup?.agents.filter(item=>item.execution==='native').map(item=><option key={item.id} value={item.id}>{item.name}</option>)}{setup?.api_providers.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
       <button className="button primary" disabled={busy}>{busy?<RefreshCw className="spin"/>:<Play/>}{busy?'正在创建任务':'开始生成'}</button>
-    </form></section>
+    </form><RunFeedback runId={runId}/></section>
     <section className="section-card history-panel"><div className="section-title"><div><h2>长周期证据覆盖</h2><p className="subtle">全量证据入库；按日、周或月分桶。总量、时间覆盖和至少 5 个发布者同时达标后才生成完整报告。</p></div><button className="button secondary" onClick={load}><RefreshCw/>刷新状态</button></div>
       {!history?<Loading label="正在核对历史覆盖…"/>:<div className="history-grid">{history.items.map(item=><article key={item.horizon} className={item.ready?'ready':''}><div><span>{horizonLabels[item.horizon]}</span><b>{item.ready?'已过生成门槛':'待补齐'}</b></div><strong>{item.admitted_total.toLocaleString()} <small>/ 目标 {item.target.toLocaleString()}</small></strong><p>生成门槛 {item.required_total.toLocaleString()} · 时间桶 {item.buckets_covered}/{item.required_buckets} · 发布者 {item.publisher_count}</p><progress aria-label={`${horizonLabels[item.horizon]}证据目标进度`} max={item.target} value={Math.min(item.admitted_total,item.target)}/><button className="button tertiary" onClick={()=>{setAction('history');setKind(item.horizon);scrollTo({top:0,behavior:'smooth'})}}>采集该周期</button></article>)}</div>}
     </section>

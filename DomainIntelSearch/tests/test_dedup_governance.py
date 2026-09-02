@@ -273,6 +273,20 @@ class SourceGovernanceContractTests(unittest.TestCase):
         self.assertEqual(next(row for row in rows if row["name"] == "Manual authority")
                          ["monitoring_status"], "recommended_manual")
 
+    def test_active_pool_prefers_a_source_that_adds_topic_coverage(self):
+        common = [{**_verified(index, category="official"),
+                   "name": f"A{index:02d}", "coverage": ["shared-topic"]}
+                  for index in range(10)]
+        frontier = {**_verified(99, category="official"),
+                    "name": "Z frontier", "coverage": ["new-frontier-topic"]}
+
+        governed = govern_sources({"official": [*common, frontier]})
+
+        selected = next(row for row in governed["official"]
+                        if row["name"] == "Z frontier")
+        assert selected["monitoring_status"] == "active"
+        assert "topic" in selected["coverage_gain"]
+
     def test_low_quality_shortage_is_reported_not_padded(self):
         governed = govern_sources({"self_media": [{
             "name": "Weak signal", "url": "https://producthunt.com/posts/x",

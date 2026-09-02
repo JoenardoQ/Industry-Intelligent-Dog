@@ -87,6 +87,27 @@ def test_unready_model_schedule_does_not_enter_job_queue(tmp_path):
     assert jobs.calls == []
 
 
+def test_schedule_inherits_shared_provider_until_explicitly_overridden(tmp_path):
+    service = IntDogService(tmp_path)
+    service.create_industry("AI", "人工智能")
+    service.repo.put_workflow_settings(None, "*", {
+        "provider": "claude", "execution_mode": "direct"})
+    service.repo.update_schedule(
+        "AI", "weekly", enabled=False, local_time="08:00",
+        pipeline_mode="generate")
+    jobs = FakeJobs()
+    checked = []
+    scheduler = AutomationScheduler(
+        tmp_path, jobs, search_root=tmp_path, project_root=tmp_path,
+        readiness=lambda provider, *_: checked.append(provider) or {"ready": True})
+
+    scheduler.run_now("AI", "weekly")
+
+    assert service.repo.get_schedule("AI", "weekly")["provider"] == ""
+    assert checked == ["claude"]
+    assert "claude" in jobs.calls[0][0]
+
+
 def test_coverage_frontier_deduplicates_queries_and_tracks_yield(tmp_path):
     service = IntDogService(tmp_path)
     service.create_industry("CHIPS", "芯片")

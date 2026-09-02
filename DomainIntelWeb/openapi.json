@@ -4604,11 +4604,17 @@
         "additionalProperties": false,
         "properties": {
           "provider": {
-            "default": "codex",
-            "maxLength": 80,
-            "minLength": 1,
-            "title": "Provider",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
           }
         },
         "title": "CoverageExpansionExecutionRequest",
@@ -5802,12 +5808,19 @@
             "type": "string"
           },
           "execution_mode": {
-            "enum": [
-              "taskpack",
-              "direct"
+            "anyOf": [
+              {
+                "enum": [
+                  "taskpack",
+                  "direct"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
             ],
-            "title": "Execution Mode",
-            "type": "string"
+            "title": "Execution Mode"
           },
           "kind": {
             "default": "",
@@ -5816,13 +5829,19 @@
             "type": "string"
           },
           "pipeline_mode": {
-            "default": "generate",
-            "enum": [
-              "aggregate",
-              "generate"
+            "anyOf": [
+              {
+                "enum": [
+                  "aggregate",
+                  "generate"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
             ],
-            "title": "Pipeline Mode",
-            "type": "string"
+            "title": "Pipeline Mode"
           },
           "provider": {
             "default": "",
@@ -5832,8 +5851,7 @@
           }
         },
         "required": [
-          "action",
-          "execution_mode"
+          "action"
         ],
         "title": "GenerateRequest",
         "type": "object"
@@ -6350,6 +6368,12 @@
             "title": "Checkpoint",
             "type": "object"
           },
+          "elapsed_seconds": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Elapsed Seconds",
+            "type": "integer"
+          },
           "error": {
             "anyOf": [
               {
@@ -6422,6 +6446,15 @@
             "title": "Progress",
             "type": "integer"
           },
+          "progress_mode": {
+            "default": "indeterminate",
+            "enum": [
+              "determinate",
+              "indeterminate"
+            ],
+            "title": "Progress Mode",
+            "type": "string"
+          },
           "provider": {
             "default": "local",
             "title": "Provider",
@@ -6449,6 +6482,17 @@
               }
             ],
             "title": "Request Dispatched At"
+          },
+          "result_kind": {
+            "default": "unknown",
+            "enum": [
+              "artifact",
+              "local_data",
+              "task_package",
+              "unknown"
+            ],
+            "title": "Result Kind",
+            "type": "string"
           },
           "run_id": {
             "title": "Run Id",
@@ -7765,7 +7809,7 @@
             "type": "string"
           },
           "provider": {
-            "default": "codex",
+            "default": "",
             "title": "Provider",
             "type": "string"
           },
@@ -7856,9 +7900,8 @@
             "type": "string"
           },
           "provider": {
-            "default": "codex",
+            "default": "",
             "maxLength": 80,
-            "minLength": 1,
             "title": "Provider",
             "type": "string"
           },
@@ -7965,7 +8008,7 @@
         "additionalProperties": false,
         "properties": {
           "budget": {
-            "default": 80,
+            "default": 120,
             "maximum": 10000.0,
             "minimum": 1.0,
             "title": "Budget",
@@ -8084,11 +8127,17 @@
         "additionalProperties": false,
         "properties": {
           "provider": {
-            "default": "codex",
-            "maxLength": 80,
-            "minLength": 1,
-            "title": "Provider",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
           }
         },
         "title": "SourceCampaignExecutionRequest",
@@ -9595,6 +9644,104 @@
           "status"
         ],
         "title": "WorkerWakeupState",
+        "type": "object"
+      },
+      "WorkflowSettingsState": {
+        "properties": {
+          "execution_mode": {
+            "enum": [
+              "taskpack",
+              "direct"
+            ],
+            "title": "Execution Mode",
+            "type": "string"
+          },
+          "layers": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Layers",
+            "type": "array"
+          },
+          "pipeline_mode": {
+            "enum": [
+              "aggregate",
+              "generate"
+            ],
+            "title": "Pipeline Mode",
+            "type": "string"
+          },
+          "provenance": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Provenance",
+            "type": "object"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "execution_mode",
+          "pipeline_mode",
+          "provenance",
+          "layers"
+        ],
+        "title": "WorkflowSettingsState",
+        "type": "object"
+      },
+      "WorkflowSettingsUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "execution_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "taskpack",
+                  "direct"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Mode"
+          },
+          "pipeline_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "aggregate",
+                  "generate"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pipeline Mode"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          }
+        },
+        "title": "WorkflowSettingsUpdate",
         "type": "object"
       }
     }
@@ -12048,6 +12195,120 @@
         ]
       }
     },
+    "/api/industries/{folder}/settings/{operation}": {
+      "delete": {
+        "operationId": "delete_industry_settings_api_industries__folder__settings__operation__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "operation",
+            "required": true,
+            "schema": {
+              "title": "Operation",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Industry Settings Api Industries  Folder  Settings  Operation  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Industry Settings",
+        "tags": [
+          "system"
+        ]
+      },
+      "put": {
+        "operationId": "put_industry_settings_api_industries__folder__settings__operation__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "title": "Folder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "operation",
+            "required": true,
+            "schema": {
+              "title": "Operation",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowSettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Put Industry Settings Api Industries  Folder  Settings  Operation  Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Industry Settings",
+        "tags": [
+          "system"
+        ]
+      }
+    },
     "/api/industries/{folder}/source-campaigns": {
       "get": {
         "operationId": "source_campaigns_api_industries__folder__source_campaigns_get",
@@ -13171,6 +13432,157 @@
         "summary": "Retry Job",
         "tags": [
           "operations"
+        ]
+      }
+    },
+    "/api/settings/effective": {
+      "get": {
+        "operationId": "effective_settings_api_settings_effective_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "maxLength": 80,
+              "minLength": 1,
+              "title": "Folder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "operation",
+            "required": false,
+            "schema": {
+              "default": "*",
+              "maxLength": 64,
+              "title": "Operation",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowSettingsState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Effective Settings",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/api/settings/global/{operation}": {
+      "delete": {
+        "operationId": "delete_global_settings_api_settings_global__operation__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation",
+            "required": true,
+            "schema": {
+              "title": "Operation",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Global Settings Api Settings Global  Operation  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Global Settings",
+        "tags": [
+          "system"
+        ]
+      },
+      "put": {
+        "operationId": "put_global_settings_api_settings_global__operation__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation",
+            "required": true,
+            "schema": {
+              "title": "Operation",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowSettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Put Global Settings Api Settings Global  Operation  Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Global Settings",
+        "tags": [
+          "system"
         ]
       }
     },

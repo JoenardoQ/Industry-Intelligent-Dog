@@ -55,6 +55,7 @@ import type {
   StoryDocumentState,
   StorySummaryState,
   TrashItemState,
+  WorkflowSettingsState,
 } from './generated/openapi'
 
 export type ContractPath = ApiPath
@@ -113,3 +114,4 @@ export type BackgroundPayload = BackgroundState
 export type TrashItem = TrashItemState
 export type RestorePreview = RestorePreviewState
 export type AuditRow = AuditState
+export type WorkflowSettings = WorkflowSettingsState

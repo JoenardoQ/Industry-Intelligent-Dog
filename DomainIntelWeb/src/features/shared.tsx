@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowRight, BookOpen, Play, RefreshCw } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { api, apiText, type ChainEdge, type ChainNode, type GenerateResult } from '../api'
+import { api, apiText, type ChainEdge, type ChainNode, type GenerateResult, type Job } from '../api'
 
 export type Toast = { kind: 'ok' | 'error'; text: string } | null
 
@@ -39,9 +39,20 @@ export function Markdown({ path, fallback }: { path?: string; fallback: string }
 }
 
 export function Generate({ industry, action, label, notify }: { industry: string; action: string; label: string; notify: (t: Toast) => void }) {
-  const [busy, setBusy] = useState(false)
-  const run = async () => { setBusy(true); try { const result = await api<GenerateResult>(`/industries/${industry}/generate`, { method:'POST', body:JSON.stringify({action,execution_mode:'direct',provider:'public_sources'}) }); notify({kind:'ok',text:`任务已进入队列 · ${result.run_id.slice(0,12)}`}); location.hash='/jobs' } catch(e) { notify({kind:'error',text:String(e)}) } finally { setBusy(false) } }
-  return <button className="button primary" disabled={busy} onClick={run}>{busy ? <RefreshCw className="spin"/> : <Play/>}{busy ? '正在创建任务' : label}</button>
+  const [busy, setBusy] = useState(false);const [runId,setRunId]=useState('')
+  const run = async () => { setBusy(true); try { const result = await api<GenerateResult>(`/industries/${industry}/generate`, { method:'POST', body:JSON.stringify({action}) }); setRunId(result.run_id);notify({kind:'ok',text:`任务已进入队列 · ${result.run_id.slice(0,12)}`}) } catch(e) { notify({kind:'error',text:String(e)}) } finally { setBusy(false) } }
+  return <div className="inline-run"><button className="button primary" disabled={busy} onClick={run}>{busy ? <RefreshCw className="spin"/> : <Play/>}{busy ? '正在创建任务' : label}</button><RunFeedback runId={runId}/></div>
+}
+
+export function RunFeedback({runId}:{runId:string}) {
+  const [job,setJob]=useState<Job|null>(null)
+  useEffect(()=>{if(!runId){setJob(null);return}let current=true
+    const load=()=>api<Job[]>('/jobs').then(rows=>{if(current)setJob(rows.find(row=>row.run_id===runId)||null)}).catch(()=>{})
+    void load();const timer=setInterval(load,2500);return()=>{current=false;clearInterval(timer)}
+  },[runId])
+  if(!runId)return null
+  const status=job?.status||'queued';const progress=job?.progress_mode==='determinate'?` · ${job.progress}%`:''
+  return <div className={`inline-run-status ${status}`} role="status" aria-live="polite"><span>{job?.stage||'已进入任务队列'}{progress}</span><small>{runId.slice(0,12)} · {job?.elapsed_seconds||0} 秒</small><a href="#/jobs">查看任务详情</a></div>
 }
 
 export function Loading({ label }: { label: string }) { return <div className="loading"><span/><p>{label}</p></div> }

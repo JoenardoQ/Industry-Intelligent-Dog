@@ -29,6 +29,7 @@ describe('first-run and industry overview loop', () => {
     apiMock.mockImplementation((path:string, init?:RequestInit) => {
       if(path==='/industries') return Promise.resolve([])
       if(path==='/industries'&&init?.method==='POST') return Promise.resolve({folder:'AI',name:'人工智能'})
+      if(path==='/settings/global/*'&&init?.method==='PUT') return Promise.resolve({provider:'taskpack',execution_mode:'taskpack'})
       if(path==='/industries/AI/generate') return Promise.resolve({run_id:'run-1',status:'queued',title:'行业初始化'})
       if(path==='/jobs') return Promise.resolve([{run_id:'run-1',title:'行业初始化',status:'running',updated_at:'now',stalled:false,active:true,stage:'entity_gate',progress:70,artifact_path:null,parent_run_id:null,operation:'bootstrap',error:null,error_category:'',origin:'app',provider:'public_sources',model:'',time_window:{},heartbeat_at:'now',heartbeat_age_seconds:0,lease_owner:'app',lease_expires_at:'later',checkpoint:{},recovery_actions:['cancel'],log_tail:[]}])
       if(path==='/industries/AI/overview') return Promise.resolve({industry:{name:'人工智能'},stats:{sources:8,documents:20,entities:12,candidate_entities:0,relations:1,claims:0,verified_claims:0,evidence:0,events:0,chain_nodes:3,empty_chain_nodes:0},chain:[],chain_edges:[],entities:[],source_categories:{official:8},latest_document_date:'2026-09-01'})

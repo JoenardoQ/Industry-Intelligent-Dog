@@ -72,7 +72,10 @@ def govern_category(category: str, entries: list[dict], chain_count: int = 0) ->
         item["governance_reason"] = assessment["reason"]
         candidates.append(item)
 
+    topic_frequency: Counter[str] = Counter(
+        topic for item in candidates for topic in _coverage(item))
     candidates.sort(key=lambda item: (
+        -sum(1 / topic_frequency[topic] for topic in _coverage(item)),
         -int(item["governance_score"]),
         -int(item["score_components"].get("china_gap", 0)),
         0 if source_origin(item) == "china" else 1,
@@ -80,28 +83,46 @@ def govern_category(category: str, entries: list[dict], chain_count: int = 0) ->
     active, manual, reserve = [], [], []
     publishers: Counter[str] = Counter()
     origins: Counter[str] = Counter()
+    covered_topics: set[str] = set()
+    authority_present = False
     for item in candidates:
         publisher = source_verification(item)["owner_cluster"]
+        topics = _coverage(item)
+        origin = source_origin(item)
+        new_topics = topics - covered_topics
+        new_origin = origin not in origins
+        tier = str(item.get("tier") or "").casefold()
+        adds_authority = tier in {"primary", "authoritative"} and not authority_present
         context = {
-            "duplicate_owner": publishers[publisher] > 0,
+            "duplicate_owner": publishers[publisher] > 0 and not new_topics and not new_origin,
             "china_gap": bool(item.get("fills_china_gap")),
         }
         assessment = assess_source_candidate(item, category=category, context=context)
         item.update(assessment)
         item["governance_score"] = assessment["score"]
         item["governance_reason"] = assessment["reason"]
-        origin = source_origin(item)
+        gains = []
+        if adds_authority:
+            gains.append("authority")
+        if new_origin:
+            gains.append("region")
+        if new_topics:
+            gains.append("topic")
+        if publishers[publisher] == 0:
+            gains.append("publisher")
+        item["coverage_gain"] = gains
         if assessment["decision"] == "active" and len(active) < boundary["maximum"]:
             item["monitoring_status"] = "active"
             item["governance_role"] = "core" if len(active) < boundary["minimum"] else "coverage"
             active.append(item)
             publishers[publisher] += 1
             origins[origin] += 1
+            covered_topics.update(topics)
+            authority_present = authority_present or tier in {"primary", "authoritative"}
         elif assessment["decision"] == "manual_review":
             item["monitoring_status"] = "recommended_manual"
             item["governance_role"] = "manual"
             manual.append(item)
-            publishers[publisher] += 1
         elif assessment["decision"] == "rejected":
             item["monitoring_status"] = "rejected"
             item["governance_role"] = "rejected"
@@ -114,8 +135,6 @@ def govern_category(category: str, entries: list[dict], chain_count: int = 0) ->
                 item["reason"] = "portfolio_boundary_reached"
                 item["governance_reason"] = "portfolio_boundary_reached"
             reserve.append(item)
-            if not context["duplicate_owner"]:
-                publishers[publisher] += 1
 
     all_items = active + manual + reserve + rejected
     all_items.sort(key=lambda item: (

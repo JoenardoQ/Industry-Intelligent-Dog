@@ -1,7 +1,7 @@
 # Industry Intelligence Operating System
 
 **Version:** 3.0 Beta
-**Authority:** 代码与 `IMPLEMENTATION_STATUS.md` 优先；README 是用户入口。
+**Authority:** 代码与 [`DESIGN.zh-CN.md`](../DESIGN.zh-CN.md) 优先；README 是用户入口。
 
 ## 1. 产品目标
 
@@ -29,7 +29,7 @@ Connectors → Ingestion/Normalization → intdog_core
 | Pipelines | 抓取、规范化、去重、分类、聚类和抽取 |
 | `intdog_core` | Schema、稳定 ID、事务、迁移、锁、Repository 和 application service |
 | Intelligence | 实体关系、主张证据、覆盖矩阵、竞争格局和影响分析 |
-| Presentation | 查询、报告、图表、App、MCP 和邮件 |
+| Presentation | 查询、报告、图表、App 和 MCP |
 
 报告只能消费结构化事实与证据，不能反向授予事实状态。App 的业务写入必须经过 application service。
 
@@ -148,7 +148,7 @@ Artifact Bundle 的 Manifest 是展示层版本边界，只有全部文件哈希
 只表示命令成功履行了其结果契约；每日采集还必须报告成功/失败类别。全部失败为
 `failed`，部分失败为 `partial`；两者均不推进调度 checkpoint。
 同一行业使用互斥锁；嵌套子阶段可重入。幂等、可恢复、可取消并保留失败原因是验收目标；
-当前可靠取消、跨重启恢复和进程树状态收敛尚未全部达到，见 `IMPLEMENTATION_STATUS.md`。
+任务状态、取消、重试与恢复边界以当前代码、测试和根目录设计文档为准。
 
 桌面端进程任务由独立 Job Runner 管理：启动时创建独立进程组，实时日志通过回调交给 UI，
 状态清单原子持久化，取消终止进程组而非只关闭弹窗。App 关闭时请求取消全部本次会话任务，

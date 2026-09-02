@@ -23,6 +23,8 @@ import ResearchPage from '../features/ResearchPage'
 import SourcesPage from '../features/SourcesPage'
 import SystemPage from '../features/SystemPage'
 import SetupWizard from '../features/SetupWizard'
+import { Generate } from '../features/shared'
+import WorkflowSettingsPanel from '../features/settings/WorkflowSettingsPanel'
 
 const notify = vi.fn()
 
@@ -113,6 +115,40 @@ afterEach(() => {
 })
 
 describe('critical workbench workflows', () => {
+  it('keeps one-click generation on the current page and shows the authoritative job state', async () => {
+    window.location.hash='#/daily'
+    apiMock.mockImplementation((path:string, options?:RequestInit) => {
+      if(path==='/industries/AI/generate'&&options?.method==='POST')
+        return Promise.resolve({run_id:'run-inline-123456789',status:'queued',title:'Daily',action:'daily'})
+      if(path==='/jobs')return Promise.resolve([{run_id:'run-inline-123456789',title:'Daily',
+        status:'running',updated_at:'now',stage:'正在检索权威来源',progress:0,
+        progress_mode:'indeterminate',elapsed_seconds:3,result_kind:'local_data',recovery_actions:['cancel']}])
+      return Promise.resolve({})
+    })
+    render(<Generate industry="AI" action="daily" label="抓取最新情报" notify={notify}/>)
+    fireEvent.click(screen.getByRole('button',{name:/抓取最新情报/}))
+    expect(await screen.findByText(/正在检索权威来源/)).toBeInTheDocument()
+    expect(window.location.hash).toBe('#/daily')
+    expect(screen.getByRole('link',{name:/查看任务详情/})).toHaveAttribute('href','#/jobs')
+  })
+
+  it('edits shared defaults without silently replacing an industry override', async () => {
+    apiMock.mockImplementation((path:string, options?:RequestInit) => {
+      if(path==='/settings/effective?folder=AI&operation=*')return Promise.resolve({
+        provider:'codex',execution_mode:'direct',pipeline_mode:'generate',
+        provenance:{provider:'industry'},layers:[{scope_key:'global',provider:'claude'},{scope_key:'industry:AI',provider:'codex'}],
+      })
+      if(path==='/settings/global/*'&&options?.method==='PUT')return Promise.resolve({})
+      return Promise.resolve({})
+    })
+    render(<WorkflowSettingsPanel industry="AI" setup={{agents:[{id:'codex',name:'Codex',execution:'native',ready:true},{id:'claude',name:'Claude Code',execution:'native',ready:true}],api_providers:[]} as unknown as SetupPayload} notify={notify}/>)
+    expect(await screen.findByText(/当前行业保留自定义设置/)).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('默认智能体'),{target:{value:'claude'}})
+    fireEvent.click(screen.getByRole('button',{name:'保存全局默认'}))
+    await waitFor(()=>expect(apiMock).toHaveBeenCalledWith('/settings/global/*',expect.objectContaining({method:'PUT'})))
+    expect(JSON.parse(String(apiMock.mock.calls.find(call=>call[0]==='/settings/global/*'&&call[1]?.method==='PUT')?.[1]?.body))).toMatchObject({provider:'claude',execution_mode:'direct'})
+  })
+
   it('runs the source-campaign review and entity-coverage workbench with explanations', async () => {
     const campaign={id:'scp_1',industry_id:'ind_1',targets:['official','news'],status:'paused',
       rounds:2,budget:20,stopping_reason:'http_429',created_at:'now',updated_at:'now'}
@@ -161,7 +197,7 @@ describe('critical workbench workflows', () => {
     render(<SourcesPage industry="AI" notify={notify}/>)
     expect(await screen.findByText('Active Authority')).toBeInTheDocument()
     expect(await screen.findByText('AI 官方来源')).toBeInTheDocument()
-    for(const state of ['candidate','active','manual','reserve','rejected','paused','converged'])
+    for(const state of ['待审核','采用','人工阅读','备用','不采用','已暂停','本轮完成'])
       expect(screen.getAllByText(state).length).toBeGreaterThan(0)
     expect(screen.getByText('Models')).toBeInTheDocument()
     expect(screen.getByText('research_group')).toBeInTheDocument()
@@ -172,7 +208,7 @@ describe('critical workbench workflows', () => {
     expect(screen.getByText(/supplies · 1 条证据/)).toBeInTheDocument()
     const explanation=screen.getByLabelText('候选复核说明 · Candidate A')
     fireEvent.change(explanation,{target:{value:'同 owner 重复'}})
-    fireEvent.click(screen.getByRole('button',{name:'转为 reserve · Candidate A'}))
+    fireEvent.click(screen.getByRole('button',{name:'备用 · Candidate A'}))
     await waitFor(()=>expect(apiMock).toHaveBeenCalledWith(
       '/industries/AI/source-candidates/src-c1/review',{
         method:'POST',body:JSON.stringify({decision:'reserve',actor:'local-user',reason:'同 owner 重复'}),
@@ -190,6 +226,7 @@ describe('critical workbench workflows', () => {
   })
 
   it('lets a fresh install enter model-free task-package mode without claiming an agent connection', async () => {
+    apiMock.mockResolvedValue({provider:'taskpack',execution_mode:'taskpack'})
     const complete=vi.fn()
     render(<SetupWizard setup={{runtime_ready:true,data_root:'/data',taskpack_ready:true,
       privacy_note:'不读取私有登录数据',mcp_command:['intdog','mcp-serve'],mcp_configs:[{id:'generic',name:'Generic MCP',format:'json',value:{mcpServers:{intdog:{command:'intdog',args:['mcp-serve']}}}}],agent_profiles:[],api_providers:[],agents:[{
@@ -203,7 +240,7 @@ describe('critical workbench workflows', () => {
     expect(screen.getByText('Generic MCP 连接配置')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button',{name:'返回诊断'}))
     fireEvent.click(screen.getByRole('button',{name:'进入工作台'}))
-    expect(complete).toHaveBeenCalledWith('taskpack')
+    await waitFor(()=>expect(complete).toHaveBeenCalledWith('taskpack'))
   })
 
   it('passes generic compatible authentication type through the desktop save request', async () => {
@@ -240,7 +277,13 @@ describe('critical workbench workflows', () => {
   })
 
   it('creates the first industry and queues a model-free bootstrap from onboarding', async () => {
-    apiMock.mockResolvedValueOnce([]).mockResolvedValueOnce({folder:'AI',name:'人工智能'}).mockResolvedValueOnce({run_id:'r1',status:'queued',title:'init'})
+    apiMock.mockImplementation((path:string,init?:RequestInit)=>{
+      if(path==='/industries')return Promise.resolve([])
+      if(path==='/industries'&&init?.method==='POST')return Promise.resolve({folder:'AI',name:'人工智能'})
+      if(path==='/settings/global/*'&&init?.method==='PUT')return Promise.resolve({provider:'taskpack',execution_mode:'taskpack'})
+      if(path==='/industries/AI/generate')return Promise.resolve({run_id:'r1',status:'queued',title:'init'})
+      throw new Error(`${path} ${String(init?.method)}`)
+    })
     const complete=vi.fn()
     render(<SetupWizard hasIndustry={false} setup={{runtime_ready:true,data_root:'/data',taskpack_ready:true,
       privacy_note:'privacy',mcp_command:['intdog','mcp-serve'],mcp_configs:[{id:'generic',name:'Generic MCP',format:'json',value:{}}],agent_profiles:[],api_providers:[],agents:[]}}
@@ -250,9 +293,12 @@ describe('critical workbench workflows', () => {
     fireEvent.change(screen.getByPlaceholderText('例如：人工智能'),{target:{value:'人工智能'}})
     fireEvent.change(screen.getByPlaceholderText('例如：AI'),{target:{value:'AI'}})
     fireEvent.click(screen.getByRole('button',{name:'创建并开始研究'}))
+    await waitFor(()=>expect(apiMock).toHaveBeenCalledWith('/settings/global/*',{
+      method:'PUT',body:JSON.stringify({provider:'taskpack',execution_mode:'taskpack'}),
+    }))
     await waitFor(()=>expect(apiMock).toHaveBeenCalledWith('/industries/AI/generate',expect.objectContaining({method:'POST'})))
     const generateCall=apiMock.mock.calls.find(call=>call[0]==='/industries/AI/generate')
-    expect(JSON.parse(String(generateCall?.[1]?.body)).provider).toBe('')
+    expect(JSON.parse(String(generateCall?.[1]?.body))).toEqual({action:'bootstrap'})
     expect(complete).not.toHaveBeenCalled()
     expect(localStorage.getItem('intdog.onboarding.active')).toContain('r1')
   })
@@ -288,7 +334,7 @@ describe('critical workbench workflows', () => {
       throw new Error(path)
     })
     render(<SystemPage industry="AI" notify={notify}/>)
-    fireEvent.click(await screen.findByRole('button',{name:/恢复/}))
+    fireEvent.click(await screen.findByRole('button',{name:'恢复'}))
     await waitFor(()=>expect(apiMock).toHaveBeenCalledWith('/trash/t1/preview'))
     expect(await screen.findByRole('dialog',{name:'恢复“batch”'})).toHaveTextContent('1 条重复文档')
     fireEvent.click(screen.getByRole('button',{name:'确认恢复'}))
@@ -296,6 +342,24 @@ describe('critical workbench workflows', () => {
     const previewIndex=apiMock.mock.calls.findIndex(call=>call[0].endsWith('/preview'))
     const restoreIndex=apiMock.mock.calls.findIndex(call=>call[0].endsWith('/restore'))
     expect(previewIndex).toBeGreaterThan(-1); expect(restoreIndex).toBeGreaterThan(previewIndex)
+  })
+
+  it('does not call first-run insufficient observations drift', async () => {
+    apiMock.mockImplementation((path:string) => {
+      if(path==='/health')return Promise.resolve({status:'ready',data_root:'/data',database:true,active_jobs:0,automation_running:true,session_required:true})
+      if(path==='/trash')return Promise.resolve({items:[]})
+      if(path==='/trash/audits/recent')return Promise.resolve([])
+      if(path==='/background')return Promise.resolve({service:{installed:false,enabled:false,platform:'test',interval_minutes:15,error_category:''},last_wakeup:null,next_run_at:null,permissions:[],schedule_errors:[],email_delivery:false})
+      if(path.includes('/automation'))return Promise.resolve({email_delivery:false,schedules:[]})
+      if(path.endsWith('/quality-drift'))return Promise.resolve({alert_count:0,metrics:[
+        {metric:'source_success_rate',window_days:7,status:'insufficient_data',value:null,diagnosis:'need baseline'},
+      ]})
+      throw new Error(path)
+    })
+    render(<SystemPage industry="AI" notify={notify}/>)
+    expect(await screen.findByText('未发现漂移')).toBeInTheDocument()
+    expect(screen.getByText(/数据不足以判断趋势/)).toBeInTheDocument()
+    expect(document.querySelector('.drift-panel details')).not.toHaveAttribute('open')
   })
 
   it('uses the accessible shutdown dialog and delegates Desktop window lifecycle', async()=>{
@@ -333,6 +397,20 @@ describe('critical workbench workflows', () => {
     fireEvent.click(await screen.findByRole('button',{name:/Failed research/}))
     fireEvent.click(await screen.findByRole('button',{name:/安全重试/}))
     await waitFor(()=>expect(apiMock).toHaveBeenCalledWith('/jobs/r1/retry',{method:'POST'}))
+  })
+
+  it('shows indeterminate work without inventing a zero-percent completion signal', async () => {
+    apiMock.mockImplementation((path:string) => {
+      if(path==='/jobs')return Promise.resolve([{run_id:'r-live',title:'Live research',
+        status:'running',updated_at:'now',stage:'检索论文',progress:0,
+        progress_mode:'indeterminate',elapsed_seconds:12,result_kind:'artifact',
+        recovery_actions:['cancel']}])
+      if(path.endsWith('/output'))return Promise.resolve({run_id:'r-live',output:'正在检索'})
+      return Promise.resolve({})
+    })
+    render(<JobsPage/>);fireEvent.click(await screen.findByRole('button',{name:/Live research/}))
+    expect(screen.getAllByText(/进度暂不可估算/).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/检索论文 · 0%/)).not.toBeInTheDocument()
   })
 
   it('shows authoritative task provenance, window, provider and recovery metadata', async () => {

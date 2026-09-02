@@ -156,16 +156,15 @@ def test_executable_binding_rejects_symlink_exchange_and_file_replacement(tmp_pa
         service.complete("must not execute")
 
 
-def test_fingerprint_rejects_oversized_regular_file_before_reading(tmp_path):
+def test_fingerprint_accepts_large_regular_cli_binaries(tmp_path):
     executable = tmp_path / "codex"
     with executable.open("wb") as handle:
         handle.truncate(64 * 1024 * 1024 + 1)
     executable.chmod(0o755)
-    result = agent_registry.diagnose_agent(
-        {"id": "codex", "executable": str(executable)}, timeout_seconds=0.2)
-    assert result["ready"] is False
-    assert result["status"] == "invalid_configuration"
-    assert result["failure_code"] == "executable_too_large"
+    result = agent_registry.executable_fingerprint(
+        str(executable), deadline=time.monotonic() + 5)
+    assert result["size"] == 64 * 1024 * 1024 + 1
+    assert len(result["sha256"]) == 64
 
 
 def test_fingerprint_deadline_is_checked_before_and_during_read(tmp_path, monkeypatch):
@@ -188,7 +187,7 @@ def test_four_large_or_blocking_files_release_slots_for_normal_diagnosis(tmp_pat
         executable = tmp_path / f"large-{index}" / "codex"
         executable.parent.mkdir()
         with executable.open("wb") as handle:
-            handle.truncate(64 * 1024 * 1024 + 1)
+            handle.truncate(512 * 1024 * 1024 + 1)
         executable.chmod(0o755)
         selected.append(executable)
     for index in range(2):

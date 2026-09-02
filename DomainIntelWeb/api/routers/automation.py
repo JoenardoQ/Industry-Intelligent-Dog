@@ -25,7 +25,7 @@ def build_automation_router(*, automation,
         folder = resolve_folder(folder)
         try:
             from src.services.capability_manifest import SCHEDULABLE_PROVIDER_IDS
-            if request.provider not in SCHEDULABLE_PROVIDER_IDS:
+            if request.provider and request.provider not in SCHEDULABLE_PROVIDER_IDS:
                 raise ValueError("不支持的模型提供方式")
             automation.configure(
                 folder, action, enabled=request.enabled,

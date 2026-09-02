@@ -13,7 +13,7 @@ from release resources.
 From the repository root:
 
 ```bash
-cd "/home/joenardo/My Projects/IntDog"
+cd Industry-Intelligent-Dog
 ./run_intdog.sh
 ```
 
@@ -27,7 +27,7 @@ For the current WSL-home deployment, use the generated Windows desktop shortcut.
 powershell -ExecutionPolicy Bypass -File .\create_shortcut.ps1
 ```
 
-Only a native Windows checkout should run `run_app.bat`. The WSL launcher resolves the `/home` repository, records logs under the user's local application data, and does not depend on the retired `/mnt/d` copy.
+Only a native Windows checkout should run `run_app.bat`. A WSL shortcut is a developer compatibility entry and is not part of the packaged Windows product.
 
 ## First use
 
@@ -89,7 +89,7 @@ The native distribution uses one Electron shell and one PyInstaller sidecar for 
 
 ## Troubleshooting
 
-- Blurred text: use the system-recommended scale and confirm the shortcut targets the current `/home` launcher.
+- Blurred text: use the system-recommended display scale and confirm that the shortcut targets the current checkout or installed release.
 - Stuck on Planning: inspect the current bootstrap stage and resume it; do not repeatedly erase the industry.
 - `401 Unauthorized`: renew Codex login in the same environment, or inject the provider key into the app process.
 - Missing report: task JSON and collection metadata are not reports; run the corresponding generation action.

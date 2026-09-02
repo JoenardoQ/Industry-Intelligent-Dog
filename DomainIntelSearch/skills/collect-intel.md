@@ -17,7 +17,7 @@
 # 当前主路径：按行业写入六类每日情报
 python -m src.main crawl-daily --industry 半导体 --days 1
 
-# 只抓取原始数据（不生成报告、不发邮件）
+# 只抓取原始数据（不生成报告）
 python -m src.main collect --industry 半导体 --days 3
 
 # 每周金融政策简报
@@ -32,7 +32,7 @@ python -m src.main timeline --industry 半导体 --days 365
 
 ## 输入
 - 行业档案（`config/industries/<id>.yaml`）：关键词、arXiv 分类、跟踪公司、RSS 源。
-- `settings.yaml`：邮件、学术源、输出路径。
+- `settings.yaml`：新闻源、学术源与输出路径。
 
 ## 输出位置
 - 规范事实库：`DomainIntelData/intdog.sqlite3`

@@ -16,7 +16,7 @@ const SetupWizard = lazy(() => import('./features/SetupWizard'))
 const navigation: { key: PageKey; label: string; note: string; icon: typeof Activity }[] = [
   { key: 'overview', label: '行业概览', note: '知识与产业链', icon: LayoutDashboard },
   { key: 'daily', label: '每日情报', note: '持续监测', icon: Newspaper },
-  { key: 'knowledge', label: '知识结构', note: '实体与关系', icon: BookOpen },
+  { key: 'knowledge', label: '实体与关系', note: '知识库详情', icon: BookOpen },
   { key: 'products', label: '研究产物', note: '周月季与报告', icon: FileText },
   { key: 'sources', label: '信息源', note: '来源与可信度', icon: Globe2 },
   { key: 'research', label: '研究助手', note: '问题、证据与实验', icon: FlaskConical },
@@ -46,6 +46,7 @@ function App() {
   const [toast, setToast] = useState<Toast>(null)
   const [loading, setLoading] = useState(true)
   const [setup, setSetup] = useState<SetupPayload|null>(null)
+  const [workflowProvider,setWorkflowProvider]=useState('taskpack')
   const [showSetup, setShowSetup] = useState(localStorage.getItem('intdog.onboarding.v1') !== 'complete')
   const notify = useCallback((value: Toast) => {
     setToast(value)
@@ -66,9 +67,11 @@ function App() {
   useEffect(() => { void refreshIndustries() }, [refreshIndustries])
   const refreshSetup = useCallback(async()=>{ try { setSetup(await api<SetupPayload>('/setup')) } catch(error) { notify({kind:'error',text:String(error)}) } },[notify])
   useEffect(()=>{ void refreshSetup() },[refreshSetup])
+  const refreshWorkflowSettings=useCallback(async()=>{if(!industry){setWorkflowProvider('taskpack');return}try{const value=await api<{provider:string}>(`/settings/effective?folder=${encodeURIComponent(industry)}&operation=*`);setWorkflowProvider(value.provider||'taskpack')}catch{setWorkflowProvider('taskpack')}},[industry])
+  useEffect(()=>{void refreshWorkflowSettings();const listener=()=>void refreshWorkflowSettings();addEventListener('intdog:settings-changed',listener);return()=>removeEventListener('intdog:settings-changed',listener)},[refreshWorkflowSettings])
   const current = industries.find(row => row.folder === industry)
   const chooseIndustry = (folder: string) => { setIndustry(folder); localStorage.setItem('intdog.industry', folder) }
-  const selectedProvider=localStorage.getItem('intdog.provider')||'taskpack'
+  const selectedProvider=workflowProvider
   const selectedAgent=localStorage.getItem('intdog.agent')||selectedProvider
   const agentState=setup?.agents.find(item=>item.id===selectedAgent)
   const apiState=setup?.api_providers.find(item=>item.id===selectedProvider)
