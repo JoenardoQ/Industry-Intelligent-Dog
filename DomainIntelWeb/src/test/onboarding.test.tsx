@@ -47,7 +47,7 @@ describe('first-run and industry overview loop', () => {
         id:'binding-claude',name:'Claude Code',command:'claude',args:[],
         executable_path:'/usr/local/bin/claude',capability_id:'claude',
       })
-      if(path==='/agent-bridge/profiles/binding-claude/diagnose') return Promise.resolve({
+      if(path==='/agent-bridge/profiles/binding-claude/diagnose'&&init?.method==='POST') return Promise.resolve({
         id:'claude',connection:'native_cli',execution_level:'direct',installed:true,version_verified:true,
         authenticated:true,ready:true,status:'ready',failure_code:null,executable:'/usr/local/bin/claude',resolved_executable:'/usr/local/bin/claude',version:'claude 1.2.3',detail:'已登录',
       })
@@ -77,7 +77,7 @@ describe('first-run and industry overview loop', () => {
         id:'binding-codex',name:'Codex CLI',command:'codex',args:[],
         executable_path:'C:\\Users\\Test\\AppData\\Roaming\\npm\\codex.cmd',capability_id:'codex',
       })
-      if(path==='/agent-bridge/profiles/binding-codex/diagnose') return Promise.resolve({
+      if(path==='/agent-bridge/profiles/binding-codex/diagnose'&&init?.method==='POST') return Promise.resolve({
         id:'codex',connection:'native_cli',execution_level:'direct',installed:true,version_verified:true,
         authenticated:true,ready:true,status:'ready',failure_code:null,executable:'codex.cmd',resolved_executable:'codex.cmd',version:'codex-cli 1.2.3',detail:'已登录',
       })

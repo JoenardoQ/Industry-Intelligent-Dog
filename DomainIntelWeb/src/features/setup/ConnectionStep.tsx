@@ -42,7 +42,7 @@ export default function ConnectionStep({setup,selected,setSelected,onBack,onNext
       if(found.execution_level!=='direct')throw new Error(`${found.name} 已识别，但当前仅支持 MCP 或任务包交接，不能由 IntDog 直接调用`)
       const id=`binding-${found.id}`
       await api('/agent-bridge/profiles',{method:'POST',body:JSON.stringify({id,name:found.name,command:found.commands[0],args:[],executable_path:found.executable,capability_id:found.id})})
-      const checked=await api<AgentDiagnosticState>(`/agent-bridge/profiles/${id}/diagnose`)
+      const checked=await api<AgentDiagnosticState>(`/agent-bridge/profiles/${id}/diagnose`,{method:'POST'})
       if(!checked.version_verified){await api(`/agent-bridge/profiles/${id}`,{method:'DELETE'});throw new Error(checked.detail)}
       setSelected(found.id);setDiagnostic(checked);await onRefresh()
     }catch(reason){setError(String(reason))}finally{setAgentBusy(false)}

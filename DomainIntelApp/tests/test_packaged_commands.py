@@ -23,6 +23,28 @@ def test_packaged_search_root_controls_working_directory(monkeypatch):
     assert search_cwd(Path("/source/search")) == Path("/app/intdog/DomainIntelSearch")
 
 
+def test_frozen_entry_finds_sibling_resources_without_desktop_environment(
+        monkeypatch, tmp_path):
+    module = _load("packaged_entry", Path(__file__).parents[1] /
+                   "packaging/entry.py")
+    executable = tmp_path / "resources" / "backend" / "intdog-runtime.exe"
+    search_root = tmp_path / "resources" / "intdog" / "DomainIntelSearch"
+    executable.parent.mkdir(parents=True)
+    search_root.mkdir(parents=True)
+    executable.write_bytes(b"runtime")
+    monkeypatch.delenv("INTDOG_PROJECT_ROOT", raising=False)
+    monkeypatch.delenv("INTDOG_SEARCH_ROOT", raising=False)
+    monkeypatch.setattr(module.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(module.sys, "executable", str(executable))
+    monkeypatch.setattr(module.sys, "path", list(module.sys.path))
+
+    project_root = module._install_import_roots()
+
+    assert project_root == tmp_path / "resources" / "intdog"
+    assert module.os.environ["INTDOG_PROJECT_ROOT"] == str(project_root)
+    assert module.os.environ["INTDOG_SEARCH_ROOT"] == str(search_root)
+
+
 def _load(name: str, path: Path):
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)

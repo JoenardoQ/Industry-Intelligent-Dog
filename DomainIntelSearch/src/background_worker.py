@@ -163,7 +163,9 @@ def _safe_environment(data_root: Path, project_root: Path) -> dict[str, str]:
     clean = {key: value for key, value in os.environ.items()
              if key.upper() in _CHILD_ENV_ALLOWLIST}
     clean.update({"DOMAIN_INTEL_DATA_ROOT": str(data_root),
-                  "INTDOG_PROJECT_ROOT": str(project_root), "PYTHONUTF8": "1",
+                  "INTDOG_PROJECT_ROOT": str(project_root),
+                  "INTDOG_SEARCH_ROOT": str(project_root / "DomainIntelSearch"),
+                  "PYTHONUTF8": "1",
                   "INTDOG_DISABLE_EMAIL": "1"})
     return clean
 

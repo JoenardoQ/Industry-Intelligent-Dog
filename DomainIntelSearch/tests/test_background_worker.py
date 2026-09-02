@@ -75,6 +75,8 @@ def test_child_environment_is_an_allowlist_not_a_secret_name_denylist(
     environment = _safe_environment(tmp_path / "data", tmp_path / "project")
     assert environment["PATH"] == "/usr/bin"
     assert environment["DOMAIN_INTEL_DATA_ROOT"] == str(tmp_path / "data")
+    assert environment["INTDOG_SEARCH_ROOT"] == str(
+        tmp_path / "project" / "DomainIntelSearch")
     assert "DATABASE_URL" not in environment
     assert "GITHUB_PAT" not in environment
     assert "INTDOG_SESSION_TOKEN" not in environment

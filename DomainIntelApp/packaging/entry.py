@@ -11,8 +11,17 @@ from pathlib import Path
 
 
 def _install_import_roots() -> Path:
-    project_root = Path(os.environ.get("INTDOG_PROJECT_ROOT")
-                        or Path(__file__).resolve().parents[2])
+    configured = os.environ.get("INTDOG_PROJECT_ROOT", "").strip()
+    if configured:
+        project_root = Path(configured)
+    elif getattr(sys, "frozen", False):
+        project_root = Path(sys.executable).resolve().parent.parent / "intdog"
+    else:
+        project_root = Path(__file__).resolve().parents[2]
+    project_root = project_root.resolve()
+    search_root = project_root / "DomainIntelSearch"
+    os.environ.setdefault("INTDOG_PROJECT_ROOT", str(project_root))
+    os.environ.setdefault("INTDOG_SEARCH_ROOT", str(search_root))
     for root in (project_root / "DomainIntelSearch",
                  project_root / "DomainIntelApp", project_root):
         if str(root) not in sys.path:
@@ -86,6 +95,7 @@ def main() -> None:
     args = parser.parse_args()
     os.environ.setdefault("PYTHONUTF8", "1")
     os.environ.setdefault("INTDOG_DISABLE_EMAIL", "1")
+    _install_import_roots()
     if args.mode == "serve":
         _serve(args.port)
     elif args.mode == "cli":
