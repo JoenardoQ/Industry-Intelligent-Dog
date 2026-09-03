@@ -146,10 +146,18 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main():
-    for stream in (sys.stdout, sys.stderr):
+def _configure_stdio(*streams) -> None:
+    """Make progress events observable while a packaged CLI process is running."""
+    for stream in streams:
         if hasattr(stream, "reconfigure"):
-            stream.reconfigure(encoding="utf-8", errors="replace")
+            stream.reconfigure(
+                encoding="utf-8", errors="replace",
+                line_buffering=True, write_through=True,
+            )
+
+
+def main():
+    _configure_stdio(sys.stdout, sys.stderr)
     parser = build_parser()
     args = parser.parse_args()
 

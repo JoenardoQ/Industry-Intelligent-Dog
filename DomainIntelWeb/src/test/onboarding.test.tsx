@@ -150,6 +150,35 @@ describe('first-run and industry overview loop', () => {
     expect(screen.getByRole('button',{name:'查看已保留内容'})).toBeInTheDocument()
   })
 
+  it('shows the concrete runtime stage instead of a generic progress label', async () => {
+    apiMock.mockImplementation((path:string) => {
+      if(path==='/jobs') return Promise.resolve([{run_id:'run-chain',title:'初始化',
+        status:'running',stage:'chain_request',progress:40,active:true,
+        checkpoint:{stage_states:{sources:'passed',value_chain:'running',entities:'waiting'}},
+        recovery_actions:['cancel'],result_kind:'local_data'}])
+      throw new Error(path)
+    })
+    render(<BootstrapStep active={{folder:'chips',runId:'run-chain',provider:'codex'}}
+      onChange={vi.fn()} onComplete={vi.fn()} onEditConnection={vi.fn()}/>)
+
+    expect(await screen.findByText('梳理产业链 · 40%')).toBeInTheDocument()
+    expect(screen.queryByText(/正在推进当前阶段/)).not.toBeInTheDocument()
+  })
+
+  it('explains zero progress while the Agent is waiting for its first response', async () => {
+    apiMock.mockImplementation((path:string) => {
+      if(path==='/jobs') return Promise.resolve([{run_id:'run-starting',title:'初始化',
+        status:'running',stage:'queued',progress:0,active:true,elapsed_seconds:40,
+        checkpoint:{stage_states:{sources:'waiting',value_chain:'waiting',entities:'waiting'}},
+        recovery_actions:['cancel'],result_kind:'local_data'}])
+      throw new Error(path)
+    })
+    render(<BootstrapStep active={{folder:'chips',runId:'run-starting',provider:'codex'}}
+      onChange={vi.fn()} onComplete={vi.fn()} onEditConnection={vi.fn()}/>)
+
+    expect(await screen.findByText('Agent 已启动，等待首个响应 · 0% · 已用 40 秒')).toBeInTheDocument()
+  })
+
   it('repairs a failed bootstrap connection and retries the same industry checkpoint', async () => {
     localStorage.setItem('intdog.onboarding.active',JSON.stringify({folder:'AI',runId:'run-failed',provider:'codex'}))
     localStorage.setItem('intdog.provider','claude')

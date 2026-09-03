@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from src import main as cli_main
 from src.industry_store import IndustryStore
 from src.knowledge_model import KnowledgeModel
 from src.research_bootstrap import check_source_accessibility, run_bootstrap
@@ -82,6 +83,25 @@ def _trusted_source_checker(payload):
             for item in values:
                 item["access_check"] = {"reachable": True, "status_code": 200}
     return payload
+
+
+def test_cli_progress_streams_are_line_buffered_and_written_through():
+    class Stream:
+        def __init__(self):
+            self.options = {}
+
+        def reconfigure(self, **options):
+            self.options = options
+
+    configure = getattr(cli_main, "_configure_stdio", None)
+    assert callable(configure), "CLI must expose deterministic stdio configuration"
+    stdout, stderr = Stream(), Stream()
+
+    configure(stdout, stderr)
+
+    for stream in (stdout, stderr):
+        assert stream.options["line_buffering"] is True
+        assert stream.options["write_through"] is True
 
 
 def test_bw04_direct_bootstrap_runs_three_gated_stages_once(monkeypatch, tmp_path):

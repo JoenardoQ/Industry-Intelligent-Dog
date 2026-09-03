@@ -16,7 +16,7 @@ VALIDATOR = ROOT / "DomainIntelDesktop" / "scripts" / "validate_release_assets.p
 
 def test_product_version_has_one_authority_and_a_valid_python_projection():
     product_version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
-    assert product_version == "4.1.0-test.3"
+    assert product_version == "4.1.0-test.4"
     for package in ("DomainIntelWeb", "DomainIntelDesktop"):
         manifest = json.loads((ROOT / package / "package.json").read_text(encoding="utf-8"))
         lock = json.loads((ROOT / package / "package-lock.json").read_text(encoding="utf-8"))

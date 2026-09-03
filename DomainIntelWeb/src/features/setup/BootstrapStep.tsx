@@ -8,7 +8,7 @@ type StageState='waiting'|'running'|'passed'|'partial'|'failed'|'skipped'
 const STAGES=[['sources','信息源门槛'],['value_chain','产业链门槛'],['entities','实体覆盖门槛']] as const
 const STATE_LABEL:Record<StageState,string>={waiting:'等待中',running:'执行中',passed:'已通过',partial:'部分完成',failed:'失败',skipped:'未执行'}
 const JOB_LABEL:Record<string,string>={queued:'排队中',running:'执行中',completed:'已完成',partial:'部分完成',failed:'失败',paused:'已暂停',cancelled:'已取消',interrupted:'已中断',cancelling:'正在取消'}
-const STAGE_LABEL:Record<string,string>={provider_preflight:'检查研究连接',source_request:'检索权威信息源',source_gate:'审查信息源门槛',value_chain_request:'梳理产业链',value_chain_gate:'审查产业链门槛',entity_request:'检索实体与研究组',entity_gate:'审查实体覆盖门槛',persisting:'保存首轮知识',completed:'首轮研究完成'}
+const STAGE_LABEL:Record<string,string>={queued:'Agent 已启动，等待首个响应',running:'Agent 已启动，等待首个响应',provider_preflight:'检查研究连接',provider_failed:'研究连接失败',source_request:'检索权威信息源',source_validation:'核验信息源可达性',source_gate:'审查信息源门槛',chain_request:'梳理产业链',chain_validation:'核验产业链证据',chain_gate:'审查产业链门槛',value_chain_request:'梳理产业链',value_chain_gate:'审查产业链门槛',entity_request:'检索实体与研究组',entity_validation:'核验实体覆盖',entity_gate:'审查实体覆盖门槛',draft_publish:'保存首轮知识',persisting:'保存首轮知识',completed:'首轮研究完成'}
 const FAILURE_LABEL:Record<string,string>={sources:'信息源门槛',value_chain:'产业链门槛',entities:'实体覆盖门槛'}
 
 function checkpointState(job:Job|null,key:string):StageState {

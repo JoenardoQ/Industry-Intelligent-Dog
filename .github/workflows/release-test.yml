@@ -6,7 +6,7 @@ on:
       version:
         description: Test SemVer without v
         required: true
-        default: 4.1.0-test.3
+        default: 4.1.0-test.4
         type: string
       windows_issue_number:
         description: Existing Windows release Issue number (optional)

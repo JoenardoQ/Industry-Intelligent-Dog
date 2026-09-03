@@ -33,7 +33,7 @@ import sys
 from pathlib import Path
 
 SERVER_NAME = "domain-intel"
-SERVER_VERSION = "4.1.0-test.3"
+SERVER_VERSION = "4.1.0-test.4"
 PROTOCOL_VERSION = "2024-11-05"   # 兼容主流客户端；initialize 时回显请求版本
 
 PROJECT_ROOT = Path(os.environ.get("INTDOG_PROJECT_ROOT") or
