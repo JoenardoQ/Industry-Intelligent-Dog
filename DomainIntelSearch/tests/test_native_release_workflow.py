@@ -29,7 +29,7 @@ def test_product_version_has_one_authority_and_a_valid_python_projection():
     python_version = tomllib.loads(
         (ROOT / "DomainIntelSearch/pyproject.toml").read_text(encoding="utf-8")
     )["project"]["version"]
-    assert python_version == "4.1.0.dev3"
+    assert python_version == "4.1.0.dev4"
 
     assert _workflow("release-test.yml")["on"]["workflow_dispatch"]["inputs"]["version"]["default"] == product_version
     assert _workflow("_native-package.yml")["on"]["workflow_call"]["inputs"]["version"]["default"] == product_version
