@@ -155,6 +155,7 @@ class ConversationState(BaseModel):
     proposals: list[ActionProposalState]
     capability: dict[str, Any]
     connection: str | None = None
+    connection_warning: str | None = None
 
 
 class ConfirmedProposalState(BaseModel):
@@ -379,6 +380,7 @@ class AgentProbeState(BaseModel):
     provider: str
     ready: bool
     status: Literal["ready", "not_ready", "unsupported", "unexpected_response", "failed"]
+    connection: str | None = None
     latency_ms: int = Field(ge=0)
     detail: str = Field(max_length=1000)
 

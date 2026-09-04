@@ -11,6 +11,7 @@ type Props = {
 }
 
 const actionNames:Record<string,string>={daily:'每日情报',weekly:'周报',monthly:'月报',quarterly:'季报',report:'行业报告',deep_report:'深度研究',impact:'影响分析',lab:'Intelligence Lab',bootstrap:'初始化研究',coverage:'覆盖搜索',history:'历史回填'}
+const connectionNames:Record<string,string>={codex_app_server:'Codex App Server',acp:'ACP 会话',cli:'本机 CLI',cli_fallback:'本机 CLI 回退',api:'模型 API'}
 
 export default function AgentConversation({industry,provider,providerName,notify}:Props){
   const [collapsed,setCollapsed]=useState(localStorage.getItem('intdog.chat.collapsed')==='true')
@@ -55,9 +56,11 @@ export default function AgentConversation({industry,provider,providerName,notify
   if(collapsed)return <button className="agent-chat-tab" onClick={toggle} aria-label="打开 Agent 对话"><Bot/><span>Agent</span><ChevronLeft/></button>
   const capability=state?.capability||{}
   const protocol=String(state?.connection||capability.session_protocol||'等待连接')
+  const protocolLabel=connectionNames[protocol]||protocol
   return <aside className="agent-chat" aria-label="行业 Agent 对话">
-    <header><div><span className="agent-avatar"><Bot/></span><div><strong>研究 Agent</strong><small>{providerName||provider} · {protocol}</small></div></div><button className="icon-button" onClick={toggle} aria-label="收起 Agent 对话"><ChevronRight/></button></header>
+    <header><div><span className="agent-avatar"><Bot/></span><div><strong>研究 Agent</strong><small>{providerName||provider} · {protocolLabel}</small></div></div><button className="icon-button" onClick={toggle} aria-label="收起 Agent 对话"><ChevronRight/></button></header>
     <div className="agent-chat-context"><span>{industry||'未选择行业'}</span><p>对话只保存在本机，并随行业切换。执行建议必须逐项确认。</p></div>
+    {state?.connection_warning&&<p className="agent-chat-connection-warning" role="status">{state.connection_warning}</p>}
     <div className="agent-chat-stream">
       {!provider&&<div className="agent-chat-empty"><Bot/><strong>尚未选择 Agent</strong><p>请先在连接设置中选择可用的 Agent 或 API。</p></div>}
       {provider&&!state&&!error&&<div className="agent-chat-loading"><LoaderCircle/> 正在读取本地对话…</div>}

@@ -67,3 +67,9 @@ ACP implementations may support different protocol versions. The adapter trusts 
 | Task handoff | Schema-validated task export and review-gated result import only |
 
 Agent upgrades can change protocol behavior. IntDog diagnoses the version and handshake before selecting an adapter. A fallback must be visible to the user and must never silently switch to a different agent or paid provider.
+
+### When a native protocol fails
+
+If Codex App Server cannot complete its handshake, ends unexpectedly, or returns no readable result, IntDog closes and evicts the broken session and retries once through the same verified Codex CLI. The conversation panel and live connection probe explicitly report “local CLI fallback,” and the invalid App Server session ID is not retained. IntDog does not automatically switch to the OpenAI API, another agent, or another paid source.
+
+IntDog uses an agent's structured App Server, ACP, or headless CLI interface rather than embedding a terminal emulator. This provides deterministic completion signals and structured events while retaining one distribution architecture across Windows, macOS, and Linux. IntDog still does not take over an already-open Agent desktop window.

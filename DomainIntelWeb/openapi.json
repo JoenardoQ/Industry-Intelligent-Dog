@@ -2051,6 +2051,17 @@
       "AgentProbeState": {
         "additionalProperties": false,
         "properties": {
+          "connection": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection"
+          },
           "detail": {
             "maxLength": 1000,
             "title": "Detail",
@@ -4528,6 +4539,17 @@
               }
             ],
             "title": "Connection"
+          },
+          "connection_warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Warning"
           },
           "conversation": {
             "additionalProperties": true,

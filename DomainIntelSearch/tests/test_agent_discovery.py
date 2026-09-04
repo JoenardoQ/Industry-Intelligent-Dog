@@ -10,7 +10,9 @@ import pytest
 
 from src.services import agent_registry
 from src.services.provider_readiness import provider_readiness
+from src.services import agent_connection
 from src.services.agent_connection import probe_agent_connection
+from src.services.agent_sessions import AgentSessionError
 from src.services.capability_manifest import AgentCapability
 from src.services.claude_cli_service import ClaudeCLIError, ClaudeCLIService
 
@@ -141,6 +143,79 @@ def test_connection_probe_rejects_a_response_that_only_echoes_the_marker(tmp_pat
 
     assert result["ready"] is False
     assert result["status"] == "unexpected_response"
+
+
+def test_codex_probe_prefers_app_server_and_reports_effective_protocol(
+        tmp_path, monkeypatch):
+    class NativeCodex:
+        def __init__(self, executable, workspace, timeout):
+            self.closed = False
+
+        def start(self):
+            return None
+
+        def start_thread(self):
+            return "thread-probe"
+
+        def start_turn(self, thread_id, prompt):
+            return {"events": [{
+                "method": "item/agentMessage/delta",
+                "params": {"delta": "INTDOG_CONNECTION_OK"},
+            }]}
+
+        def close(self):
+            self.closed = True
+
+    monkeypatch.setattr(agent_connection, "diagnose_agent", lambda *_args, **_kwargs: {
+        "id": "codex", "ready": True, "resolved_executable": "/tools/codex",
+    })
+    monkeypatch.setattr(agent_connection, "CodexAppServerSession", NativeCodex,
+                        raising=False)
+
+    result = probe_agent_connection(
+        {"id": "codex", "executable": "/tools/codex"}, tmp_path,
+        timeout_seconds=5)
+
+    assert result["ready"] is True
+    assert result["connection"] == "codex_app_server"
+    assert result["detail"] == "Codex App Server 真实最小调用成功"
+
+
+def test_codex_probe_falls_back_to_same_cli_when_app_server_fails(
+        tmp_path, monkeypatch):
+    class BrokenNativeCodex:
+        def __init__(self, executable, workspace, timeout):
+            pass
+
+        def start(self):
+            raise AgentSessionError("handshake failed")
+
+        def close(self):
+            return None
+
+    class CliCodex:
+        def __init__(self, config, workspace, executable_binding):
+            pass
+
+        def complete(self, prompt):
+            return type("Result", (), {"text": "INTDOG_CONNECTION_OK"})()
+
+    monkeypatch.setattr(agent_connection, "diagnose_agent", lambda *_args, **_kwargs: {
+        "id": "codex", "ready": True, "resolved_executable": "/tools/codex",
+    })
+    monkeypatch.setattr(agent_connection, "CodexAppServerSession",
+                        BrokenNativeCodex, raising=False)
+    monkeypatch.setattr(
+        "src.services.codex_cli_service.CodexCLIService", CliCodex)
+
+    result = probe_agent_connection(
+        {"id": "codex", "executable": "/tools/codex"}, tmp_path,
+        timeout_seconds=5)
+
+    assert result["ready"] is True
+    assert result["connection"] == "cli_fallback"
+    assert result["detail"] == (
+        "Codex App Server 不可用，已通过同一 Codex CLI 完成真实调用")
 
 
 def test_missing_native_executable_is_not_ready(tmp_path):

@@ -13,7 +13,7 @@ import threading
 from pathlib import Path
 from typing import Callable
 
-from .agent_sessions import AcpSession, CodexAppServerSession
+from .agent_sessions import AcpSession, AgentSessionError, CodexAppServerSession
 from .capability_manifest import capability_or_unknown
 
 
@@ -61,40 +61,70 @@ class NativeSessionRunner:
         executable = str(state.get("resolved_executable") or state.get("executable") or "")
         if spec.native_session_implemented and executable and state.get("ready"):
             key = (provider, str(workspace))
-            with self._lock:
-                entry = self._sessions.get(key)
-                created = entry is None
-                if created:
-                    session = (CodexAppServerSession(executable, workspace)
-                               if spec.session_protocol == "codex_app_server"
-                               else AcpSession(executable, spec.native_args, workspace))
-                    session.start()
-                    entry = {"session": session, "session_id": "",
-                             "turn_lock": threading.Lock()}
-                    self._sessions[key] = entry
-            session = entry["session"]
-            with entry["turn_lock"]:
-                session_id = str(entry.get("session_id") or external_session_id or "")
-                if spec.session_protocol == "codex_app_server":
-                    if created and session_id:
-                        session.resume_thread(session_id)
-                    elif not session_id:
-                        session_id = session.start_thread()
-                    result = session.start_turn(session_id, prompt)
-                else:
-                    if created and session_id:
-                        session.load_session(session_id)
-                    elif not session_id:
-                        session_id = session.new_session()
-                    result = session.prompt(session_id, prompt)
-                entry["session_id"] = session_id
-            text = _event_text(result.get("events", []))
-            if not text:
-                text = str((result.get("result") or {}).get("text") or "").strip()
-            if not text:
-                raise RuntimeError("Agent session completed without readable text")
-            return {"text": text, "connection": spec.session_protocol,
-                    "external_session_id": session_id}
+            entry = None
+            candidate_session = None
+            try:
+                with self._lock:
+                    entry = self._sessions.get(key)
+                    created = entry is None
+                    if created:
+                        candidate_session = (
+                            CodexAppServerSession(executable, workspace)
+                            if spec.session_protocol == "codex_app_server"
+                            else AcpSession(executable, spec.native_args, workspace))
+                        candidate_session.start()
+                        entry = {"session": candidate_session, "session_id": "",
+                                 "turn_lock": threading.Lock()}
+                        self._sessions[key] = entry
+                session = entry["session"]
+                with entry["turn_lock"]:
+                    session_id = str(entry.get("session_id") or external_session_id or "")
+                    if spec.session_protocol == "codex_app_server":
+                        if created and session_id:
+                            session.resume_thread(session_id)
+                        elif not session_id:
+                            session_id = session.start_thread()
+                        result = session.start_turn(session_id, prompt)
+                    else:
+                        if created and session_id:
+                            session.load_session(session_id)
+                        elif not session_id:
+                            session_id = session.new_session()
+                        result = session.prompt(session_id, prompt)
+                    entry["session_id"] = session_id
+                text = _event_text(result.get("events", []))
+                if not text:
+                    text = str((result.get("result") or {}).get("text") or "").strip()
+                if not text:
+                    raise AgentSessionError(
+                        "Agent session completed without readable text")
+                return {"text": text, "connection": spec.session_protocol,
+                        "external_session_id": session_id}
+            except (AgentSessionError, OSError) as exc:
+                with self._lock:
+                    failed = self._sessions.pop(key, None)
+                failed_session = ((failed or {}).get("session")
+                                  if failed is not None else candidate_session)
+                if failed_session is not None:
+                    try:
+                        failed_session.close()
+                    except Exception:
+                        pass
+                if spec.execution_level != "direct" or "cli" not in spec.fallbacks:
+                    raise
+                service = create_provider({}, provider, workspace)
+                result = service.complete(prompt)
+                protocol_name = ("Codex App Server"
+                                 if spec.session_protocol == "codex_app_server"
+                                 else spec.session_protocol)
+                return {
+                    "text": result.text,
+                    "connection": "cli_fallback",
+                    "external_session_id": "",
+                    "connection_warning": (
+                        f"{protocol_name} 连接失败（{type(exc).__name__}），"
+                        f"已改用同一 {spec.name}。"),
+                }
 
         # Existing CLI and API implementations remain a deliberate fallback.
         # The response metadata exposes this downgrade to the UI.
@@ -156,9 +186,14 @@ class ConversationBroker:
             visible = "我已生成一个待确认的执行建议。" if proposals else raw
         self.repo.append_conversation_message(
             conversation["id"], "assistant", visible,
-            {"connection": str(result.get("connection") or "unknown")})
+            {key: value for key, value in {
+                "connection": str(result.get("connection") or "unknown"),
+                "connection_warning": str(result.get("connection_warning") or ""),
+            }.items() if value})
         state = self.state(folder, provider)
         state["connection"] = str(result.get("connection") or "unknown")
+        if result.get("connection_warning"):
+            state["connection_warning"] = str(result["connection_warning"])
         return state
 
     @staticmethod

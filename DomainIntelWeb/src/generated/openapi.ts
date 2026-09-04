@@ -284,6 +284,7 @@ export interface AgentLocatorProvenance {
 }
 
 export interface AgentProbeState {
+  "connection"?: string | null
   "detail": string
   "latency_ms": number
   "provider": string
@@ -707,6 +708,7 @@ export interface ConversationMessageState {
 export interface ConversationState {
   "capability": Record<string, unknown>
   "connection"?: string | null
+  "connection_warning"?: string | null
   "conversation": Record<string, unknown>
   "messages": Array<ConversationMessageState>
   "proposals": Array<ActionProposalState>

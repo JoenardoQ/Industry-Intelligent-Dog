@@ -41,3 +41,15 @@ it('switches local transcripts with the industry and confirms proposals explicit
   expect(await screen.findByText('chips welcome')).toBeInTheDocument()
   expect(screen.queryByText('AI welcome')).not.toBeInTheDocument()
 })
+
+it('shows when the native protocol downgraded to the same Agent CLI',async()=>{
+  apiMock.mockResolvedValue({
+    ...state('AI'),connection:'cli_fallback',
+    connection_warning:'Codex App Server 无法使用，已改用同一 Codex CLI。',
+  })
+
+  render(<AgentConversation industry="AI" provider="codex" providerName="Codex CLI" notify={vi.fn()}/>)
+
+  expect(await screen.findByText(/本机 CLI 回退/)).toBeInTheDocument()
+  expect(screen.getByText('Codex App Server 无法使用，已改用同一 Codex CLI。')).toBeInTheDocument()
+})
