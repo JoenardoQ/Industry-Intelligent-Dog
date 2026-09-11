@@ -44,10 +44,6 @@ def data_root(config: dict) -> Path:
     return resolve_config_path(configured)
 
 
-def archive_root(config: dict) -> Path:
-    """Legacy archive root, retained only for backwards-compatible commands."""
-    configured = (config.get("archive", {}) or {}).get("root", "../DomainIntelData/_archive")
-    return resolve_config_path(configured)
 
 
 def load_config(config_path: str = None) -> dict:
@@ -60,8 +56,7 @@ def load_config(config_path: str = None) -> dict:
     # Normalize all filesystem paths once.  Downstream modules therefore do
     # not need to guess which directory a relative path belongs to.
     for section, keys in (("output", ("dir", "data_dir")),
-                          ("data_layer", ("root",)),
-                          ("archive", ("root",))):
+                          ("data_layer", ("root",))):
         values = cfg.get(section, {}) or {}
         for key in keys:
             if values.get(key):
@@ -104,11 +99,8 @@ class SeenStore:
 
     def _load(self) -> dict:
         if self.store_path.exists():
-            try:
-                with open(self.store_path, "r", encoding="utf-8") as f:
-                    return dict.fromkeys(json.load(f))
-            except (json.JSONDecodeError, IOError):
-                return {}
+            with open(self.store_path, "r", encoding="utf-8") as f:
+                return dict.fromkeys(json.load(f))
         return {}
 
     def is_seen(self, uid: str) -> bool:
@@ -129,14 +121,3 @@ def save_json(data, path):
     ensure_dir(Path(path).parent)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2, default=str)
-
-
-def load_json(path, default=None):
-    p = Path(path)
-    if not p.exists():
-        return default if default is not None else []
-    try:
-        with open(p, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, IOError):
-        return default if default is not None else []

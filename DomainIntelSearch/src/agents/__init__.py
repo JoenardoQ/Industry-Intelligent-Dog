@@ -1,4 +1,4 @@
-"""IIOS 多 Agent 层（IIOS_SPEC.md §5）.
+"""IIOS 多 Agent 层（根目录 DESIGN.md）.
 
 - 研究组（LLM 任务包）: Industry / ValueChain / Company / Technology / Learning / Timeline / Social
 - 情报组（爬虫，位于 src/crawlers/）: News / Paper / Policy / Finance / Startup

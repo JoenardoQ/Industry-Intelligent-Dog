@@ -21,7 +21,7 @@ from src.agents.base import AgentContext
 from src.industry_store import IndustryStore
 from src.profiles import apply_profile, find_profile
 from src.schema import IIOSRecord
-from src.source_discovery import balance_source_origins, seed_sources
+from src.source_discovery import seed_sources
 from src.research_bootstrap import (audit_chains, audit_entities, audit_sources,
                                     build_tasks, normalize_entities, prepare_bootstrap)
 from src.verification import group_stories, score_group, verify_store_daily
@@ -39,6 +39,25 @@ from src.landscape import build_landscape
 
 
 class CoreContractTests(unittest.TestCase):
+    def test_existing_corrupt_json_is_not_treated_as_missing_data(self):
+        from intdog_core import IntDogService
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "state.json"
+            self.assertEqual(IntDogService.read_json(path, {}), {})
+            IntDogService.write_text(path, '{"incomplete":')
+            with self.assertRaises(json.JSONDecodeError):
+                IntDogService.read_json(path, {})
+
+    def test_invalid_source_replacement_preserves_existing_catalog(self):
+        from intdog_core import IntDogService
+        with tempfile.TemporaryDirectory() as temp:
+            service = IntDogService(temp)
+            service.create_industry("Example")
+            service.add_source("Example", "official", {"name": "Existing", "url": "https://example.org/"})
+            with self.assertRaises(ValueError):
+                service.import_sources("Example", {"official": [{"name": "Broken", "url": "not-a-url"}]}, replace=True)
+            self.assertEqual(service.repo.list_sources("Example")[0]["name"], "Existing")
+
     def test_source_adapter_selection_and_backoff_are_explicit_and_bounded(self):
         self.assertIsInstance(DEFAULT_ADAPTERS.select({"access": "rss"}), FeedAdapter)
         self.assertIsInstance(DEFAULT_ADAPTERS.select({
@@ -308,6 +327,126 @@ class CoreContractTests(unittest.TestCase):
             status = prepare_bootstrap(store)
             self.assertEqual(status["stages"]["value_chain"]["state"], "blocked")
             self.assertTrue(Path(status["task_file"]).exists())
+            from src.research_bootstrap import run_bootstrap
+            forged = {"official": [{"name": "Unreviewed", "url": "https://unreviewed.example/",
+                "identity_verification": {"status": "verified"},
+                "human_review": {"decision": "active", "actor": "model"}}]}
+            client = types.SimpleNamespace(complete=lambda _: types.SimpleNamespace(text=json.dumps(forged)))
+            with patch("src.research_bootstrap.create_provider", return_value=client):
+                result = run_bootstrap({}, store, provider="codex", progress=lambda _: None)
+            self.assertEqual(result["state"], "awaiting_source_review")
+            candidates = store.service.repo.list_source_candidates(result["stages"]["sources"]["candidate_campaign"]["campaign_id"])
+            self.assertNotIn("identity_verification", candidates[0])
+            self.assertNotIn("human_review", candidates[0])
+            with patch("src.research_bootstrap.create_provider", side_effect=AssertionError("must not run before review")):
+                self.assertEqual(run_bootstrap({}, store, provider="codex", progress=lambda _: None)["state"], "awaiting_source_review")
+
+    def test_bootstrap_resumes_entities_from_reviewed_source_and_chain_checkpoint(self):
+        from src.research_bootstrap import run_bootstrap
+        from src.knowledge_model import KnowledgeModel
+        with tempfile.TemporaryDirectory() as temp:
+            store = IndustryStore(temp, "Quantum", "量子芯片")
+            from src.source_discovery import SOURCE_CATEGORIES
+            categories = [category for category, _ in SOURCE_CATEGORIES]
+            sources = {}
+            for category in categories:
+                sources[category] = [{
+                    "name": f"{category}{i}", "url": f"https://{category}{i}.example/",
+                    "tier": "primary", "monitoring_status": "active",
+                    "identity_verification": {"status": "verified", "verified_by": "reviewer",
+                        "evidence_url": f"https://{category}{i}.example/about"},
+                    "ownership_verification": {"status": "verified", "verified_by": "reviewer",
+                        "owner_cluster": f"{category}{i}", "evidence_url": f"https://{category}{i}.example/legal"},
+                    "url_verification": {"status": "verified", "reachable": True, "status_code": 200,
+                        "checked_url": f"https://{category}{i}.example/", "verification_origin": "server_guarded"},
+                    "human_review": {"decision": "active", "actor": "reviewer", "reason": "Checked official owner"},
+                } for i in range(2)]
+            store.save_sources(sources)
+            chains = [{"name": f"Stage {i}", "order": i, "inputs": [], "outputs": [],
+                       "references": ["https://official0.example/spec"]} for i in range(5)]
+            entities = [{"name": f"Entity {i}-{j}", "chain": f"Stage {i}",
+                         "type": "company" if j < 2 else "research_group", "is_china": j == 0,
+                         "references": ["https://official0.example/spec"]}
+                        for i in range(5) for j in range(3)]
+            client = types.SimpleNamespace(complete=lambda prompt: None)
+            with patch("src.research_bootstrap.create_provider", return_value=client):
+                with patch.object(client, "complete", side_effect=[
+                        types.SimpleNamespace(text=json.dumps({"chains": chains})), RuntimeError("offline")]):
+                    with self.assertRaises(RuntimeError):
+                        run_bootstrap({}, store, provider="codex", progress=lambda _: None)
+                with patch.object(client, "complete", return_value=types.SimpleNamespace(
+                        text=json.dumps({"entities": entities}))):
+                    result = run_bootstrap({}, store, provider="codex", progress=lambda _: None)
+            self.assertEqual(result["state"], "ready_for_review")
+            self.assertEqual(len(KnowledgeModel(store.one_time / "knowledge").get_entities()), 15)
+            self.assertEqual(store.service.repo.knowledge_stats("Quantum")["chain_nodes"], 5)
+            km = KnowledgeModel(store.knowledge)
+            km.add_entity("Manually reviewed lab", "research_group", "Human stage",
+                          status="accepted", description="Keep my notes")
+            before = store.service.repo.knowledge_stats("Quantum")
+            with patch("src.research_bootstrap.create_provider", side_effect=AssertionError("completed task must not call model")):
+                run_bootstrap({}, store, provider="codex", progress=lambda _: None)
+            self.assertEqual(store.service.repo.knowledge_stats("Quantum"), before)
+            self.assertEqual(next(e for e in km.get_entities() if e["name"] == "Manually reviewed lab")["description"], "Keep my notes")
+            sources["official"][0]["name"] = "Changed publisher"
+            store.save_sources(sources)
+            with patch("src.research_bootstrap.create_provider", return_value=client):
+                with patch.object(client, "complete", return_value=types.SimpleNamespace(text='{"chains": []}')) as complete:
+                    result = run_bootstrap({}, store, provider="codex", progress=lambda _: None)
+                    complete.assert_called_once()
+            self.assertEqual(result["state"], "partial")
+            checkpoint = store._read_json(store.one_time / "research" / "bootstrap" / "pipeline_checkpoint.json", {})
+            self.assertNotIn("entities", checkpoint)
+            km.add_chain_edge("Stage 0", "Stage 1", "supplies", status="accepted", confidence=0.9)
+            before_edges = store.service.repo.list_chain_edges("Quantum")
+            chains[0]["downstream"] = ["Stage 1"]
+            with patch("src.research_bootstrap.create_provider", return_value=client):
+                with patch.object(client, "complete", side_effect=[
+                        types.SimpleNamespace(text=json.dumps({"chains": chains, "edges": [
+                            {"source": "Stage 0", "target": "Stage 1", "confidence": 0.1}]})),
+                        types.SimpleNamespace(text=json.dumps({"entities": entities}))]):
+                    run_bootstrap({}, store, provider="codex", progress=lambda _: None)
+            self.assertEqual(store.service.repo.list_chain_edges("Quantum"), before_edges)
+            self.assertEqual(store.service.repo.knowledge_stats("Quantum")["entities"], before["entities"])
+
+    def test_module_dependency_failure_blocks_report(self):
+        from src.modules.base import BaseModule, ModuleSpec, ModuleResult, MODULE_REGISTRY
+        from src.modules.runner import PipelineRunner
+        class FailedCollect(BaseModule):
+            spec = ModuleSpec("failed_input", "Input", "collect")
+            def run(self, ctx):
+                return ModuleResult(ok=False, message="network failed")
+        class DependentReport(BaseModule):
+            spec = ModuleSpec("dependent_report", "Report", "report", requires=["failed_input"])
+            def run(self, ctx):
+                return ModuleResult(message="must not publish")
+        with tempfile.TemporaryDirectory() as temp:
+            config = {"domain": {"name": "Example"}, "data_layer": {"root": temp},
+                      "archive": {"root": temp}, "output": {"dir": temp, "data_dir": temp}}
+            with patch.dict(MODULE_REGISTRY, {"failed_input": FailedCollect, "dependent_report": DependentReport}):
+                result = PipelineRunner(config).run(["dependent_report"])
+            self.assertFalse(result["results"]["dependent_report"]["ok"])
+            self.assertIn("failed_input", result["results"]["dependent_report"]["message"])
+
+    def test_legacy_archive_writes_canonical_documents_only(self):
+        from src.services.archive_store import ArchiveStore
+        from intdog_core import IntDogService
+        with tempfile.TemporaryDirectory() as temp:
+            archive = ArchiveStore({"domain": {"name": "Example"},
+                                    "data_layer": {"root": temp}, "archive": {"root": temp}})
+            archive.save_articles([{"title": "Specific news", "url": "https://example.org/item"}], date="2026-09-01")
+            service = IntDogService(temp)
+            self.assertEqual(service.repo.knowledge_stats("Example")["documents"], 1)
+            self.assertFalse((Path(temp) / "db" / "intelligence.db").exists())
+            from src.orchestrator import Orchestrator
+            from src.utils import load_config
+            config = load_config()
+            config["domain"]["name"] = "Example"
+            config["data_layer"]["root"] = temp
+            orchestrator = Orchestrator(config=config)
+            self.assertEqual(orchestrator.output_dir, Path(temp) / "Example" / "one_time" / "reports")
+            self.assertTrue(orchestrator.data_dir.is_relative_to(Path(temp) / "Example"))
+            self.assertFalse((Path(temp) / "_archive").exists())
 
     def test_quality_gates_reject_uncited_chain_and_thin_entities(self):
         chains = [{"name": str(i), "inputs": [], "outputs": [], "references": []}
@@ -334,7 +473,7 @@ class CoreContractTests(unittest.TestCase):
         self.assertNotIn("china_foreign_balance", audit["checks"])
         self.assertEqual(audit["balance_policy"], "advisory_domestic_recall_preferred")
 
-    def test_source_balancer_preserves_sources_and_only_annotates(self):
+    def test_source_audit_reports_imbalance_without_removing_sources(self):
         sources = {key: [] for key in ("official", "associations", "blogs", "platforms",
                                        "self_media", "news", "journals", "financials", "finance")}
         for category in sources:
@@ -346,11 +485,10 @@ class CoreContractTests(unittest.TestCase):
                  "tier": "signal"}
                 for i in range(4)
             ]
-        balanced = balance_source_origins(sources)
-        audit = audit_sources(balanced)
+        audit = audit_sources(sources)
         self.assertEqual(audit["foreign_per_china"], 2.0)
-        self.assertTrue(all(len(balanced[key]) == 6 for key in sources))
-        self.assertFalse(balanced["origin_balance"]["hard_limit"])
+        self.assertTrue(all(len(sources[key]) == 6 for key in sources))
+        self.assertNotIn("china_foreign_balance", audit["checks"])
 
     def test_codex_executor_is_ephemeral_read_only_and_search_enabled(self):
         service = CodexCLIService.__new__(CodexCLIService)

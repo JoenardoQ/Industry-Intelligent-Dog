@@ -100,13 +100,8 @@ history:
   require_ready: true             # 总量、时间桶和发布者门槛不足时拒绝伪装成完整报告
   context_item_cap: 500           # 全量入库；模型上下文按时间桶等距抽样
 
-# ---------- 输出设置（旧版 daily/weekly 命令的扁平归档，归入 _archive 子目录） ----------
-# 注意：新版按行业分目录存储用 init-industry / crawl-daily（见 main.py 顶部说明），
-#       数据写入 DomainIntelData/<行业>/。以下 output/archive 仅供旧命令使用。
+# ---------- 研究输出语言；文件默认保存在当前行业目录 ----------
 output:
-  dir: "../DomainIntelData/_archive/reports"
-  data_dir: "../DomainIntelData/_archive/raw"
-  report_format: "html"          # html | markdown
   language: "zh"                 # zh | en | both
 
 # ---------- 按行业分目录的数据层根（新版主存储） ----------
@@ -114,27 +109,6 @@ output:
 data_layer:
   root: "../DomainIntelData"
 
-# ---------- 数据层设置（旧版扁平归档，归入 _archive 子目录） ----------
-# 新版按行业分目录：DomainIntelData/<行业>/（init-industry 创建）。
-archive:
-  enabled: true
-  root: "../DomainIntelData/_archive"
-  serve_port: 8900               # 局域网服务端口（可选）
-
-# ---------- IIOS 多 Agent 设置（规格见 IIOS_SPEC.md） ----------
+# ---------- IIOS 多 Agent 设置（规格见 根目录 DESIGN.md） ----------
 iios:
   region: "global"               # global | china | us | europe（区域视角）
-  # 四级调度（daily/weekly 由 WorkBuddy 自动化承担；monthly/quarterly 生成 LLM 任务包）
-  schedule:
-    daily:     ["collect", "daily"]                    # 新闻/论文/发言 → 日报
-    weekly:    ["weekly"]                              # 行业+政策+投融资周报
-    monthly:   ["agent:finance", "agent:technology"]   # 财报跟踪+技术趋势任务包
-    quarterly: ["plan"]                                # 深度行业报告全量计划
-  # 多源交叉验证（Phase 2）：同一事件 >=2 源 → confidence >= 0.8
-  verification:
-    min_sources: 2
-    base_confidence: 0.6
-
-# ---------- 桌面启动设置 ----------
-desktop:
-  crawl_interval_hours: 4        # 后台爬虫抓取间隔（小时）

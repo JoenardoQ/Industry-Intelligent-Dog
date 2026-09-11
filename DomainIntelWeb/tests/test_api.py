@@ -58,6 +58,21 @@ def test_health_and_overview_use_temporary_canonical_store(monkeypatch, tmp_path
     assert module.DATA_ROOT == tmp_path.resolve()
 
 
+def test_scheduler_poll_failure_is_visible_and_recovers(monkeypatch, tmp_path):
+    module, _ = load_api(monkeypatch, tmp_path)
+    scheduler = module.automation
+    def fail_claim(*args, **kwargs):
+        raise sqlite3.OperationalError("database unavailable")
+    monkeypatch.setattr("DomainIntelWeb.api.automation.claim_due_schedules", fail_claim)
+    monkeypatch.setattr(scheduler._stop, "wait", lambda _: scheduler._stop.set())
+    scheduler._loop()
+    assert "OperationalError" in module.health()["automation_error"]
+    monkeypatch.setattr("DomainIntelWeb.api.automation.claim_due_schedules", lambda *a, **kw: [])
+    scheduler._stop.clear()
+    scheduler._loop()
+    assert module.health()["automation_error"] == ""
+
+
 def test_background_state_and_authoritative_job_contract(monkeypatch, tmp_path):
     state_path = tmp_path / "desktop-background-state.json"
     state_path.write_text(json.dumps({
@@ -206,9 +221,34 @@ def test_source_campaign_and_entity_coverage_workbench_contract(monkeypatch, tmp
     assert reviewed["status"] == "reserve"
     assert reviewed["review"]["reason"] == "same owner overlap"
 
+    # Adoption needs explicit human evidence and an independent guarded URL probe.
+    review = _router_endpoint(module.sources_router, "/source-candidates/{candidate_id}/review", "POST")
+    with pytest.raises(HTTPException) as missing:
+        review("AI", candidate_ids[0], schemas.SourceCandidateReview(
+            decision="active", actor="analyst", reason="Reviewed publisher"))
+    assert missing.value.status_code == 409
+    from src.coverage_execution import Probe
+    proof = schemas.SourceCandidateReview(
+        decision="active", actor="analyst", reason="Reviewed publisher",
+        identity_evidence_url="https://authority0.example/about",
+        ownership_evidence_url="https://authority0.example/legal", owner_cluster="Authority Zero")
+    monkeypatch.setattr("src.coverage_execution.probe_url", lambda url: Probe(False, url, 0))
+    with pytest.raises(HTTPException) as unreachable:
+        review("AI", candidate_ids[0], proof)
+    assert unreachable.value.status_code == 409
+    assert service.repo.get_source_candidate("AI", candidate_ids[0])["status"] == "candidate"
+    monkeypatch.setattr("src.coverage_execution.probe_url", lambda url: Probe(True, url, 200))
+    verified = review("AI", candidate_ids[0], schemas.SourceCandidateReview(
+        decision="active", actor="analyst", reason="Reviewed publisher",
+        identity_evidence_url="https://authority0.example/about",
+        ownership_evidence_url="https://authority0.example/legal", owner_cluster="Authority Zero"))
+    assert verified["status"] == "active"
+    assert verified["url_verification"]["verification_origin"] == "server_guarded"
+    assert service.repo.list_sources("AI")[0]["human_review"]["actor"] == "analyst"
+
     service.add_source("AI", "news", {
         "name": "Manual News", "url": "https://manual.example/feed"})
-    source_id = service.repo.list_sources("AI")[0]["id"]
+    source_id = next(source["id"] for source in service.repo.list_sources("AI") if source["name"] == "Manual News")
     reassessed = _router_endpoint(
         module.sources_router, "/sources/{source_id}/reassess", "POST")(
             "AI", source_id, schemas.SourceReassessmentRequest(

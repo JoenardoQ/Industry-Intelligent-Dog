@@ -19,7 +19,6 @@ from urllib.parse import urlsplit
 
 from .capability_manifest import AGENT_SPECS, capability_or_unknown
 
-AGENTS = AGENT_SPECS  # compatibility alias
 MAX_DIAGNOSTIC_OUTPUT_BYTES = 16 * 1024
 MAX_EXECUTABLE_FINGERPRINT_BYTES = 512 * 1024 * 1024
 MAX_CONCURRENT_DIAGNOSES = 4
@@ -146,12 +145,7 @@ def _run_bounded_argv(argv: list[str], *, timeout_seconds: float) -> _Probe:
 def _which(command: str, path: str | None) -> str:
     if path is None:
         return shutil.which(command) or ""
-    try:
-        return shutil.which(command, path=path) or ""
-    except TypeError:
-        # Preserve compatibility with simple test/platform shims that expose
-        # the historic one-argument signature.
-        return shutil.which(command) or ""
+    return shutil.which(command, path=path) or ""
 
 
 def _selected_file(raw: str) -> Path | None:

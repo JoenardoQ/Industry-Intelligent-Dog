@@ -282,8 +282,6 @@ def _launch(application: Path, kind: str, root: Path, attempt: int,
         return state
 
 
-def verify_launches(application: Path, kind: str, root: Path) -> list[dict]:
-    return [_launch(application, kind, root, attempt) for attempt in (1, 2)]
 
 
 def _generate_nom01_record(sidecar: Path, root: Path, folder: str = "AI") -> Path:

@@ -6,4 +6,3 @@ import os
 
 
 UI_FONT = "Segoe UI Variable" if os.name == "nt" else "IntDog UI"
-MONO_FONT = "Consolas" if os.name == "nt" else "IntDog Mono"

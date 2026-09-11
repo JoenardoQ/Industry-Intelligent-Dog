@@ -14,7 +14,6 @@ on:
       - DomainIntelSearch/intdog_core/**
       - DomainIntelSearch/config/**
       - DomainIntelSearch/evaluation/**
-      - DomainIntelSearch/skills/**
       - DomainIntelSearch/tests/**
       - DomainIntelWeb/api/**
       - DomainIntelWeb/src/**
@@ -40,7 +39,6 @@ on:
       - DomainIntelSearch/intdog_core/**
       - DomainIntelSearch/config/**
       - DomainIntelSearch/evaluation/**
-      - DomainIntelSearch/skills/**
       - DomainIntelSearch/tests/**
       - DomainIntelWeb/api/**
       - DomainIntelWeb/src/**

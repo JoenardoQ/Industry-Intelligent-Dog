@@ -94,6 +94,7 @@ def fetch_github(keywords: list[str], per_kw: int = 5, days: int = 30) -> list[d
     from .http_utils import fetch_url
     since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
     out, seen = [], set()
+    errors = []
     for kw in _search_terms(keywords):  # 控制请求数，优先高区分度英文技术词
         q = f"{kw} pushed:>={since}"
         try:
@@ -121,8 +122,12 @@ def fetch_github(keywords: list[str], per_kw: int = 5, days: int = 30) -> list[d
                                  relevance_score=1.0,
                                  metrics={"stars": stars,
                                           "language": repo.get("language") or ""}))
-        except (requests.RequestException, ValueError):
-            continue
+        except (requests.RequestException, ValueError) as exc:
+            from .http_utils import _record
+            errors.append(type(exc).__name__)
+            _record(f"GitHub[{kw}]", "https://api.github.com/search/repositories", type(exc).__name__)
+    if errors and not out:
+        raise RuntimeError("GitHub 采集失败：" + ", ".join(errors))
     return out
 
 

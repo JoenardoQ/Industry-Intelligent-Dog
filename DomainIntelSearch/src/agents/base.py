@@ -1,6 +1,6 @@
 """Agent 基类与运行上下文.
 
-设计原则（IIOS_SPEC.md §4）：
+设计原则（根目录 DESIGN.md）：
 1. 研究组 Agent 不直接调用 LLM API，而是产出「任务包」——
    结构化 Prompt + 数据上下文 + 期望输出路径，交由 WorkBuddy/Codex/任意 LLM 执行。
    这样系统离线也能跑，且 LLM 可替换。
@@ -17,7 +17,7 @@ from ..schema import IIOSRecord
 
 @dataclass
 class AgentContext:
-    """统一输入（IIOS_SPEC.md §2）."""
+    """统一输入（根目录 DESIGN.md）."""
 
     industry: str = "人工智能"
     industry_en: str = ""

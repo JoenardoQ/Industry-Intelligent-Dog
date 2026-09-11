@@ -4,10 +4,9 @@ import os
 from datetime import datetime
 
 import requests
-import feedparser
 
 from .base import BaseCrawler, Article
-from ..utils import days_ago, article_id, SeenStore, ensure_dir
+from ..utils import days_ago, article_id, SeenStore
 
 
 class RSSCrawler(BaseCrawler):
@@ -108,28 +107,24 @@ class NewsAPICrawler(BaseCrawler):
             "pageSize": 50,
             "apiKey": self.api_key,
         }
-        try:
-            from .http_utils import fetch_url
-            resp = fetch_url(self.BASE, params=params, timeout=15, name="NewsAPI")
-            data = resp.json()
-            articles = []
-            for item in data.get("articles", []):
-                a = Article(
-                    title=item.get("title", ""),
-                    url=item.get("url", ""),
-                    source=item.get("source", {}).get("name", "NewsAPI"),
-                    published=item.get("publishedAt", "")[:10],
-                    summary=(item.get("description") or "")[:500],
-                    lang="en",
-                    category="general",
-                )
-                a.extra["uid"] = article_id(a.url)
-                if a.url:
-                    articles.append(a)
-            return self.filter_by_keywords(articles)
-        except Exception as e:
-            print(f"[NewsAPI] 抓取失败: {e}")
-            return []
+        from .http_utils import fetch_url
+        resp = fetch_url(self.BASE, params=params, timeout=15, name="NewsAPI")
+        data = resp.json()
+        articles = []
+        for item in data.get("articles", []):
+            a = Article(
+                title=item.get("title", ""),
+                url=item.get("url", ""),
+                source=item.get("source", {}).get("name", "NewsAPI"),
+                published=item.get("publishedAt", "")[:10],
+                summary=(item.get("description") or "")[:500],
+                lang="en",
+                category="general",
+            )
+            a.extra["uid"] = article_id(a.url)
+            if a.url:
+                articles.append(a)
+        return self.filter_by_keywords(articles)
 
 
 class GNewsCrawler(BaseCrawler):
@@ -154,28 +149,24 @@ class GNewsCrawler(BaseCrawler):
             "from": days_ago(self.since_days).isoformat(timespec="seconds") + "Z",
             "apikey": self.api_key,
         }
-        try:
-            from .http_utils import fetch_url
-            resp = fetch_url(self.BASE, params=params, timeout=15, name="GNews")
-            data = resp.json()
-            articles = []
-            for item in data.get("articles", []):
-                a = Article(
-                    title=item.get("title", ""),
-                    url=item.get("url", ""),
-                    source=item.get("source", {}).get("name", "GNews"),
-                    published=item.get("publishedAt", "")[:10],
-                    summary=(item.get("description") or "")[:500],
-                    lang="zh",
-                    category="general",
-                )
-                a.extra["uid"] = article_id(a.url)
-                if a.url:
-                    articles.append(a)
-            return self.filter_by_keywords(articles)
-        except Exception as e:
-            print(f"[GNews] 抓取失败: {e}")
-            return []
+        from .http_utils import fetch_url
+        resp = fetch_url(self.BASE, params=params, timeout=15, name="GNews")
+        data = resp.json()
+        articles = []
+        for item in data.get("articles", []):
+            a = Article(
+                title=item.get("title", ""),
+                url=item.get("url", ""),
+                source=item.get("source", {}).get("name", "GNews"),
+                published=item.get("publishedAt", "")[:10],
+                summary=(item.get("description") or "")[:500],
+                lang="zh",
+                category="general",
+            )
+            a.extra["uid"] = article_id(a.url)
+            if a.url:
+                articles.append(a)
+        return self.filter_by_keywords(articles)
 
 
 class NewsAggregator:
@@ -202,8 +193,15 @@ class NewsAggregator:
             all_articles.extend(rss.fetch())
 
         # API 源（仅 general 类别）
-        all_articles.extend(NewsAPICrawler(self.config, since_days=since_days).fetch())
-        all_articles.extend(GNewsCrawler(self.config, since_days=since_days).fetch())
+        self.errors = []
+        for crawler in (NewsAPICrawler(self.config, since_days=since_days),
+                        GNewsCrawler(self.config, since_days=since_days)):
+            try:
+                all_articles.extend(crawler.fetch())
+            except (requests.RequestException, ValueError) as exc:
+                self.errors.append(f"{crawler.name}: {type(exc).__name__}")
+        if self.errors and not all_articles:
+            raise RuntimeError("新闻采集失败：" + "; ".join(self.errors))
 
         # 去重
         seen_urls = set()

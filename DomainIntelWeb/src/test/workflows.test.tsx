@@ -207,6 +207,10 @@ describe('critical workbench workflows', () => {
     expect(screen.getAllByText(/完整性未证明/).length).toBeGreaterThan(0)
     expect(screen.getByText(/supplies · 1 条证据/)).toBeInTheDocument()
     const explanation=screen.getByLabelText('候选复核说明 · Candidate A')
+    expect(screen.getByLabelText('发布者身份证据网址 · Candidate A')).toBeInTheDocument()
+    expect(screen.getByLabelText('所属机构证据网址 · Candidate A')).toBeInTheDocument()
+    expect(screen.getByLabelText('所属机构名称 · Candidate A')).toBeInTheDocument()
+    expect(screen.getByRole('button',{name:'继续生成产业链与实体'})).toBeInTheDocument()
     fireEvent.change(explanation,{target:{value:'同 owner 重复'}})
     fireEvent.click(screen.getByRole('button',{name:'备用 · Candidate A'}))
     await waitFor(()=>expect(apiMock).toHaveBeenCalledWith(
@@ -324,6 +328,7 @@ describe('critical workbench workflows', () => {
 
   it('previews restore collisions before sending the restore mutation', async () => {
     apiMock.mockImplementation((path: string, init?: RequestInit) => {
+      if (path.endsWith('/quality-drift')) return Promise.resolve({metrics:[],alert_count:0})
       if (path==='/health') return Promise.resolve({status:'ready',data_root:'/data',database:true,active_jobs:0,automation_running:true,session_required:true})
       if (path==='/trash') return Promise.resolve({items:[{id:'t1',kind:'daily',folder:'AI',name:'batch',created_at:'now',item_count:3}]})
       if (path==='/trash/audits/recent') return Promise.resolve([])
@@ -442,6 +447,7 @@ describe('critical workbench workflows', () => {
       clearProvider:vi.fn(),relaunch:vi.fn(),
     }})
     apiMock.mockImplementation((path:string) => {
+      if (path.endsWith('/quality-drift')) return Promise.resolve({metrics:[],alert_count:0})
       if(path==='/health') return Promise.resolve({status:'ready',data_root:'/data',database:true,
         active_jobs:0,automation_running:true,session_required:true})
       if(path==='/trash') return Promise.resolve({items:[]})

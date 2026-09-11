@@ -15,7 +15,7 @@ test('architecture changes trigger all three native packages from the same revis
     'DomainIntelSearch/src/**', 'DomainIntelSearch/intdog_core/**',
     'DomainIntelSearch/requirements.txt', 'DomainIntelSearch/scripts/**',
     'DomainIntelSearch/config/**', 'DomainIntelSearch/evaluation/**',
-    'DomainIntelSearch/skills/**', 'DomainIntelWeb/api/**', 'DomainIntelWeb/src/**',
+    'DomainIntelWeb/api/**', 'DomainIntelWeb/src/**',
     'DomainIntelWeb/scripts/**', 'DomainIntelWeb/vite.config.*',
     'DomainIntelWeb/tsconfig*.json', 'DomainIntelWeb/index.html',
     'DomainIntelWeb/package.json', 'DomainIntelWeb/package-lock.json']) {

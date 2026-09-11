@@ -174,7 +174,7 @@ degraded / failed`，人工源记录 `manual`，未配置源记录 `unconfigured
   受版本控制的 YAML。非本机 API Base 必须使用 HTTPS。
 - **采集 API**：NewsAPI、GNews 和 Semantic Scholar 密钥分别使用 `NEWSAPI_KEY`、
   `GNEWS_API_KEY` 和 `SEMANTIC_SCHOLAR_API_KEY`。
-- **本地分享**：`serve` 默认只监听 `127.0.0.1`；只有确认局域网可见风险后才使用
+- **本地分享**：`serve --industry <行业>` 仅分享该行业报告目录，不分享数据库、凭据或任务记录。默认只监听 `127.0.0.1`；只有确认局域网可见风险后才使用
   `--host 0.0.0.0`。该简易服务没有身份认证。
 - **403/429/超时**：通常是目标站反爬、限流或网络限制。系统应保留失败记录并继续其他来源，不把失败页当正文。
 - **有任务、没有报告**：`report-tasks` 和周期 crawl 只生成任务/聚合；使用 `generate-report` 或 `generate-period` 才会生成 Markdown。

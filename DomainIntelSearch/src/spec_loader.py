@@ -1,7 +1,7 @@
 """读取 DomainIntelData/skill/spec.md，解析"抓取领域"与"保存格式".
 
-DomainIntelSearch 不写死任何领域或格式，全部由 DomainIntelData 里的 skill 规定。
-本模块把 spec.md 解析成结构化 dict，供 Orchestrator / 各 Agent 使用。
+本模块提取用户的行业偏好与格式说明，供研究任务包使用。
+数据结构和写入校验由 intdog_core 实现；修改说明不会自动修改 Schema。
 
 spec.md 约定（大小写不敏感匹配标题）：
   ## 抓取领域            <- 每行一个领域，支持 "显示名 (id)" 或纯名称

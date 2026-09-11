@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 
 import feedparser
+import requests
 
 from .base import BaseCrawler, Article
 from ..utils import days_ago, article_id, SeenStore
@@ -64,47 +65,45 @@ class ArxivCrawler(BaseCrawler):
             "max_results": self.academic_cfg.get(
                 "max_papers_per_day", DEFAULT_PAPERS_PER_DAY) * 3,
         }
-        try:
-            resp = fetch_url(self.BASE, params=params, timeout=25,
-                             name="arXiv",
-                             headers={"User-Agent": "research-agent/1.0"})
-            parsed = feedparser.parse(resp.text)
-            articles = []
-            for entry in parsed.entries:
-                published = entry.get("published", "")[:10]
-                a = Article(
-                    title=entry.get("title", "").strip(),
-                    url=entry.get("link", ""),
-                    source="arXiv",
-                    published=published,
-                    summary=(entry.get("summary", "") or "").strip()[:600],
-                    lang="en",
-                    category="academic",
-                    authors=[a.get("name", "") for a in entry.get("authors", [])],
-                )
-                a.extra["uid"] = article_id(a.url)
-                a.extra["arxiv_id"] = entry.get("id", "")
-                if a.url:
-                    articles.append(a)
-            articles.sort(key=lambda x: x.published, reverse=True)
-            # 修复：行业关键词多为中文，英文论文几乎不命中 → 只用 ASCII 关键词过滤；
-            # 若命中过少，保留分类内最新 N 条（arXiv 分类本身即行业方向，属合理兜底），
-            # 并标注 keyword_match=False 保持诚实。
-            max_n = self.academic_cfg.get(
-                "max_papers_per_day", DEFAULT_PAPERS_PER_DAY)
-            en_kw = [k for k in self.domain_cfg.get("keywords", [])
-                     if k and k.isascii()]
-            matched = [a for a in articles
-                       if self.match_keywords(f"{a.title} {a.summary}")] if en_kw else []
-            for a in articles:
-                a.extra["keyword_match"] = a in matched
-            # Profiles with searchable English terms must not silently fall
-            # back to unrelated category-wide papers.
-            return select_paper_portfolio(
-                articles, limit=max_n, matches=lambda article: article in matched)
-        except Exception as e:
-            print(f"[Arxiv] 抓取失败: {e}")
-            return []
+        resp = fetch_url(self.BASE, params=params, timeout=25,
+                         name="arXiv",
+                         headers={"User-Agent": "research-agent/1.0"})
+        parsed = feedparser.parse(resp.text)
+        if getattr(parsed, "bozo", False) and not parsed.entries:
+            raise ValueError("arXiv returned an invalid feed")
+        articles = []
+        for entry in parsed.entries:
+            published = entry.get("published", "")[:10]
+            a = Article(
+                title=entry.get("title", "").strip(),
+                url=entry.get("link", ""),
+                source="arXiv",
+                published=published,
+                summary=(entry.get("summary", "") or "").strip()[:600],
+                lang="en",
+                category="academic",
+                authors=[a.get("name", "") for a in entry.get("authors", [])],
+            )
+            a.extra["uid"] = article_id(a.url)
+            a.extra["arxiv_id"] = entry.get("id", "")
+            if a.url:
+                articles.append(a)
+        articles.sort(key=lambda x: x.published, reverse=True)
+        # 修复：行业关键词多为中文，英文论文几乎不命中 → 只用 ASCII 关键词过滤；
+        # 若命中过少，保留分类内最新 N 条（arXiv 分类本身即行业方向，属合理兜底），
+        # 并标注 keyword_match=False 保持诚实。
+        max_n = self.academic_cfg.get(
+            "max_papers_per_day", DEFAULT_PAPERS_PER_DAY)
+        en_kw = [k for k in self.domain_cfg.get("keywords", [])
+                 if k and k.isascii()]
+        matched = [a for a in articles
+                   if self.match_keywords(f"{a.title} {a.summary}")] if en_kw else []
+        for a in articles:
+            a.extra["keyword_match"] = a in matched
+        # Profiles with searchable English terms must not silently fall
+        # back to unrelated category-wide papers.
+        return select_paper_portfolio(
+            articles, limit=max_n, matches=lambda article: article in matched)
 
 
 class SemanticScholarCrawler(BaseCrawler):
@@ -135,30 +134,26 @@ class SemanticScholarCrawler(BaseCrawler):
         api_key = os.environ.get("SEMANTIC_SCHOLAR_API_KEY", "")
         if api_key:
             headers["x-api-key"] = api_key
-        try:
-            resp = fetch_url(self.BASE, params=params, headers=headers,
-                             timeout=15, name="SemanticScholar")
-            data = resp.json()
-            articles = []
-            for item in data.get("data", []):
-                a = Article(
-                    title=item.get("title", ""),
-                    url=item.get("url", ""),
-                    source=f"SemanticScholar ({item.get('venue', '')})",
-                    published=item.get("publicationDate", ""),
-                    summary=(item.get("abstract") or "")[:600],
-                    lang="en",
-                    category="academic",
-                    authors=[au.get("name", "") for au in item.get("authors", [])],
-                )
-                a.extra["uid"] = article_id(a.url or a.title)
-                a.extra["citation_venue"] = item.get("venue", "")
-                if a.title:
-                    articles.append(a)
-            return self.filter_by_keywords(articles)
-        except Exception as e:
-            print(f"[SemanticScholar] 抓取失败: {e}")
-            return []
+        resp = fetch_url(self.BASE, params=params, headers=headers,
+                         timeout=15, name="SemanticScholar")
+        data = resp.json()
+        articles = []
+        for item in data.get("data", []):
+            a = Article(
+                title=item.get("title", ""),
+                url=item.get("url", ""),
+                source=f"SemanticScholar ({item.get('venue', '')})",
+                published=item.get("publicationDate", ""),
+                summary=(item.get("abstract") or "")[:600],
+                lang="en",
+                category="academic",
+                authors=[au.get("name", "") for au in item.get("authors", [])],
+            )
+            a.extra["uid"] = article_id(a.url or a.title)
+            a.extra["citation_venue"] = item.get("venue", "")
+            if a.title:
+                articles.append(a)
+        return self.filter_by_keywords(articles)
 
 
 class AcademicAggregator:
@@ -175,8 +170,15 @@ class AcademicAggregator:
 
     def collect(self, since_days: int = 1) -> list[Article]:
         articles = []
-        articles.extend(ArxivCrawler(self.config, since_days=since_days).fetch())
-        articles.extend(SemanticScholarCrawler(self.config, since_days=max(since_days, 7)).fetch())
+        self.errors = []
+        for crawler in (ArxivCrawler(self.config, since_days=since_days),
+                        SemanticScholarCrawler(self.config, since_days=max(since_days, 7))):
+            try:
+                articles.extend(crawler.fetch())
+            except (requests.RequestException, ValueError) as exc:
+                self.errors.append(f"{crawler.name}: {type(exc).__name__}")
+        if self.errors and not articles:
+            raise RuntimeError("论文采集失败：" + "; ".join(self.errors))
 
         seen_ids = set()
         unique = []

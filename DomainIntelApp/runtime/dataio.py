@@ -1,29 +1,10 @@
-"""DomainIntelData 直连读写（纯标准库，不依赖 DomainIntelSearch 的 src）.
-
-DomainIntelApp 只做 UI：读取 / 删除 DomainIntelData 里按行业分目录保存的数据。
-本模块负责定位数据根、遍历行业、读取/删除定期条目与产物、读写控制开关。
-
-数据根定位顺序：
-  1. 环境变量 DOMAIN_INTEL_DATA_ROOT / INTDOG_DATA_ROOT
-  2. 当前代码仓库内的 ../DomainIntelData
-
-行业文件夹结构（由 DomainIntelSearch 写入）：
-  <行业>/control.json                 定期开关
-  <行业>/sources.json                 信息源
-  <行业>/one_time/knowledge/*.json    三层知识（industry/chains/entities）
-  <行业>/one_time/reports/*           行业报告 + tasks.json
-  <行业>/periodic/daily/<日期>/<类别>.json
-  <行业>/periodic/{weekly,monthly,quarterly}/*.json
-"""
+"""工作台数据接口：通过 IntDogService 访问规范存储与文件产物。"""
 
 from __future__ import annotations
 
-import json
 import os
 import sys
-from datetime import datetime
 from functools import lru_cache
-from html.parser import HTMLParser
 from pathlib import Path
 
 _PROJECT_ROOT = Path(os.environ.get("INTDOG_PROJECT_ROOT") or
@@ -34,7 +15,6 @@ if str(_SEARCH_ROOT) not in sys.path:
     sys.path.insert(0, str(_SEARCH_ROOT))
 from intdog_core import IntDogService  # noqa: E402
 from intdog_core.models import validate_folder  # noqa: E402
-from src.source_discovery import source_origin  # noqa: E402
 from src.lab.artifacts import list_valid_bundles  # noqa: E402
 
 DAILY_CATEGORIES = ("news", "github", "funding", "hiring", "ceo", "papers")
@@ -46,24 +26,13 @@ SOURCE_CATEGORIES = ("official", "associations", "blogs", "platforms",
                      "self_media", "news", "journals", "financials", "finance")
 
 
-def find_data_root() -> Path:
-    env = os.environ.get("DOMAIN_INTEL_DATA_ROOT") or os.environ.get("INTDOG_DATA_ROOT")
-    if env and Path(env).exists():
-        return Path(env)
-    here = Path(__file__).resolve()
-    return here.parents[2] / "DomainIntelData"
 
 
 # ----------------------------------------------------------------------
 # 基础 JSON 读写（原子写）
 # ----------------------------------------------------------------------
 def read_json(path: Path, default):
-    try:
-        if path.exists():
-            return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        pass
-    return default
+    return IntDogService.read_json(path, default)
 
 
 def write_json(path: Path, data):
@@ -165,9 +134,6 @@ def delete_source(root: Path, folder: str, category: str, url: str) -> bool:
     return _service(root).delete_source(folder, category, url)
 
 
-def read_bootstrap_status(root: Path, folder: str) -> dict:
-    """读取来源优先研究初始化状态；旧行业没有该文件时返回空对象。"""
-    return read_json(root / folder / "bootstrap_status.json", {})
 
 
 def read_core_status(root: Path, folder: str) -> dict:
@@ -344,47 +310,13 @@ def read_text(path: Path, limit: int = 200_000) -> str:
     return t[:limit] + ("\n\n…（截断）" if len(t) > limit else "")
 
 
-class _HTMLText(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.parts = []
-
-    def handle_data(self, data):
-        text = data.strip()
-        if text:
-            self.parts.append(text)
 
 
-def read_report_text(path: Path, limit: int = 200_000) -> str:
-    """Render JSON and HTML reports as readable text instead of raw source."""
-    path = Path(path)
-    raw = read_text(path, limit)
-    if raw.startswith("读取失败:"):
-        return raw
-    if path.suffix.lower() == ".json":
-        try:
-            return json.dumps(json.loads(raw), ensure_ascii=False, indent=2)
-        except json.JSONDecodeError:
-            return raw
-    if path.suffix.lower() in {".html", ".htm"}:
-        parser = _HTMLText()
-        parser.feed(raw)
-        return "\n\n".join(parser.parts)
-    return raw
 
 
 # ----------------------------------------------------------------------
 # 竞争格局（one_time/landscape，DomainIntelSearch landscape 命令产出）
 # ----------------------------------------------------------------------
-def read_landscape(root: Path, folder: str) -> dict:
-    """读取竞争格局最新结果 + 历史快照日期列表."""
-    ldir = root / folder / "one_time" / "landscape"
-    latest = read_json(ldir / "landscape.json", {})
-    hdir = ldir / "history"
-    history = []
-    if hdir.exists():
-        history = [f.stem for f in sorted(hdir.glob("*.json"))]
-    return {"landscape": latest, "history": history}
 
 
 def share_trend(root: Path, folder: str, company: str) -> list[dict]:
@@ -407,9 +339,6 @@ def share_trend(root: Path, folder: str, company: str) -> list[dict]:
 # ----------------------------------------------------------------------
 # 事件影响分析（one_time/impact，DomainIntelSearch impact 命令产出）
 # ----------------------------------------------------------------------
-def read_impact_events(root: Path, folder: str) -> dict:
-    return read_json(root / folder / "one_time" / "impact" / "events.json",
-                     {"events": []})
 
 
 def list_impact_analyses(root: Path, folder: str) -> list[dict]:
@@ -468,8 +397,6 @@ def update_agenda_status(root: Path, folder: str, item_id: str, status: str) -> 
     return _service(root).update_research_agenda_status(folder, item_id, status)
 
 
-def agenda_history(root: Path, folder: str, item_id: str) -> list[dict]:
-    return _service(root).repo.list_research_agenda_history(folder, item_id)
 
 
 def create_research_task(root: Path, folder: str, item_id: str,
@@ -484,9 +411,6 @@ def list_research_tasks(root: Path, folder: str, item_id: str = "") -> list[dict
 # ----------------------------------------------------------------------
 # 深度研究报告（one_time/reports/deep_tasks.json + deep/*.md）
 # ----------------------------------------------------------------------
-def read_deep_tasks(root: Path, folder: str) -> list[dict]:
-    data = read_json(root / folder / "one_time" / "reports" / "deep_tasks.json", {})
-    return data.get("tasks", [])
 
 
 def list_deep_reports(root: Path, folder: str) -> list[dict]:

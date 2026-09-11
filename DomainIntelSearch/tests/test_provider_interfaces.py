@@ -14,7 +14,7 @@ from src.services.provider_factory import CAPABILITIES, create_provider
 
 
 def test_registry_distinguishes_native_execution_from_handoff():
-    def found(command):
+    def found(command, *, path=None):
         return f"/tools/{command}" if command in {"codex", "claude", "dsh", "gemini"} else None
     def diagnosed(profile, **_kwargs):
         return {

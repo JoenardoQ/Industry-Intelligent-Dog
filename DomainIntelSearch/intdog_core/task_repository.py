@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import json
 import math
 import re
 import sqlite3
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Protocol
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .models import json_text, json_value, utc_now
@@ -47,17 +45,6 @@ _SK_SECRET = re.compile(r"(?i)\bsk-[A-Za-z0-9._-]+")
 _CREDENTIAL_REF = re.compile(r"^credref:[A-Za-z0-9._:-]{1,180}$")
 
 
-class TaskLedger(Protocol):
-    def create_task(self, *, folder: str, operation: str, input: dict,
-                    origin: str, provider: str, **metadata) -> dict: ...
-
-    def heartbeat(self, run_id: str, *, owner: str, stage: str, progress: int,
-                  checkpoint: dict) -> None: ...
-
-    def transition(self, run_id: str, *, expected: set[str], target: str,
-                   error: dict | None = None, owner: str | None = None) -> dict: ...
-
-    def claim_expired(self, run_id: str, owner: str, ttl_seconds: int) -> bool: ...
 
 
 def _required(value: object, name: str) -> str:

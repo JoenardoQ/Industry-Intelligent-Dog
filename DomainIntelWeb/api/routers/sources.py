@@ -184,9 +184,33 @@ def build_sources_router(*, data_root: Path, dataio, service,
                                 request: SourceCandidateReview) -> dict:
         folder = resolve_folder(folder)
         try:
+            verification = None
+            if request.decision == "active":
+                from intdog_core.models import canonical_url, utc_now
+                from src.coverage_execution import probe_url
+                candidate = service.repo.get_source_candidate(folder, candidate_id)
+                identity = canonical_url(request.identity_evidence_url)
+                ownership = canonical_url(request.ownership_evidence_url)
+                owner = request.owner_cluster.strip()
+                if not identity or not ownership or not owner:
+                    raise ValueError("采用前请填写发布者身份证据网址、所属机构证据网址和机构名称")
+                probe = probe_url(candidate["url"])
+                if not probe.reachable:
+                    raise ValueError(f"网址核验未通过：{probe.reason}；可保留为人工阅读或稍后重试")
+                verification = {
+                    "identity_verification": {"status": "verified", "evidence_url": identity,
+                        "verified_by": request.actor, "verification_origin": "human_review"},
+                    "ownership_verification": {"status": "verified", "evidence_url": ownership,
+                        "owner_cluster": owner, "verified_by": request.actor,
+                        "verification_origin": "human_review"},
+                    "url_verification": {"status": "verified", "reachable": True,
+                        "status_code": probe.status_code, "checked_url": candidate["url"],
+                        "final_url": probe.final_url, "checked_at": utc_now(),
+                        "verification_origin": "server_guarded"},
+                }
             item = service.repo.review_source_candidate(
                 folder, candidate_id, decision=request.decision,
-                actor=request.actor, reason=request.reason)
+                actor=request.actor, reason=request.reason, verification=verification)
         except FileNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
         except ValueError as exc:

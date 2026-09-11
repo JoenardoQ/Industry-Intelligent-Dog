@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
 
 
 def _public_batch(count: int = 6) -> dict:
@@ -105,9 +104,8 @@ def test_report_graph_uses_only_persisted_evidence_edges():
 
 def test_email_delivery_is_not_part_of_the_runtime_interface():
     import inspect
-    from src.orchestrator import Orchestrator
     from src.scheduler import PeriodicScheduler
 
-    assert "send" not in inspect.signature(Orchestrator.run_daily).parameters
-    assert "send" not in inspect.signature(Orchestrator.run_weekly).parameters
+    assert "send" not in inspect.signature(PeriodicScheduler.run_daily).parameters
+    assert "send" not in inspect.signature(PeriodicScheduler.run_weekly).parameters
     assert not hasattr(PeriodicScheduler, "_send_digest")

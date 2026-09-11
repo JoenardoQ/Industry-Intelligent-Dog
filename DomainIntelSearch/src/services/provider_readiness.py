@@ -18,14 +18,13 @@ def _saved_agent_profile(provider: str, workspace: str | Path) -> dict | None:
     if not explicit_root:
         candidates.append(base.parent / "_settings" / "agent_profiles.json")
     for path in candidates:
-        try:
-            if not path.is_file() or path.stat().st_size > 256 * 1024:
-                continue
-            value = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        if not path.exists():
             continue
+        if path.stat().st_size > 256 * 1024:
+            raise ValueError("本地 Agent 配置过大，请修复连接设置")
+        value = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(value, list):
-            continue
+            raise ValueError("本地 Agent 配置格式无效，请修复连接设置")
         matches = [item for item in value if (
             isinstance(item, dict)
             and str(item.get("capability_id") or "").casefold() == provider)]
@@ -45,7 +44,11 @@ def provider_readiness(provider: str, workspace: str | Path) -> dict:
                 "failure_code": None, "detail": "任务包模式"}
     spec = capability_or_unknown(name)
     if spec.connection == "native_cli":
-        profile = _saved_agent_profile(name, workspace) or {"id": name}
+        try:
+            profile = _saved_agent_profile(name, workspace) or {"id": name}
+        except (OSError, ValueError) as exc:
+            return {"provider": name, "ready": False, "installed": False,
+                    "failure_code": "invalid_local_binding", "detail": f"本地 Agent 配置不可读：{type(exc).__name__}；请修复连接设置"}
         result = diagnose_agent(profile)
         return {"provider": name, **result}
     if spec.connection != "api":

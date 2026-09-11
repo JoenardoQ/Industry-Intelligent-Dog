@@ -6257,6 +6257,11 @@
             "title": "Active Jobs",
             "type": "integer"
           },
+          "automation_error": {
+            "default": "",
+            "title": "Automation Error",
+            "type": "string"
+          },
           "automation_running": {
             "title": "Automation Running",
             "type": "boolean"
@@ -8714,6 +8719,24 @@
               "rejected"
             ],
             "title": "Decision",
+            "type": "string"
+          },
+          "identity_evidence_url": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Identity Evidence Url",
+            "type": "string"
+          },
+          "owner_cluster": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Owner Cluster",
+            "type": "string"
+          },
+          "ownership_evidence_url": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Ownership Evidence Url",
             "type": "string"
           },
           "reason": {

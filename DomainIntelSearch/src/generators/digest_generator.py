@@ -4,22 +4,12 @@ from typing import List
 from ..crawlers.base import Article
 from ..utils import today_str, now_str
 
-try:
-    from markdown import markdown as md_to_html
-    MD_AVAILABLE = True
-except ImportError:
-    MD_AVAILABLE = False
-
-
 class DigestGenerator:
     """生成日报 / 周报摘要."""
 
     def __init__(self, config: dict):
         self.config = config
         self.domain = config.get("domain", {})
-        self.out_cfg = config.get("output", {})
-        self.lang = self.out_cfg.get("language", "zh")
-        self.fmt = self.out_cfg.get("report_format", "html")
 
     # ---------------- 文章列表渲染 ----------------
     def render_articles(self, articles: List[Article], max_items: int = 30) -> str:
@@ -212,7 +202,3 @@ class DigestGenerator:
         if cap >= 1e8:
             return f"{cap/1e8:.2f} 亿"
         return f"{cap:.0f}"
-
-    def to_markdown(self, html: str) -> str:
-        """若安装了 markdown 库可逆向转换，否则返回纯文本截断."""
-        return html

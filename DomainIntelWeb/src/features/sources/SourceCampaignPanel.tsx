@@ -8,7 +8,7 @@ const PAGE_SIZE=20
 const visibleStates=['candidate','active','manual','reserve','rejected','paused','converged'] as const
 const stateLabels:Record<string,string>={candidate:'待审核',active:'采用',manual:'人工阅读',manual_review:'人工阅读',reserve:'备用',rejected:'不采用',paused:'已暂停',converged:'本轮完成',failed:'失败'}
 
-export default function SourceCampaignPanel({industry,notify}:{industry:string;notify:(toast:Toast)=>void}){
+export default function SourceCampaignPanel({industry,notify,onSourcesChanged}:{industry:string;notify:(toast:Toast)=>void;onSourcesChanged:()=>void}){
   const [campaigns,setCampaigns]=useState<SourceCampaignPage|null>(null)
   const [selected,setSelected]=useState('')
   const [detail,setDetail]=useState<SourceCampaignDetail|null>(null)
@@ -18,6 +18,8 @@ export default function SourceCampaignPanel({industry,notify}:{industry:string;n
   const [reasons,setReasons]=useState<Record<string,string>>({})
   const [loading,setLoading]=useState(true)
   const [runId,setRunId]=useState('')
+  const [proofs,setProofs]=useState<Record<string,Record<string,string>>>({})
+  const [reviewing,setReviewing]=useState('')
 
   const loadDetail=useCallback(async(id:string,offset=0)=>{
     const payload=await api<SourceCampaignDetail>(
@@ -61,14 +63,31 @@ export default function SourceCampaignPanel({industry,notify}:{industry:string;n
   const review=async(candidate:SourceCandidate,decision:Exclude<SourceCandidateStatus,'candidate'>)=>{
     const reason=(reasons[candidate.id]||'').trim()
     if(!reason){notify({kind:'error',text:'请先填写候选复核说明'});return}
+    const proof=proofs[candidate.id]||{}
+    if(decision==='active'&&['identity_evidence_url','ownership_evidence_url','owner_cluster'].some(key=>!proof[key]?.trim())){
+      notify({kind:'error',text:'采用前请填写两项证据网址和所属机构名称'});return
+    }
+    setReviewing(candidate.id)
     try{
       const updated=await api<SourceCandidate>(
         `/industries/${industry}/source-candidates/${candidate.id}/review`,{
-          method:'POST',body:JSON.stringify({decision,actor:'local-user',reason}),
+          method:'POST',body:JSON.stringify({decision,actor:'local-user',reason,...(decision==='active'?proof:{})}),
         })
       setDetail(current=>current?{...current,candidate_page:{...current.candidate_page,
         items:current.candidate_page.items.map(item=>item.id===updated.id?updated:item)}}:current)
       notify({kind:'ok',text:`${candidate.name} 已转为 ${decision}`})
+      if(decision==='active')onSourcesChanged()
+    }catch(error){notify({kind:'error',text:String(error)})}
+    finally{setReviewing('')}
+  }
+
+  const continueBootstrap=async()=>{
+    try{
+      const job=await api<{run_id:string}>(`/industries/${industry}/generate`,{
+        method:'POST',body:JSON.stringify({action:'bootstrap'}),
+      })
+      setRunId(job.run_id)
+      notify({kind:'ok',text:'已继续行业研究；通过的阶段会复用，未满足的条件会显示在任务记录中。'})
     }catch(error){notify({kind:'error',text:String(error)})}
   }
 
@@ -115,10 +134,12 @@ export default function SourceCampaignPanel({industry,notify}:{industry:string;n
     <div className="campaign-state-legend" aria-label="工作流状态">
       {visibleStates.map(state=><span className={`health health-${state}`} key={state}>{stateLabels[state]}</span>)}
     </div>
+    <p>首次研究需采用至少 15 个已核验来源，覆盖 10 个网站域名、6 类来源，其中至少 5 个是一手来源。随后可继续生成产业链和实体草稿。</p>
+    <button className="button primary" onClick={()=>void continueBootstrap()}>继续生成产业链与实体</button>
     {loading&&!campaigns?<Loading label="正在读取检索活动与覆盖矩阵…"/>:<>
       <div className="campaign-tabs">{campaigns?.items.map(campaign=><button
         className={selected===campaign.id?'button secondary selected':'button secondary'}
-        key={campaign.id} onClick={()=>{setSelected(campaign.id);void loadDetail(campaign.id)}}>
+        key={campaign.id} onClick={()=>{setSelected(campaign.id);void loadDetail(campaign.id).catch(error=>notify({kind:'error',text:String(error)}))}}>
         {campaign.targets.length} 类来源 · <span>{stateLabels[campaign.status]||campaign.status}</span>
       </button>)}</div>
       {detail&&<>
@@ -139,19 +160,28 @@ export default function SourceCampaignPanel({industry,notify}:{industry:string;n
           <div><strong>{candidate.name}</strong><span className={`health health-${candidate.status}`}>
             {stateLabels[candidate.status]||candidate.status}</span></div>
           <p>{candidate.selection_reason||candidate.status_reason||'尚无选择说明'}</p>
+          <a href={candidate.url} target="_blank" rel="noreferrer">打开 {candidate.name} 核实发布者</a>
           {candidate.review?.reason&&<small>最近复核：{candidate.review.reason}</small>}
           {candidate.status!=='rejected'&&<><label><span>候选复核说明 · {candidate.name}</span>
             <textarea aria-label={`候选复核说明 · ${candidate.name}`} value={reasons[candidate.id]||''}
               onChange={event=>setReasons(current=>({...current,[candidate.id]:event.target.value}))}/></label>
+            <p>采用前，请阅读官网的关于或法律声明页，确认发布者及所属机构，填写依据。IntDog 会另行检查来源网址能否安全访问；无法抓取的来源可保留为人工阅读。</p>
+            <div className="inline-form">{([
+              ['identity_evidence_url','发布者身份证据网址','url'],
+              ['ownership_evidence_url','所属机构证据网址','url'],
+              ['owner_cluster','所属机构名称','text'],
+            ] as const).map(([key,label,type])=><label key={key}><span>{label}</span><input type={type}
+              aria-label={`${label} · ${candidate.name}`} value={proofs[candidate.id]?.[key]||''}
+              onChange={event=>setProofs(current=>({...current,[candidate.id]:{...current[candidate.id],[key]:event.target.value}}))}/></label>)}</div>
             <div className="candidate-actions">
               {(['active','manual_review','reserve','rejected'] as const).map(state=><button
-                className="button secondary" key={state} onClick={()=>void review(candidate,state)}
+                className="button secondary" key={state} disabled={Boolean(reviewing)} onClick={()=>void review(candidate,state)}
                 aria-label={`${stateLabels[state]} · ${candidate.name}`}>
                 {stateLabels[state]}</button>)}
             </div></>}
         </article>)}</div>
         {detail.candidate_page.next_offset!==null&&<button className="button secondary"
-          aria-label="下一页候选" onClick={()=>void loadDetail(detail.id,detail.candidate_page.next_offset!)}>
+          aria-label="下一页候选" onClick={()=>void loadDetail(detail.id,detail.candidate_page.next_offset!).catch(error=>notify({kind:'error',text:String(error)}))}>
           下一页候选</button>}
       </>}
       <RunFeedback runId={runId}/>

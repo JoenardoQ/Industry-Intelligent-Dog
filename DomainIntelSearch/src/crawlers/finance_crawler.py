@@ -68,72 +68,46 @@ class StockDataFetcher:
         ak = self.ak
         if not ak:
             return None
-        try:
-            # A股实时行情
-            normalized = str(symbol or "").lower()
-            if normalized.startswith(("sh", "sz", "bj")):
-                normalized = normalized[2:]
-            if len(normalized) == 6 and normalized.isdigit():
-                if self._zh_spot is None:
-                    self._zh_spot = ak.stock_zh_a_spot_em()
-                row = self._zh_spot[self._zh_spot["代码"] == normalized]
-                if row.empty:
-                    return None
-                r = row.iloc[0]
-                return {
-                    "name": name or r.get("名称", ""),
-                    "symbol": normalized,
-                    "price": float(r.get("最新价", 0)),
-                    "change_pct": float(r.get("涨跌幅", 0)),
-                    "market_cap": float(r.get("总市值", 0)),
-                    "turnover": float(r.get("成交额", 0)),
-                    "currency": "CNY",
-                    "as_of": datetime.now().isoformat(timespec="seconds"),
-                    "source": "AKShare/东方财富",
-                }
-            else:
-                # 美股
-                if self._us_spot is None:
-                    self._us_spot = ak.stock_us_spot_em()
-                row = self._us_spot[self._us_spot["代码"] == normalized.upper()]
-                if row.empty:
-                    return None
-                r = row.iloc[0]
-                return {
-                    "name": name or r.get("名称", ""),
-                    "symbol": normalized.upper(),
-                    "price": float(r.get("最新价", 0)),
-                    "change_pct": float(r.get("涨跌幅", 0)),
-                    "market_cap": float(r.get("总市值", 0) or 0),
-                    "currency": "USD",
-                    "as_of": datetime.now().isoformat(timespec="seconds"),
-                    "source": "AKShare/东方财富",
-                }
-        except Exception as e:
-            print(f"[StockData] 抓取 {symbol} 失败: {e}")
-            return None
+        normalized = str(symbol or "").lower()
+        if normalized.startswith(("sh", "sz", "bj")):
+            normalized = normalized[2:]
+        if len(normalized) == 6 and normalized.isdigit():
+            if self._zh_spot is None:
+                self._zh_spot = ak.stock_zh_a_spot_em()
+            row = self._zh_spot[self._zh_spot["代码"] == normalized]
+            if row.empty:
+                return None
+            r = row.iloc[0]
+            return {
+                "name": name or r.get("名称", ""),
+                "symbol": normalized,
+                "price": float(r.get("最新价", 0)),
+                "change_pct": float(r.get("涨跌幅", 0)),
+                "market_cap": float(r.get("总市值", 0)),
+                "turnover": float(r.get("成交额", 0)),
+                "currency": "CNY",
+                "as_of": datetime.now().isoformat(timespec="seconds"),
+                "source": "AKShare/东方财富",
+            }
+        else:
+            # 美股
+            if self._us_spot is None:
+                self._us_spot = ak.stock_us_spot_em()
+            row = self._us_spot[self._us_spot["代码"] == normalized.upper()]
+            if row.empty:
+                return None
+            r = row.iloc[0]
+            return {
+                "name": name or r.get("名称", ""),
+                "symbol": normalized.upper(),
+                "price": float(r.get("最新价", 0)),
+                "change_pct": float(r.get("涨跌幅", 0)),
+                "market_cap": float(r.get("总市值", 0) or 0),
+                "currency": "USD",
+                "as_of": datetime.now().isoformat(timespec="seconds"),
+                "source": "AKShare/东方财富",
+            }
 
-    def get_history(self, symbol: str, days: int = 30) -> Optional[list]:
-        """获取近 N 天历史行情."""
-        ak = self.ak
-        if not ak:
-            return None
-        try:
-            import akshare as ak_mod
-            df = ak_mod.stock_zh_a_hist(
-                symbol=symbol, period="daily",
-                start_date=days_ago(days).strftime("%Y%m%d"),
-                end_date=days_ago(0).strftime("%Y%m%d"),
-                adjust="qfq",
-            )
-            return [
-                {"date": r["日期"], "close": float(r["收盘"]),
-                 "pct": float(r["涨跌幅"])}
-                for _, r in df.iterrows()
-            ]
-        except Exception as e:
-            print(f"[StockData] 历史 {symbol} 失败: {e}")
-            return None
 
 
 class FinanceAggregator:

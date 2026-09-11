@@ -272,9 +272,9 @@ const serviceMode = process.argv.includes('--e2e-service-install') ? 'install'
 
 if (serviceMode) {
   app.whenReady().then(() => runE2EServiceCommand(serviceMode))
-    .catch(() => { process.exitCode = 1 }).finally(() => app.quit())
+    .catch(error => { console.error('IntDog background startup failed:', error.name); process.exitCode = 1 }).finally(() => app.quit())
 } else if (backgroundMode) {
-  app.whenReady().then(startBackgroundWorker).catch(() => { process.exitCode = 1 })
+  app.whenReady().then(startBackgroundWorker).catch(error => { console.error('IntDog background startup failed:', error.name); process.exitCode = 1 })
     .finally(() => app.quit())
 } else if (!app.requestSingleInstanceLock()) {
   app.quit()

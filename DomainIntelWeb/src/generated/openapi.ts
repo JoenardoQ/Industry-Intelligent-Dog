@@ -1015,6 +1015,7 @@ export interface HTTPValidationError {
 
 export interface HealthState {
   "active_jobs": number
+  "automation_error"?: string
   "automation_running": boolean
   "data_root": string
   "database": boolean
@@ -1451,6 +1452,9 @@ export interface SourceCandidatePage {
 export interface SourceCandidateReview {
   "actor": string
   "decision": "manual_review" | "active" | "reserve" | "rejected"
+  "identity_evidence_url"?: string
+  "owner_cluster"?: string
+  "ownership_evidence_url"?: string
   "reason": string
 }
 

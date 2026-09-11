@@ -229,7 +229,7 @@ def _get_json(session, url: str, *, params: dict, headers: dict | None = None,
             except ValueError as exc:
                 body = " ".join(response.text[:300].split())
                 raise ValueError(f"供应商返回非 JSON：{body or '<empty>'}") from exc
-        except Exception as exc:
+        except (requests.RequestException, ValueError) as exc:
             last_error = exc
             if attempt + 1 < attempts and not getattr(exc, "response", None):
                 time.sleep(min(4.0, 2.0 ** attempt))

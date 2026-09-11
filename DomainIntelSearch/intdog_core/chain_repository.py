@@ -83,13 +83,6 @@ class ChainRepositoryMixin:
             out.append(item)
         return out
 
-    def clear_chain_nodes(self, folder: str) -> int:
-        iid = self.industry_id(folder)
-        with self.transaction() as con:
-            cur = con.execute("DELETE FROM value_chain_nodes WHERE industry_id=?", (iid,))
-            self._mark_compat_dirty(con, iid, "chains")
-        return cur.rowcount
-
     def upsert_chain_edge(self, folder: str, item: dict) -> str:
         iid = self.industry_id(folder)
         relation = str(item.get("relation") or "").strip()

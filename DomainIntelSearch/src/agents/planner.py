@@ -1,6 +1,6 @@
 """Planner Agent：按 industry/level/region 生成任务 DAG 并编排全部 Agent.
 
-DAG 规格见 IIOS_SPEC.md §8：
+DAG 规格见 根目录 DESIGN.md：
   value_chain → industry_overview → company_research → scoring
   technology_map → learning_path
   (并行) news/paper/policy/finance/startup 爬取 → kg_build → report

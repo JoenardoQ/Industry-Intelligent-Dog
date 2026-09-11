@@ -39,8 +39,8 @@ class IntDogService:
     @staticmethod
     def read_json(path: Path, default):
         try:
-            return json.loads(path.read_text(encoding="utf-8")) if path.exists() else default
-        except (OSError, json.JSONDecodeError):
+            return json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
             return default
 
     @staticmethod
@@ -623,8 +623,9 @@ class IntDogService:
                                          "error": f"{type(exc).__name__}: {exc}"})
                 try:
                     self.repo.mark_compat_error(folder, key, exc)
-                except Exception:
-                    pass
+                except Exception as record_error:
+                    result["errors"].append({"folder": folder, "view": key,
+                        "error": f"Could not persist repair failure: {type(record_error).__name__}"})
         return result
 
     def add_source(self, folder: str, category: str, source: dict) -> bool:
@@ -726,12 +727,14 @@ class IntDogService:
         count = 0
         active = set()
         for category in SOURCE_CATEGORIES:
-            for item in payload.get(category, []) or []:
-                try:
-                    source_id = self.repo.upsert_source(folder, category, item)
-                    active.add((source_id, category)); count += 1
-                except (TypeError, ValueError):
-                    continue
+            items = payload.get(category, []) or []
+            if not isinstance(items, list):
+                raise ValueError(f"来源类别 {category} 必须是数组")
+            for item in items:
+                if not isinstance(item, dict) or not canonical_url(item.get("url", "")):
+                    raise ValueError(f"来源类别 {category} 包含无效记录；未替换已有目录")
+                source_id = self.repo.upsert_source(folder, category, item)
+                active.add((source_id, category)); count += 1
         if replace:
             self.repo.retain_source_links(folder, active)
         return count
@@ -816,8 +819,8 @@ class IntDogService:
                                 metadata={"references": item.get("references", []),
                                           "migrated_from": "entities.json"})
                         stats["entities"] += 1
-                    except (TypeError, ValueError):
-                        continue
+                    except (TypeError, ValueError) as exc:
+                        raise ValueError(f"实体迁移失败：{entity_file}") from exc
                 self._mark_legacy_import(entity_file)
                 self.repo.mark_compat_clean(folder, "entities")
             elif entity_file.exists():
@@ -828,8 +831,8 @@ class IntDogService:
                 for item in chains if isinstance(chains, list) else []:
                     try:
                         self.repo.upsert_chain_node(folder, item)
-                    except (TypeError, ValueError):
-                        continue
+                    except (TypeError, ValueError) as exc:
+                        raise ValueError(f"产业链迁移失败：{chain_file}") from exc
                 self._mark_legacy_import(chain_file)
                 self.repo.mark_compat_clean(folder, "chains")
         return stats

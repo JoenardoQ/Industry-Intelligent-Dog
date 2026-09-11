@@ -1,19 +1,13 @@
 :root {
-  font-family: Inter, "Noto Sans SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
-  --ink:#1f2925;
-  --muted:#596761;
-  --faint:#738079;
-  --line:#d8dfda;
-  --surface:#fff;
-  --canvas:#f3f5f2;
-  --soft:#edf1ee;
-  --accent:#315f50;
-  --accent-soft:#e1ebe6;
-  --danger:#99463f;
   --mono:"SFMono-Regular",Consolas,"Liberation Mono",monospace;
   --radius-control:13px;
   --radius-card:22px;
   --space-reading:1.7;
+  font-family: Inter, "Noto Sans SC", "Microsoft YaHei UI", system-ui, sans-serif;
+  color: #202724; background: #f3f4f1; font-synthesis: none;
+  --ink: #202724; --muted: #69736e; --faint: #929b96; --line: #dde1dc;
+  --surface: #fff; --canvas: #f3f4f1; --soft: #eef1ed; --accent: #2f6251;
+  --accent-soft: #e1ece6; --danger: #9f443e; --shadow: 0 18px 50px rgba(33,46,40,.07); --text-aux:14px;
 }
 
 html { color-scheme:light;scroll-behavior:smooth; }

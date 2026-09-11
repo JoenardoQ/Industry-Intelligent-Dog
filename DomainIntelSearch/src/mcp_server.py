@@ -67,12 +67,8 @@ def _safe_child(base: Path, relative: str) -> Path:
 
 
 def _read_json(path: Path, default):
-    try:
-        if path.exists():
-            return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        pass
-    return default
+    from intdog_core import IntDogService
+    return IntDogService.read_json(path, default)
 
 
 def _service():

@@ -21,7 +21,6 @@
 每日兼容视图: <行业>/periodic/daily/<YYYY-MM-DD>/<类别>.json
 周期产物: <行业>/periodic/{weekly,monthly,quarterly}/
 回收站: _trash/
-旧版归档: _archive/
 
 核心对象: Industry | Source | Document | Entity | Relation | Event | Claim | Evidence | Run
 稳定标识: source_id | document_id | entity_id | event_id | claim_id | evidence_id | run_id

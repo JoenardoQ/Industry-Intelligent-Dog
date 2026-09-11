@@ -282,7 +282,7 @@ Never claim accepted status and never invent a URL, document id, or assertion id
             repo.append_coverage_round_log(
                 round_id, token, f"{kind} {query['cell_id']}: {saved} candidates")
     except Exception as exc:
-        reason = f"provider_unavailable:{type(exc).__name__}"
+        reason = f"coverage_execution_failed:{type(exc).__name__}"
         repo.append_coverage_round_log(round_id, token, reason, level="warning")
         return repo.finish_coverage_round(
             round_id, token, {"entities": len(entity_ids),

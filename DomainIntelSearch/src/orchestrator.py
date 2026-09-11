@@ -1,8 +1,7 @@
-"""主编排器：串联抓取、分析、生成、推送全流程."""
+"""兼容 CLI 的研究简报、时间线与原始采集入口；归档使用规范存储。"""
 
 import json
 from datetime import datetime
-from pathlib import Path
 
 from .utils import load_config, ensure_dir, save_json, today_str
 from .generators.digest_generator import DigestGenerator
@@ -17,20 +16,17 @@ class Orchestrator:
     def __init__(self, config_path: str = None, config: dict = None):
         self.config = config or load_config(config_path)
         self.domain = self.config.get("domain", {})
+        self.archive = ArchiveStore(self.config)
         out = self.config.get("output", {})
-        self.data_dir = ensure_dir(out.get("data_dir", "./data"))
+        self.data_dir = ensure_dir(out.get("data_dir") or self.archive.store.one_time / "research" / "raw")
         # settings 用 output.dir 表示报告目录（兼容旧的 output_dir 键名）
-        self.output_dir = ensure_dir(out.get("dir") or out.get("output_dir", "./output"))
+        self.output_dir = ensure_dir(out.get("dir") or out.get("output_dir") or self.archive.store.reports)
         self.prompts = PromptTemplates(self.config)
         self.digest = DigestGenerator(self.config)
-        self.archive = ArchiveStore(self.config)
         # 读取 DomainIntelData/skill/spec.md：抓取领域 + 保存格式（agent 中立驱动）
-        self.data_root = Path(self.config.get("archive", {}).get("root", "./data"))
+        self.data_root = self.archive.root
         self.spec = load_spec(self.data_root)
-        try:
-            print(summarize(self.spec))
-        except Exception:
-            pass
+        print(summarize(self.spec))
 
     # ===================================================================
     # 阶段一：一次性深度研究（面向新手/熟手）
@@ -94,97 +90,11 @@ class Orchestrator:
                 "model": result.model, "path": str(report_path),
                 "metadata": str(meta_path)}
 
-    # ===================================================================
-    # 阶段二：持续监控（每日/每周推送）
-    # ===================================================================
-    def run_daily(self, since_days: int = 1) -> dict:
-        """执行每日情报收集."""
-        from .crawlers.news_crawler import NewsAggregator
-        from .crawlers.academic_crawler import AcademicAggregator
-        from .crawlers.finance_crawler import FinanceAggregator
-        news_agg = NewsAggregator(self.config)
-        news = news_agg.collect(since_days=since_days)
-
-        # 分类
-        from .crawlers.base import Article
-        cats = {"general": [], "startup": [], "finance": [], "policy": []}
-        for a in news:
-            cats.setdefault(a.category, []).append(a)
-        news_agg.mark_seen(news)
-
-        academic_agg = AcademicAggregator(self.config)
-        academic = academic_agg.collect(since_days=since_days)
-        academic_agg.mark_seen(academic)
-
-        # 金融 + 政策已在 categories 里，这里再单独取（更长窗口）
-        fin_agg = FinanceAggregator(self.config)
-        fin_news = fin_agg.collect_news(since_days=since_days)
-        for cat in ("finance", "policy"):
-            for a in fin_news.get(cat, []):
-                if a not in cats[cat]:
-                    cats[cat].append(a)
-
-        html = self.digest.build_daily(
-            cats.get("general", []), academic,
-            cats.get("finance", []), cats.get("policy", []),
-        )
-        path = self.output_dir / f"daily_{today_str()}.html"
-        path.write_text(html, encoding="utf-8")
-
-        # 归档到 D 盘（JSON + SQLite，按 时间/类别 索引）
-        self.archive.save_articles(cats.get("general", []), category="news")
-        self.archive.save_articles(cats.get("startup", []), category="startup")
-        self.archive.save_articles(academic, category="academic")
-        self.archive.save_articles(cats.get("finance", []), category="finance")
-        self.archive.save_articles(cats.get("policy", []), category="policy")
-        self.archive.save_report("daily", path)
-
-        result = {
-            "news_count": len(cats.get("general", [])),
-            "academic_count": len(academic),
-            "finance_count": len(cats.get("finance", [])),
-            "policy_count": len(cats.get("policy", [])),
-            "html_path": str(path),
-        }
-        return result
-
-    def run_weekly(self, since_days: int = 7) -> dict:
-        """执行每周金融政策简报."""
-        from .crawlers.finance_crawler import FinanceAggregator
-        fin_agg = FinanceAggregator(self.config)
-        news = fin_agg.collect_news(since_days=since_days)
-        finance = news.get("finance", [])
-        policy = news.get("policy", [])
-
-        # 可选：拉取重点公司市场数据
-        market_data = []
-        companies = self.config.get("domain", {}).get("tracked_companies", [])
-        if companies:
-            market_data = fin_agg.collect_market_data(companies)
-
-        html = self.digest.build_weekly(finance, policy, market_data)
-        path = self.output_dir / f"weekly_{today_str()}.html"
-        path.write_text(html, encoding="utf-8")
-
-        # 归档
-        self.archive.save_articles(finance, category="finance")
-        self.archive.save_articles(policy, category="policy")
-        self.archive.save_report("weekly", path)
-
-        result = {
-            "finance_count": len(finance),
-            "policy_count": len(policy),
-            "market_count": len(market_data),
-            "html_path": str(path),
-        }
-        return result
-
     def run_timeline(self, since_days: int = 365) -> dict:
         """生成近一年发展轨迹（历史回顾）."""
         from .crawlers.news_crawler import NewsAggregator
         news_agg = NewsAggregator(self.config)
         news = news_agg.collect(since_days=since_days)
-        from .crawlers.base import Article
         # 仅保留 general + startup 作为产业轨迹
         items = [a for a in news if a.category in ("general", "startup", "finance")]
         headlines = [f"{a.published} | {a.title}" for a in items]

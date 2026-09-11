@@ -203,24 +203,3 @@ def merge_sources(base: dict, extra: dict) -> dict:
             out[key] = extra[key]
     out["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     return out
-
-
-def balance_source_origins(sources: dict, minimum_per_category: int = 3,
-                           target_max: float = 1.8) -> dict:
-    """Annotate origin coverage without deleting useful sources (legacy API name)."""
-    out = dict(sources)
-
-    def counts() -> tuple[int, int]:
-        items = [item for key, _ in SOURCE_CATEGORIES
-                 for item in out.get(key, []) or [] if isinstance(item, dict)]
-        return (sum(source_origin(item) == "china" for item in items),
-                sum(source_origin(item) == "foreign" for item in items))
-
-    china, foreign = counts()
-    out["origin_balance"] = {
-        "policy": "advisory_domestic_recall_preferred",
-        "hard_limit": False,
-        "china": china,
-        "foreign": foreign,
-    }
-    return out

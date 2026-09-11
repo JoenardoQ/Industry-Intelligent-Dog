@@ -1,6 +1,6 @@
 """IIOS 统一输出 Schema — 所有 Agent 的数据交换契约.
 
-规格见 IIOS_SPEC.md §3.1。任何 Agent 产出（新闻/论文/公司/政策/任务包）
+规格见 根目录 DESIGN.md。任何 Agent 产出（新闻/论文/公司/政策/任务包）
 最终都应转换为 IIOSRecord 后入库或落盘。
 """
 
@@ -34,7 +34,7 @@ class Impact:
 
 @dataclass
 class IIOSRecord:
-    """统一记录格式（IIOS_SPEC.md §3.1）."""
+    """统一记录格式（根目录 DESIGN.md）."""
 
     type: str
     title: str
@@ -136,7 +136,7 @@ class IIOSRecord:
         )
 
 
-# 公司 24 项指标模板（IIOS_SPEC.md §6）——Company Agent 任务包与 companies 表共用
+# 公司 24 项指标模板（根目录 DESIGN.md）——Company Agent 任务包与 companies 表共用
 COMPANY_METRICS_TEMPLATE = {
     "overview": "", "founded": "", "ceo": "", "employees": "",
     "market_cap": "", "revenue": "", "net_profit": "", "gross_margin": "",

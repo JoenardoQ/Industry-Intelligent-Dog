@@ -11,7 +11,6 @@ import queue
 import re
 import signal
 import subprocess
-import sys
 import threading
 import time
 import uuid
@@ -1080,7 +1079,7 @@ class ManagedJob:
             elif returncode == 0:
                 status, error = "completed", ""
             elif returncode == PARTIAL_EXIT_CODE:
-                status, error = "partial", "One or more collection categories failed"
+                status, error = "partial", "任务尚未全部完成，请查看阶段记录中的待处理事项"
             else:
                 status, error = "failed", f"Process exited with {returncode}"
         except Exception as exc:

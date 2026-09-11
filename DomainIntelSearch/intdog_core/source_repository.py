@@ -519,7 +519,8 @@ class SourceRepositoryMixin:
             return output
 
     def review_source_candidate(self, folder: str, candidate_id: str, *,
-                                decision: str, actor: str, reason: str) -> dict:
+                                decision: str, actor: str, reason: str,
+                                verification: dict | None = None) -> dict:
         from src.source_review import assess_source_candidate
 
         target = str(decision or "").strip().casefold()
@@ -545,6 +546,8 @@ class SourceRepositoryMixin:
                 raise ValueError(
                     f"invalid source candidate transition: {current} -> {target}")
             attributes = json_value(row["attributes_json"], {})
+            if verification is not None:
+                attributes.update(verification)
             candidate_item = {
                 **attributes,
                 "name": row["name"],
@@ -582,9 +585,9 @@ class SourceRepositoryMixin:
                 "assessment": assessment,
             }
             changed = con.execute("""UPDATE source_candidates
-                SET status=?,status_reason=?,source_id=COALESCE(?,source_id),updated_at=?
+                SET status=?,status_reason=?,source_id=COALESCE(?,source_id),updated_at=?,attributes_json=?
                 WHERE id=? AND status=?""",
-                                  (target, normalized_reason, source_id, now, candidate_id,
+                                  (target, normalized_reason, source_id, now, _canonical_json(attributes), candidate_id,
                                    current)).rowcount
             if changed != 1:
                 raise RuntimeError("source candidate changed concurrently")

@@ -16,6 +16,12 @@ from src.crawlers import http_utils
 
 
 class HttpFailureTests(unittest.TestCase):
+    @patch("src.crawlers.http_utils.fetch_url", side_effect=requests.Timeout("offline"))
+    def test_failed_academic_provider_is_not_an_empty_success(self, fetch):
+        from src.crawlers.academic_crawler import ArxivCrawler
+        with self.assertRaises(requests.Timeout):
+            ArxivCrawler({}).fetch()
+
     def setUp(self):
         http_utils.reset_feed_failures()
 

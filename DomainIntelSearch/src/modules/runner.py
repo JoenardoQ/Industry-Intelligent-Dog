@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import traceback
+from graphlib import TopologicalSorter
 from datetime import datetime
 
 from .base import MODULE_REGISTRY, ModuleContext, ModuleResult, get_module, list_modules
@@ -35,15 +36,15 @@ def resolve_selection(module_ids: list[str]) -> list[str]:
     def add(mid: str):
         if mid in selected:
             return
+        if mid not in MODULE_REGISTRY:
+            raise ValueError(f"未知模块：{mid}")
         spec = get_module(mid).spec
-        for dep in spec.requires:
-            if dep in MODULE_REGISTRY:
-                add(dep)
         selected[mid] = None
+        for dep in spec.requires:
+            add(dep)
 
     for mid in module_ids:
-        if mid in MODULE_REGISTRY:
-            add(mid)
+        add(mid)
 
     # research_plan 选中时：它接管被勾选的单个研究 Agent（避免重复执行）
     if "research_plan" in selected:
@@ -58,7 +59,8 @@ def resolve_selection(module_ids: list[str]) -> list[str]:
         return (PHASE_ORDER.get(s.category, 99), after_penalty, decl_pos.get(s.id, 999))
 
     specs.sort(key=sort_key)
-    return [s.id for s in specs]
+    graph = {s.id: list(s.requires) + [a for a in s.after if a in selected] for s in specs}
+    return list(TopologicalSorter(graph).static_order())
 
 
 class PipelineRunner:
@@ -107,11 +109,15 @@ class PipelineRunner:
         for mid in ordered:
             cls = get_module(mid)
             self.log(f"── 运行模块 [{mid}] {cls.spec.name}")
-            try:
-                res = cls().run(ctx)
-            except Exception as e:  # 模块失败不中断整条流水线
-                traceback.print_exc()
-                res = ModuleResult(ok=False, message=f"异常：{e}")
+            blocked = [dep for dep in cls.spec.requires if not results.get(dep, {}).get("ok")]
+            if blocked:
+                res = ModuleResult(ok=False, message="前置模块未成功：" + ", ".join(blocked))
+            else:
+                try:
+                    res = cls().run(ctx)
+                except Exception as e:  # Independent modules may continue; dependents may not.
+                    traceback.print_exc()
+                    res = ModuleResult(ok=False, message=f"{type(e).__name__}: {e}")
             results[mid] = res.to_dict()
             if res.ok:
                 ok_count += 1

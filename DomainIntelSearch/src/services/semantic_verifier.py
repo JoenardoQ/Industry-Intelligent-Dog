@@ -181,7 +181,7 @@ def build_production_assertion_verifier(
         result = provider.complete(_prompt(request))
         try:
             rows = _PROVIDER_RESULTS.validate_python(_json_payload(result.text))
-        except Exception as exc:
+        except ValueError as exc:
             raise ValueError("structured semantic probe validation failed") from exc
         source = {item.evidence_id: item for item in request.evidence}
         call_id = str(getattr(result, "response_id", "") or

@@ -123,6 +123,7 @@ Scores retain components, algorithm version, and thresholds. Conflicting evidenc
 - Codex `401`: authenticate in the same host environment.
 - Provider key: use the provider variable or `INTDOG_LLM_API_KEY`; remote API bases require HTTPS.
 - Optional collection keys: `NEWSAPI_KEY`, `GNEWS_API_KEY`, and `SEMANTIC_SCHOLAR_API_KEY`.
+- Local sharing: `serve --industry <industry>` serves only that industry's report directory, not databases, credentials, or task records. It binds to `127.0.0.1` by default; use `--host 0.0.0.0` only when you intend unauthenticated LAN access.
 - `403`, `429`, timeout: keep the failed observation, apply bounded retry, and continue other sources.
 - Task exists but report does not: collection/task metadata is not prose; run a generation command.
 - Low domestic recall: inspect reachability, enrich authoritative domestic sources, then run `doctor`.

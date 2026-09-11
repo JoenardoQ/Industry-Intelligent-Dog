@@ -2277,17 +2277,6 @@ class IntelligenceRepository(
                 self._mark_compat_dirty(con, iid, "entities")
         return cur.rowcount > 0
 
-    def clear_industry_entities(self, folder: str) -> int:
-        """Soft-delete generated memberships and remove their industry relations."""
-        iid = self.industry_id(folder)
-        with self.transaction() as con:
-            con.execute("DELETE FROM relations WHERE industry_id=?", (iid,))
-            con.execute("DELETE FROM entity_chain_roles WHERE industry_id=?", (iid,))
-            cur = con.execute("""UPDATE industry_entities SET status='deleted'
-                WHERE industry_id=? AND status!='deleted'""", (iid,))
-            self._mark_compat_dirty(con, iid, "entities")
-        return cur.rowcount
-
     def start_run(self, folder: str, kind: str, stage: str = "queued") -> str:
         iid = self.industry_id(folder)
         now = utc_now()

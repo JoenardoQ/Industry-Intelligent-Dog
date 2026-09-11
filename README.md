@@ -56,7 +56,9 @@ The three installers are independent artifacts. Any shared code change requires 
    - **Task package:** no key is required, but the result is a task for any agent, not a finished research report.
 3. Create an industry name and data folder.
 4. Select “Initialize industry research.” The job enters the queue directly; the current page shows its real stage and elapsed time, while Task Center exposes logs, cancellation, and retry.
-5. Review source candidates, value-chain order, entity coverage, and evidence gaps before starting daily collection or reports.
+5. Source discovery pauses for review. Open **Sources**, read each candidate’s official/about/legal pages, and enter its publisher-identity evidence URL, ownership evidence URL, owner name, and review reason. Select **Adopt**; IntDog independently checks that the source URL is safely reachable. Keep inaccessible sources for **Manual reading** instead.
+6. Adopt at least 15 verified sources across 10 domains and 6 source categories, including 5 primary sources. Select **Continue generating value chains and entities**. IntDog generates chain and entity drafts in sequence; a failed gate stops downstream work. Retry reuses completed stages only while their reviewed source set remains unchanged.
+7. Inspect chain order, entity coverage, citations, and remaining gaps before daily collection or reports. A structurally complete draft is not a verified fact.
 
 IntDog connects to local Agents in the same operating system; Windows/WSL bridging is not a default product path. A desktop process can still receive a different `PATH` from a terminal, so discovery checks a bounded list of conventional install directories without scanning the disk. Manual selection verifies executable identity, version, and public sign-in status before persisting a local binding. “Test live connection” sends one very short model request and may count against the Agent subscription. Statuses distinguish ready, sign-in required, incompatible, MCP/task-package only, and unsupported.
 

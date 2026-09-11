@@ -24,7 +24,7 @@ def verify_resource_manifest() -> dict:
             "release resources are not prepared; run "
             "DomainIntelDesktop/scripts/prepare_resources.py first"
         ) from exc
-    expected = {"web", "config", "evaluation", "skills", "service_templates"}
+    expected = {"web", "config", "evaluation", "service_templates"}
     if manifest.get("schema") != "intdog-resource-manifest-v1":
         raise SystemExit("unsupported or invalid release resource manifest")
     if set(manifest.get("groups", {})) != expected or not manifest.get("files"):

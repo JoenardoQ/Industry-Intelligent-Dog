@@ -49,8 +49,8 @@ def list_industries() -> list[dict]:
         for f in sorted(d.glob("*.yaml")):
             try:
                 p = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
-            except yaml.YAMLError:
-                continue
+            except yaml.YAMLError as exc:
+                raise ValueError(f"Invalid industry profile: {f.name}") from exc
             pid = p.get("id") or f.stem
             p.setdefault("id", pid)
             found[pid] = p  # 同名 id 前者优先（exe 旁覆盖内置）

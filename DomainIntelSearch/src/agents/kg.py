@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 
 from intdog_core import IntDogService
@@ -26,10 +25,7 @@ class KnowledgeGraphAgent(BaseAgent):
 
     @staticmethod
     def _read(path, default):
-        try:
-            return json.loads(path.read_text(encoding="utf-8")) if path.exists() else default
-        except (OSError, json.JSONDecodeError):
-            return default
+        return IntDogService.read_json(path, default)
 
     def _entity(self, name: str, kind: str, **metadata) -> str:
         return self.repo.upsert_entity(self.folder, {

@@ -14,7 +14,6 @@ RESOURCE_GROUPS = {
     "web": "DomainIntelWeb/dist",
     "config": "DomainIntelSearch/config",
     "evaluation": "DomainIntelSearch/evaluation",
-    "skills": "DomainIntelSearch/skills",
     "service_templates": "DomainIntelDesktop/resources/service-templates",
 }
 _BANNED_PARTS = {"domaininteldata", ".venv", "venv", "keys", "__pycache__"}

@@ -44,6 +44,7 @@ from intdog_core import IntDogService  # noqa: E402
 from src.services.semantic_verifier import build_production_assertion_verifier  # noqa: E402
 from src.services.runtime_credentials import credential_bundle  # noqa: E402
 from src.services.conversation_broker import ConversationBroker  # noqa: E402
+from src.source_discovery import source_origin  # noqa: E402
 from .automation import AutomationScheduler  # noqa: E402
 
 
@@ -109,7 +110,7 @@ def _display_source(item: dict) -> str:
 def _daily_item(item: dict) -> dict:
     result = dict(item)
     result["display_source"] = _display_source(result)
-    result["origin"] = dataio.source_origin(result)
+    result["origin"] = source_origin(result)
     result["identity"] = {
         "date": str(result.get("_date") or result.get("date") or ""),
         "category": str(result.get("_cat") or result.get("category") or ""),

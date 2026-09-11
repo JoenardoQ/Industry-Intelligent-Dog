@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import logging
 import threading
 import uuid
 from datetime import datetime
@@ -43,6 +44,7 @@ class AutomationScheduler:
         self.owner = f"web:{os.getpid()}:{uuid.uuid4().hex}"
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        self.last_error = ""
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -62,10 +64,11 @@ class AutomationScheduler:
         while not self._stop.is_set():
             try:
                 self.tick()
-            except Exception:
-                # Per-schedule failures are persisted by tick. A poller must not
-                # take down the local API because a row or timezone is malformed.
-                pass
+                self.last_error = ""
+            except Exception as exc:
+                # Keep the API available, but expose failure of the poller itself.
+                self.last_error = f"调度检查失败：{type(exc).__name__}"
+                logging.getLogger(__name__).error(self.last_error)
             self._stop.wait(self.poll_seconds)
 
     def snapshot(self, folder: str) -> list[dict]:

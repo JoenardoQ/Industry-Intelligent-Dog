@@ -110,8 +110,9 @@ class NativeSessionRunner:
                 if failed_session is not None:
                     try:
                         failed_session.close()
-                    except Exception:
-                        pass
+                    except (OSError, AgentSessionError) as cleanup_error:
+                        import logging
+                        logging.getLogger(__name__).warning("Agent cleanup failed: %s", type(cleanup_error).__name__)
                 if spec.execution_level != "direct" or "cli" not in spec.fallbacks:
                     raise
                 service = create_provider({}, provider, workspace)

@@ -15,7 +15,7 @@ DomainIntelData/skill/spec.md 规定的格式写入 DomainIntelData。
   python -m src.main query --kw 芯片    # 查询 DomainIntelData（SQLite）
   python -m src.main serve              # 启动只读局域网服务，分享 DomainIntelData
 
-IIOS 多 Agent 命令（规格见 IIOS_SPEC.md）：
+IIOS 多 Agent 命令（规格见 根目录 DESIGN.md）：
   python -m src.main plan --industry 半导体 --level beginner --region global
                                         # Planner：生成任务 DAG + 全部研究任务包
   python -m src.main agent --name company --industry 半导体
@@ -94,7 +94,7 @@ def build_parser() -> argparse.ArgumentParser:
     common.add_argument("--port", type=int, default=8765, help="服务端口（serve 命令）")
     common.add_argument("--host", default="127.0.0.1",
                         help="serve 监听地址（默认仅本机；局域网需显式设为 0.0.0.0）")
-    # ---- IIOS 统一输入（IIOS_SPEC.md §2） ----
+    # ---- IIOS 统一输入（根目录 DESIGN.md） ----
     common.add_argument("--industry", default="", help="行业名（覆盖配置 domain.name）")
     common.add_argument("--level", default="", choices=["", "beginner", "intermediate", "expert"],
                         help="用户水平")
@@ -150,6 +150,7 @@ def main():
             stream.reconfigure(encoding="utf-8", errors="replace")
     parser = build_parser()
     args = parser.parse_args()
+    args.command = {"daily": "crawl-daily", "weekly": "crawl-weekly"}.get(args.command, args.command)
 
     cfg = load_config(args.config)
 
@@ -171,8 +172,8 @@ def main():
             print(f"[行业] 已切换到档案：{profile['name']} ({profile['id']})")
 
     # Orchestrator 初始化会向 stdout 打印 spec 摘要；协议型命令（mcp-serve）必须保持
-    # stdout 纯净，故按需懒构造——只有旧版监控/查询/serve/kg 命令真正用到 orch。
-    NEEDS_ORCH = {"daily", "weekly", "timeline", "brief", "collect",
+    # stdout 纯净；仅为研究简报、原始采集和归档命令构造适配器。
+    NEEDS_ORCH = {"timeline", "brief", "collect",
                   "archive", "serve"}
     if args.command in NEEDS_ORCH:
         from src.orchestrator import Orchestrator
@@ -180,19 +181,7 @@ def main():
     else:
         orch = None
 
-    if args.command == "daily":
-        r = orch.run_daily(since_days=args.days)
-        print(f"[完成] 每日情报：新闻 {r['news_count']} | 学术 {r['academic_count']} "
-              f"| 金融 {r['finance_count']} | 政策 {r['policy_count']}")
-        print(f"  报告: {r['html_path']}")
-
-    elif args.command == "weekly":
-        r = orch.run_weekly(since_days=args.days)
-        print(f"[完成] 每周简报：金融 {r['finance_count']} | 政策 {r['policy_count']} "
-              f"| 市场 {r['market_count']}")
-        print(f"  报告: {r['html_path']}")
-
-    elif args.command == "timeline":
+    if args.command == "timeline":
         r = orch.run_timeline(since_days=args.days)
         print(f"[完成] 发展轨迹：共 {r['count']} 条")
         print(f"  报告: {r['html_path']}")
@@ -213,7 +202,7 @@ def main():
 
     elif args.command == "collect":
         r = orch.collect_raw(since_days=args.days)
-        out = Path(cfg.get("output", {}).get("data_dir", "./data")) / "raw_collect.json"
+        out = orch.data_dir / "raw_collect.json"
         from src.utils import save_json
         save_json(r, out)
         print(f"[完成] 抓取：新闻 {len(r['news'])} | 学术 {len(r['academic'])}")
@@ -492,9 +481,13 @@ def main():
             except Exception as exc:
                 print(f"[错误] 行业研究初始化失败：{type(exc).__name__}: {exc}", file=sys.stderr)
                 sys.exit(2)
-            print(f"[完成] 来源优先初始化：{store.name}")
+            complete = status['state'] == 'ready_for_review'
+            print(f"[{'完成' if complete else '暂停'}] 来源优先初始化：{store.name}")
             print("  顺序：信息源门槛 → 产业链门槛 → 实体覆盖门槛")
             print(f"  状态：{status['state']} · 人工复核={status['review_required']}")
+            if not complete:
+                print("  请在信息源页核验并采用来源，再点击「继续生成产业链与实体」。")
+                sys.exit(4)
 
         elif args.command == "resume-bootstrap":
             from src.research_bootstrap import resume_codex_bootstrap
@@ -765,7 +758,7 @@ def main():
 
     elif args.command == "serve":
         from src.commands.serve import serve_archive
-        serve_archive(orch.archive.root, args.host, args.port)
+        serve_archive(orch.archive.store.reports, args.host, args.port)
 
 
 if __name__ == "__main__":

@@ -75,7 +75,6 @@ def test_release_resources_are_explicit_hashed_and_exclude_mutable_or_secret_dat
         "DomainIntelWeb/dist/index.html": "web",
         "DomainIntelSearch/config/settings.yaml": "config",
         "DomainIntelSearch/evaluation/fixtures/ai-v1.json": "{}",
-        "DomainIntelSearch/skills/README.md": "skills",
         "DomainIntelDesktop/resources/service-templates/linux.service": "service",
         "DomainIntelData/AI/private.json": "user-data",
         ".venv/secret": "venv",
@@ -91,7 +90,7 @@ def test_release_resources_are_explicit_hashed_and_exclude_mutable_or_secret_dat
     target.mkdir(parents=True)
     (target / "stale.txt").write_text("old")
     manifest = module.stage_resources(root, target)
-    assert set(manifest["groups"]) == {"web", "config", "evaluation", "skills", "service_templates"}
+    assert set(manifest["groups"]) == {"web", "config", "evaluation", "service_templates"}
     assert not (target / "stale.txt").exists()
     paths = {item["path"] for item in manifest["files"]}
     assert "DomainIntelWeb/dist/index.html" in paths

@@ -16,7 +16,6 @@ technology / product / facility。
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from intdog_core import IntDogService, stable_id
@@ -159,15 +158,6 @@ class KnowledgeModel:
     def delete_entity(self, entity_id: str) -> bool:
         return self.service.delete_entity(self.folder, entity_id)
 
-    def reset_generated(self) -> None:
-        """Clear generated chains/entities before an authoritative bootstrap replace."""
-        self.service.repo.clear_industry_entities(self.folder)
-        self.service.repo.clear_chain_nodes(self.folder)
-        self._write(self.chains_path, [])
-        self._write(self.entities_path, [])
-        self.service.repo.mark_compat_clean(self.folder, "entities")
-        self.service.repo.mark_compat_clean(self.folder, "chains")
-
     # ------------------------------------------------------------------
     # 汇总视图（三层树）
     # ------------------------------------------------------------------
@@ -183,17 +173,8 @@ class KnowledgeModel:
     # ------------------------------------------------------------------
     @staticmethod
     def _read(path: Path, default):
-        try:
-            if path.exists():
-                return json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            pass
-        return default
+        return IntDogService.read_json(path, default)
 
     @staticmethod
     def _write(path: Path, data):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2),
-                       encoding="utf-8")
-        tmp.replace(path)
+        IntDogService.write_json(path, data)

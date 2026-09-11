@@ -254,7 +254,7 @@ def run_campaign_round(repo, campaign_id: str, *, search: SearchAdapter) -> Camp
                 dimensions=dict(spec["dimensions"]),
                 limit=int(spec["candidate_pool_target"]))
         except Exception as exc:
-            reason = _pause_reason(exc) or f"provider_unavailable:{type(exc).__name__}"
+            reason = _pause_reason(exc) or f"source_search_failed:{type(exc).__name__}"
             repo.record_source_query(
                 campaign_id, round_no=round_no, language=spec["language"],
                 family=spec["family"], dimensions=spec["dimensions"],

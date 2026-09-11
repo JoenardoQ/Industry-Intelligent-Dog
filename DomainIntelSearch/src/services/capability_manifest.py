@@ -65,7 +65,6 @@ class AgentCapability:
         return value
 
 
-CapabilitySpec = AgentCapability  # compatibility import
 
 
 CAPABILITY_MANIFEST: tuple[AgentCapability, ...] = (

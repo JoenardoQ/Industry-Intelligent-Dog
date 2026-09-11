@@ -2,7 +2,7 @@ import io
 import json
 import pytest
 
-from src.services.agent_sessions import AcpSession, AgentSessionError, CodexAppServerSession
+from src.services.agent_sessions import AcpSession, AgentSessionError, CodexAppServerSession, JsonLineProcess
 
 
 class _Input:
@@ -33,6 +33,24 @@ class _Process:
 
 def _sent(process):
     return [json.loads(line) for line in process.stdin.getvalue().splitlines()]
+
+
+@pytest.mark.parametrize("payload", ["not json\n", "[]\n", OSError("pipe closed")])
+def test_invalid_transport_output_reports_error_instead_of_timing_out(payload, tmp_path):
+    process = _Process([])
+    if isinstance(payload, Exception):
+        class BrokenInput:
+            def readline(self):
+                raise payload
+        process.stdout = BrokenInput()
+    else:
+        process.stdout = io.StringIO(payload)
+    transport = JsonLineProcess(["agent"], tmp_path)
+    transport.process = process
+    transport._read()
+    expected = "read failed" if isinstance(payload, Exception) else "invalid protocol JSON" if payload.startswith("not") else "non-object"
+    with pytest.raises(AgentSessionError, match=expected):
+        transport._check_event(transport._messages.get_nowait())
 
 
 def test_codex_app_server_handshake_precedes_thread_and_turn():

@@ -25,6 +25,18 @@ Electron: window, lifecycle, operating-system secure storage
 - Electron does not write domain facts; React has no filesystem or credential access.
 - API keys enter only operating-system secure storage and reach the sidecar through a one-shot anonymous pipe.
 
+## Canonical storage and recovery
+
+`intdog.sqlite3` is the only writable business database. Legacy `daily` and `weekly` commands resolve to `crawl-daily` and `crawl-weekly`; old archive callers import through the canonical service rather than maintaining `intelligence.db` or a separate index. The weekly collector prepares data and a task package; `generate-period --kind weekly --provider ...` produces a model-written draft. Explicit migration preserves its input files.
+
+Missing optional JSON state may use a default. Existing but malformed or unreadable state raises an error; it must not be overwritten as an empty collection. Compatibility JSON is a materialized view: database writes mark it dirty and reconciliation repairs it. Independent collectors may continue after a provider failure, but missing required inputs block dependent reports and partial collection never advances its successful time boundary. Scheduler polling failures appear in system health and logs.
+
+Initialization first discovers source candidates and waits for human source review. Adopted sources need cited publisher/ownership evidence and a guarded reachability check. Passing source, chain and entity structural gates produces drafts, not verified facts. Matching completed checkpoints are reused without rewriting knowledge. New runs enrich existing knowledge; without reliable generation ownership, initialization never clears existing entities, relations or chain nodes. Human records and notes are preserved.
+
+Knowledge distinguishes industries, canonical sources/publishers, documents, entities, temporal relations/events, claims and supporting/contradicting/qualifying evidence. Coverage spans geography, subdomain, chain position, entity/source/event type and time; fixed counts never prove completeness. User level changes explanation depth, not the underlying knowledge scope. SQLite connections close on success and failure; migrations preserve old inputs. Lab artifacts are immutable and hash-validated, and chain-edge evidence counts come from actual evidence links. Scenarios report heuristic exposure, not causal probabilities. See [Intelligence Lab](DomainIntelSearch/INTELLIGENCE_LAB.md).
+
+There is no email-delivery feature. CLI, the desktop workbench and read-only MCP are the supported presentation boundaries.
+
 ## Settings inheritance
 
 Industries inherit shared task and Agent/provider defaults. Only actual user overrides are persisted:

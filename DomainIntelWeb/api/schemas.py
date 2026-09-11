@@ -1137,6 +1137,9 @@ class SourceCandidateReview(BaseModel):
     decision: Literal["manual_review", "active", "reserve", "rejected"]
     actor: str = Field(min_length=1, max_length=120)
     reason: str = Field(min_length=1, max_length=2000)
+    identity_evidence_url: str = Field(default="", max_length=2000)
+    ownership_evidence_url: str = Field(default="", max_length=2000)
+    owner_cluster: str = Field(default="", max_length=200)
 
 
 class SourceReassessmentRequest(BaseModel):
@@ -1429,6 +1432,7 @@ class HealthState(BaseModel):
     database: bool
     active_jobs: int
     automation_running: bool
+    automation_error: str = ""
     session_required: bool
 
 

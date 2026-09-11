@@ -125,6 +125,8 @@ class PeriodicScheduler:
             self.store.save_daily("news", items, date)
             news_agg.mark_seen(news)
             result["news"] = len(items)
+            if getattr(news_agg, "errors", []):
+                result["news_error"] = "; ".join(news_agg.errors)
         except Exception as e:
             result["news_error"] = str(e)
 
@@ -137,6 +139,8 @@ class PeriodicScheduler:
             self.store.save_daily("papers", items, date)
             ac_agg.mark_seen(papers)
             result["papers"] = len(items)
+            if getattr(ac_agg, "errors", []):
+                result["papers_error"] = "; ".join(ac_agg.errors)
         except Exception as e:
             result["papers_error"] = str(e)
 
@@ -219,7 +223,8 @@ class PeriodicScheduler:
                   if f"{category}_error" in result or category not in result]
         result["successful_categories"] = successful
         result["failed_categories"] = failed
-        result["status"] = ("completed" if not failed else
+        result["status"] = ("completed" if not failed and not failures and not any(
+                            key.endswith("_error") for key in result) else
                             "failed" if not successful else "partial")
 
         # A partial crawl is visible and recoverable, but it is not a successful

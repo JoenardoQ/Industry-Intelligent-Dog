@@ -43,6 +43,7 @@ def build_system_router(*, data_root: Path, jobs, automation, repo,
                 "database": (data_root / "intdog.sqlite3").exists(),
                 "active_jobs": len(jobs.active()),
                 "automation_running": bool(automation._thread and automation._thread.is_alive()),
+                "automation_error": automation.last_error,
                 "session_required": session_required}
 
     @router.get("/setup", response_model=SetupState)

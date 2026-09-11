@@ -61,7 +61,8 @@ class NewsCollectModule(BaseModule):
 
         ctx.log(f"[news_collect] {ctx.industry}：抓取 {len(articles)} 条（{counts}）")
         return ModuleResult(
-            message=f"新闻 {len(articles)} 条", data=counts, references=_refs(articles))
+            ok=not agg.errors, message=f"新闻 {len(articles)} 条；" + "; ".join(agg.errors),
+            data=counts, references=_refs(articles))
 
 
 @register
@@ -84,7 +85,7 @@ class AcademicCollectModule(BaseModule):
         ctx.state["academic"] = articles
         ctx.log(f"[academic_collect] {ctx.industry}：论文 {len(articles)} 篇")
         return ModuleResult(
-            message=f"论文 {len(articles)} 篇", data={"academic": len(articles)},
+            ok=not agg.errors, message=f"论文 {len(articles)} 篇；" + "; ".join(agg.errors), data={"academic": len(articles)},
             references=_refs(articles))
 
 
@@ -139,7 +140,7 @@ class MarketDataModule(BaseModule):
         ctx.log(f"[market_data] 行情 {len(data)}/{len(companies)} 家")
         refs = [{"title": f"{d.get('name')} 行情快照", "url": "",
                  "source": "AKShare/东方财富", "published": today_str()} for d in data]
-        return ModuleResult(message=f"行情 {len(data)} 家",
+        return ModuleResult(ok=len(data)==len(companies), message=f"行情 {len(data)}/{len(companies)} 家",
                             data={"count": len(data)}, references=refs)
 
 

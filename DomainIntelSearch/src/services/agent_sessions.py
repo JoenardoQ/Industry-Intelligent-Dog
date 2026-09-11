@@ -45,16 +45,23 @@ class JsonLineProcess:
     def _read(self) -> None:
         assert self.process is not None
         while True:
-            line = self.process.stdout.readline()
+            try:
+                line = self.process.stdout.readline()
+            except (OSError, UnicodeError) as exc:
+                self._messages.put({"_transport_error": f"Agent protocol read failed: {type(exc).__name__}"})
+                return
             if not line:
                 self._messages.put({"_transport_error": "Agent session ended"})
                 return
             try:
                 value = json.loads(line)
             except json.JSONDecodeError:
-                continue
-            if isinstance(value, dict):
-                self._messages.put(value)
+                self._messages.put({"_transport_error": "Agent returned invalid protocol JSON"})
+                return
+            if not isinstance(value, dict):
+                self._messages.put({"_transport_error": "Agent returned a non-object protocol message"})
+                return
+            self._messages.put(value)
 
     def _read_stderr(self) -> None:
         assert self.process is not None
