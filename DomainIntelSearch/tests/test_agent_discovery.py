@@ -437,20 +437,28 @@ def test_diagnosis_capacity_returns_typed_busy_without_starting_probe(monkeypatc
     assert result["failure_code"] == "diagnosis_busy"
 
 
-def test_timeout_budget_covers_version_and_authentication_together(tmp_path):
-    executable = _executable(
-        tmp_path, "claude",
-        "import sys, time\n"
-        "time.sleep(0.08)\n"
-        "print('Claude Code 2.1.4' if '--version' in sys.argv else 'authenticated')\n",
-    )
-    started = time.monotonic()
+def test_timeout_budget_covers_version_and_authentication_together(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    executable = _executable(tmp_path, "claude", "print('Claude Code 2.1.4')\n")
+    clock = [0.0]
+    budgets = []
+    monkeypatch.setattr(agent_registry, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+
+    def probe(argv, *, timeout_seconds):
+        budgets.append(timeout_seconds)
+        if "--version" in argv:
+            clock[0] += 0.08
+            return agent_registry._Probe(0, b"Claude Code 2.1.4", b"")
+        clock[0] += timeout_seconds
+        return agent_registry._Probe(-1, b"", b"", timed_out=True)
+
+    monkeypatch.setattr(agent_registry, "_run_bounded_argv", probe)
     result = agent_registry.diagnose_agent(
         {"id": "claude", "executable": str(executable)}, timeout_seconds=0.12)
-    elapsed = time.monotonic() - started
     assert result["ready"] is False
     assert result["status"] == "timeout"
-    assert elapsed < 0.18
+    assert budgets == pytest.approx([0.12, 0.04])
+    assert clock[0] == pytest.approx(0.12)
 
 
 def test_oversized_probe_output_is_discarded_and_cannot_report_ready(tmp_path):

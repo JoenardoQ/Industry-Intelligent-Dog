@@ -444,8 +444,8 @@ class CoreContractTests(unittest.TestCase):
             config["domain"]["name"] = "Example"
             config["data_layer"]["root"] = temp
             orchestrator = Orchestrator(config=config)
-            self.assertEqual(orchestrator.output_dir, Path(temp) / "Example" / "one_time" / "reports")
-            self.assertTrue(orchestrator.data_dir.is_relative_to(Path(temp) / "Example"))
+            self.assertEqual(orchestrator.output_dir, Path(temp).resolve() / "Example" / "one_time" / "reports")
+            self.assertTrue(orchestrator.data_dir.is_relative_to(Path(temp).resolve() / "Example"))
             self.assertFalse((Path(temp) / "_archive").exists())
 
     def test_quality_gates_reject_uncited_chain_and_thin_entities(self):
