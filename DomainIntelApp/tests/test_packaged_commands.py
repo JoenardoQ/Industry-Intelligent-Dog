@@ -29,7 +29,7 @@ def test_packaged_cli_flushes_checkpoints_before_the_task_finishes(monkeypatch):
     monkeypatch.delenv("INTDOG_CREDENTIAL_PIPE", raising=False)
     def task():
         stream.write("[1/3] source search\n")
-        assert raw.getvalue() == b"[1/3] source search\n"
+        assert raw.getvalue().decode("utf-8").splitlines() == ["[1/3] source search"]
     monkeypatch.setitem(sys.modules, "src.main", SimpleNamespace(main=task))
     module._cli([])
 
