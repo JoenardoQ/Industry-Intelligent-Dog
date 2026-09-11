@@ -70,7 +70,8 @@ class LLMService:
         env_auth = (runtime.get("authType") or os.environ.get(
             "INTDOG_LLM_AUTH_TYPE", "")).strip().lower() \
             if env_matches else ""
-        configured_auth = str(cfg.get("auth_type") or "").strip().lower()
+        configured_auth = (str(cfg.get("auth_type") or "").strip().lower()
+                           if configured_provider == self.provider else "")
         default_auth = self.AUTH_TYPES.get(self.provider, "")
         self.auth_type = env_auth or configured_auth or (
             "" if default_auth == "explicit" else default_auth)

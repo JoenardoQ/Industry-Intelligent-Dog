@@ -973,6 +973,9 @@ class ManagedJob:
             else:
                 kwargs["start_new_session"] = True
             child_env = dict(self.env or os.environ)
+            child_env.pop("INTDOG_JOB_RUN_ID", None)
+            if self.manager.ledger is not None:
+                child_env["INTDOG_JOB_RUN_ID"] = self.run_id
             credential_payload: dict = {}
             if self.manager.credential_supplier:
                 child_env["INTDOG_CREDENTIAL_PIPE"] = "1"
@@ -1096,6 +1099,8 @@ class ManagedJob:
             if proc and proc.stdout:
                 proc.stdout.close()
         error = sanitize_text(error)
+        if self.manager.ledger is not None and proc is not None and proc.poll() is not None:
+            self.manager.ledger.finish_terminated_job_runs(self.run_id, status)
         result = JobResult(
             self.run_id, status, returncode,
             self.manager.store.read_output(self._manifest), error,

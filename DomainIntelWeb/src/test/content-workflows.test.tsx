@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { axe } from 'vitest-axe'
 
@@ -11,6 +11,7 @@ vi.mock('../api',async importOriginal=>{
 
 import DailyPage from '../features/DailyPage'
 import KnowledgePage from '../features/KnowledgePage'
+import OverviewPage from '../features/OverviewPage'
 import ProductsPage from '../features/ProductsPage'
 import ArtifactReader from '../features/artifacts/ArtifactReader'
 import ArtifactWorkbench from '../features/research/ArtifactWorkbench'
@@ -33,6 +34,43 @@ beforeEach(()=>{apiMock.mockReset();apiTextMock.mockReset();notify.mockReset();v
 afterEach(()=>{cleanup();vi.unstubAllGlobals();localStorage.clear()})
 
 describe('reader-facing intelligence workflows',()=>{
+  it.each(['knowledge','overview'])('keeps the latest entity filter and detail in %s',async(view)=>{
+    const pending = new Map<string,(value:unknown)=>void>()
+    const entity = (id:string) => ({id,name:id,kind:'company',country:'CN',chain:'',role:'',status:'candidate',evidence_count:0})
+    const page = (ids:string[]) => ({items:ids.map(entity),total:ids.length,offset:0,limit:50,next_offset:null})
+    apiMock.mockImplementation((path:string)=>{
+      if(path.endsWith('/overview'))return Promise.resolve({industry:{name:'AI'},stats:{sources:0,documents:0,entities:2,relations:0},source_categories:{},chain:[],chain_edges:[],entities:[]})
+      if(path.includes('/knowledge/entities?')&&!path.includes('query='))return Promise.resolve(page(['initial']))
+      return new Promise(resolve=>pending.set(path,resolve))
+    })
+    render(view==='knowledge'?<KnowledgePage industry="AI"/>:<OverviewPage industry="AI" navigate={vi.fn()}/>)
+    await screen.findByText('initial')
+    const input = screen.getByRole('textbox',{name:/搜索实体/})
+    fireEvent.change(input,{target:{value:'older'}})
+    await waitFor(()=>expect([...pending.keys()].some(key=>key.includes('query=older'))).toBe(true))
+    fireEvent.change(input,{target:{value:'newer'}})
+    await waitFor(()=>expect([...pending.keys()].some(key=>key.includes('query=newer'))).toBe(true))
+    await act(async()=>pending.get([...pending.keys()].find(key=>key.includes('query=newer'))!)!(page(['latest-a','latest-b'])))
+    await act(async()=>pending.get([...pending.keys()].find(key=>key.includes('query=older'))!)!(page(['stale'])))
+    expect(screen.queryByText('stale')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button',{name:/latest-a/}))
+    fireEvent.click(screen.getByRole('button',{name:/latest-b/}))
+    const detail = (name:string) => ({id:name,canonical_name:name,kind:'company',country:'CN',status:'candidate',aliases:[],roles:[],relations:[],claims:[],evidence_count:0})
+    await act(async()=>pending.get('/industries/AI/knowledge/entities/latest-b')!(detail('detail-b')))
+    await act(async()=>pending.get('/industries/AI/knowledge/entities/latest-a')!(detail('detail-a')))
+    expect(screen.getByRole('dialog')).toHaveTextContent('detail-b')
+    expect(screen.queryByText('detail-a')).not.toBeInTheDocument()
+    fireEvent.click(screen.getAllByRole('button',{name:'关闭实体详情'})[0])
+    apiMock.mockRejectedValueOnce(new Error('实体暂时不可用'))
+    fireEvent.click(screen.getByRole('button',{name:/latest-a/}))
+    expect(await screen.findByRole('alert')).toHaveTextContent('实体暂时不可用')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button',{name:/latest-b/}))
+    await act(async()=>pending.get('/industries/AI/knowledge/entities/latest-b')!(detail('recovered')))
+    expect(screen.getByRole('dialog')).toHaveTextContent('recovered')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('defaults to title sorting and selects every filtered Daily page before recoverable deletion',async()=>{
     const first=[dailyItem('1','Alpha 芯片发布','news','Reuters'),dailyItem('2','Beta 开源更新','github','open-source-dev')]
     const second=[dailyItem('3','Gamma 论文','papers','Li Ming, Ada Chen')]

@@ -20,7 +20,17 @@ const referenceParts=(item:unknown)=>{
 export default function ArtifactReader({artifact}:{artifact:ProductItem|null}) {
   const path=artifact?.report_file||artifact?.path||artifact?._file||undefined
   const [text,setText]=useState('');const [loading,setLoading]=useState(false);const [error,setError]=useState('');const [query,setQuery]=useState('')
-  useEffect(()=>{setError('');setText(artifact?.summary||'');if(!path)return;setLoading(true);apiText(`/artifact?path=${encodeURIComponent(path)}`).then(setText).catch(reason=>setError(String(reason))).finally(()=>setLoading(false))},[path,artifact?.summary])
+  useEffect(() => {
+    const controller = new AbortController()
+    setError(''); setText(artifact?.summary||''); setLoading(Boolean(path)); setQuery('')
+    if (path) {
+      apiText(`/artifact?path=${encodeURIComponent(path)}`, {signal:controller.signal})
+        .then(value => { if (!controller.signal.aborted) setText(value) })
+        .catch(reason => { if (!controller.signal.aborted) setError(String(reason)) })
+        .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    }
+    return () => controller.abort()
+  }, [path, artifact?.summary])
   const headings=useMemo(()=>[...text.matchAll(/^(#{1,3})\s+(.+)$/gm)].map(match=>({level:match[1].length,title:match[2].trim(),id:slug(match[2])})),[text])
   const matches=query.trim()?text.toLocaleLowerCase().split(query.trim().toLocaleLowerCase()).length-1:0
   if(!artifact)return <Empty title="暂无研究产物" body="使用周期或研究按钮生成第一份产物。" compact/>

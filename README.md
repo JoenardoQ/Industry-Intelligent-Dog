@@ -86,7 +86,7 @@ After onboarding, use “Connection settings” in the top bar to replace an Age
 5. **Research Assistant:** run a documented default in one click, or change task, horizon, event, or one-run agent.
 6. **System Status:** set shared agent and workflow defaults. Industry overrides take precedence and are not overwritten by later global changes.
 
-Relative to the previous baseline, default source discovery and general collection budgets are 1.5× and paper collection is 2×. Papers cover both established topics and frontier candidates that may become new industry directions. Frontier candidates remain `candidate` until industry and evidence checks succeed.
+Papers cover established topics and frontier candidates that may become new industry directions. Frontier candidates remain `candidate` until industry and evidence checks succeed. Collection budgets bound the work; a larger item count does not establish completeness.
 
 ## Data, privacy, and states
 
@@ -94,6 +94,7 @@ Relative to the previous baseline, default source discovery and general collecti
 - Industry data, generated artifacts, logs, credentials, build output, and runtime caches are ignored by Git and must not be committed.
 - Deleted industries and daily items first enter recoverable trash. Stop active jobs and back up the complete data directory before permanent deletion.
 - `candidate` is unverified; `collected` means retrieved; `verified/corroborated` has passed the applicable evidence policy; `draft_review_required` is model-written but still needs human review.
+- `partial` means the output failed a quality check or the task bundle is incomplete; inspect its quality details. `execute-tasks` reports draft, partial, skipped, failed, and unstarted counts, and exits with code 2 when incomplete. Its printed manifest path preserves per-task results and output snapshot paths, including after a Provider failure. It does not automatically retry failed calls. A passing draft still requires review.
 - A reachable URL is not sufficient evidence. Accepted assertions also require semantic support, reproducible locators, numeric/unit consistency, claim-type policy, required independent corroboration, and conflict checks.
 - “Not observed” does not mean “does not exist.” Coverage gaps, failed sources, and uncertainty remain visible. A first run with no stable baseline reports insufficient data, not false drift.
 

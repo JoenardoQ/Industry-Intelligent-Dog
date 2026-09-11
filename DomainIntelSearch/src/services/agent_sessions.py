@@ -30,7 +30,6 @@ class JsonLineProcess:
         self.process = None
         self._next_id = 1
         self._messages: queue.Queue[dict] = queue.Queue()
-        self._deferred: list[dict] = []
         self._stderr: list[str] = []
 
     def start(self) -> None:

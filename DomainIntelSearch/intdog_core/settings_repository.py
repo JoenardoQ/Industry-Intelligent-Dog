@@ -78,10 +78,12 @@ class SettingsRepositoryMixin:
         if not _OPERATION.fullmatch(operation):
             raise ValueError("invalid workflow operation")
         industry_scope = self._settings_scope(folder)
-        wanted = (("global", "*", "global"),
-                  ("global", operation, "global_task"),
-                  (industry_scope, "*", "industry"),
-                  (industry_scope, operation, "industry_task"))
+        wanted = [("global", "*", "global")]
+        if operation != "*":
+            wanted.append(("global", operation, "global_task"))
+        wanted.append((industry_scope, "*", "industry"))
+        if operation != "*":
+            wanted.append((industry_scope, operation, "industry_task"))
         result = dict(WORKFLOW_DEFAULTS)
         provenance = {key: "system" for key in result}
         with self.connection() as con:

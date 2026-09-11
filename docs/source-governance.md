@@ -10,7 +10,7 @@ Deduplication runs in this order:
 
 1. Equal canonical URLs identify the same document.
 2. Equal content fingerprints identify the same document after title and abstract normalization; URLs are excluded from the fingerprint.
-3. Highly similar titles from the same publisher in a nearby time window identify an update or repeated collection.
+3. Highly similar titles from the same publisher identify a replay only when both publication dates are known and within the time window. Missing or invalid dates do not prove temporal proximity.
 4. Similar titles from independent publishers remain separate documents for credibility corroboration.
 5. Similar Chinese and English events are not removed by text similarity alone. They may be grouped at the Story layer only when canonical entities, event keys, and time windows agree.
 

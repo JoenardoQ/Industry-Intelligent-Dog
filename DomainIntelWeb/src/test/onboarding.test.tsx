@@ -123,6 +123,8 @@ describe('first-run and industry overview loop', () => {
     fireEvent.click(screen.getByRole('button',{name:'创建并开始研究'}))
     expect(await screen.findByText('信息源门槛')).toBeInTheDocument()
     expect(await screen.findByText('8 / 8')).toBeInTheDocument()
+    expect(screen.getByRole('progressbar')).not.toHaveAttribute('value')
+    expect(screen.getByText(/进度暂不可估算/)).toBeInTheDocument()
     expect(screen.getByText('3 / 1')).toBeInTheDocument()
     expect(screen.getByText('12 / 1')).toBeInTheDocument()
     expect(complete).not.toHaveBeenCalled()

@@ -23,6 +23,42 @@ from runtime.jobs import (  # noqa: E402
 
 
 class RuntimeJobTests(unittest.TestCase):
+    def test_cancel_releases_only_the_terminated_jobs_industry_lock(self):
+        import os
+        import threading
+        from intdog_core import IntDogService
+
+        with tempfile.TemporaryDirectory() as temp:
+            service = IntDogService(temp)
+            service.create_industry("Quantum")
+            service.repo.acquire_lock("industry:Other", "unrelated-owner")
+            ready = threading.Event()
+            manager = JobManager(temp, ledger=service.repo)
+            env = dict(os.environ, PYTHONPATH=str(APP_ROOT.parent / "DomainIntelSearch"))
+            job = manager.start(
+                [sys.executable, "-u", "-c",
+                 "import time; from intdog_core import IntDogService; "
+                 "s=IntDogService('.'); "
+                 "\nwith s.run('Quantum','bootstrap'):\n print('locked',flush=True); time.sleep(30)"],
+                cwd=temp, title="cancel research", timeout=60, env=env,
+                on_output=lambda line: ready.set() if "locked" in line else None,
+            )
+            try:
+                self.assertTrue(ready.wait(10), "child did not acquire its lock")
+                job.cancel()
+                job.wait(10)
+                self.assertEqual(job.result.status, "cancelled")
+                with service.run("Quantum", "retry"):
+                    pass
+                with service.repo.connection() as con:
+                    self.assertEqual(con.execute("SELECT owner FROM locks").fetchone()[0],
+                                     "unrelated-owner")
+                    self.assertEqual(con.execute(
+                        "SELECT status FROM runs WHERE kind='bootstrap'").fetchone()[0],
+                        "cancelled")
+            finally:
+                manager.shutdown()
+
     def test_credentials_are_redacted_from_text_command_and_streams(self):
         secret = "credential-value-9347"
         self.assertNotIn(secret, sanitize_text(f"Authorization: Bearer {secret}"))

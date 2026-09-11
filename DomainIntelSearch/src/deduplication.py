@@ -45,7 +45,8 @@ def _date(item: dict) -> datetime | None:
 
 def _near_in_time(left: dict, right: dict, days: int = 3) -> bool:
     left_date, right_date = _date(left), _date(right)
-    return not left_date or not right_date or abs((left_date - right_date).days) <= days
+    return (left_date is not None and right_date is not None
+            and abs((left_date - right_date).days) <= days)
 
 
 def _series_markers(value: object) -> set[str]:

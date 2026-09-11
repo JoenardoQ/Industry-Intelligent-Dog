@@ -18,6 +18,22 @@ def test_packaged_command_reuses_sidecar(monkeypatch):
         str(Path("/app/backend/intdog-runtime")), "cli", "run-lab", "--folder", "AI"]
 
 
+def test_packaged_cli_flushes_checkpoints_before_the_task_finishes(monkeypatch):
+    import io
+    import sys
+    from types import SimpleNamespace
+    module = _load("packaged_entry_progress", Path(__file__).parents[1] / "packaging/entry.py")
+    raw = io.BytesIO()
+    stream = io.TextIOWrapper(raw, encoding="utf-8")
+    module.sys = SimpleNamespace(stdout=stream, stderr=stream, argv=[])
+    monkeypatch.delenv("INTDOG_CREDENTIAL_PIPE", raising=False)
+    def task():
+        stream.write("[1/3] source search\n")
+        assert raw.getvalue() == b"[1/3] source search\n"
+    monkeypatch.setitem(sys.modules, "src.main", SimpleNamespace(main=task))
+    module._cli([])
+
+
 def test_packaged_search_root_controls_working_directory(monkeypatch):
     monkeypatch.setenv("INTDOG_SEARCH_ROOT", "/app/intdog/DomainIntelSearch")
     assert search_cwd(Path("/source/search")) == Path("/app/intdog/DomainIntelSearch")

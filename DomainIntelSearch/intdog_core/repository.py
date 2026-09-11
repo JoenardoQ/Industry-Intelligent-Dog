@@ -2317,6 +2317,19 @@ class IntelligenceRepository(
         with self.transaction() as con:
             con.execute("DELETE FROM locks WHERE lock_key=? AND owner=?", (lock_key, owner))
 
+    def finish_terminated_job_runs(self, job_id: str, status: str) -> None:
+        """Called only after the owning managed child has exited."""
+        prefix = f"{job_id}:"
+        with self.transaction() as con:
+            rows = con.execute("SELECT lock_key,owner FROM locks WHERE substr(owner,1,?)=?",
+                               (len(prefix), prefix)).fetchall()
+            for row in rows:
+                con.execute("DELETE FROM locks WHERE lock_key=? AND owner=?",
+                            (row["lock_key"], row["owner"]))
+                con.execute("""UPDATE runs SET status=?,updated_at=?,finished_at=?
+                    WHERE id=? AND status='running'""",
+                            (status, utc_now(), utc_now(), row["owner"][len(prefix):]))
+
     def update_run(self, run_id: str, *, stage: str | None = None,
                    status: str | None = None, checkpoint: dict | None = None,
                    metrics: dict | None = None, error: Exception | None = None) -> None:

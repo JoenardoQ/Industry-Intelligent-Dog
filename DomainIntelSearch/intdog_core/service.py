@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import hashlib
 import hmac
 import shutil
@@ -748,10 +749,12 @@ class IntDogService:
             yield active[2]
             return
         run_id = self.repo.start_run(folder, kind, stage)
+        job_id = os.environ.get("INTDOG_JOB_RUN_ID")
+        lock_owner = f"{job_id}:{run_id}" if job_id else run_id
         lock_key = f"industry:{folder}"
         token = None
         try:
-            self.repo.acquire_lock(lock_key, run_id)
+            self.repo.acquire_lock(lock_key, lock_owner)
             token = _ACTIVE_RUN.set((db_key, folder, run_id))
             yield run_id
         except Exception as exc:
@@ -762,7 +765,7 @@ class IntDogService:
         finally:
             if token is not None:
                 _ACTIVE_RUN.reset(token)
-            self.repo.release_lock(lock_key, run_id)
+            self.repo.release_lock(lock_key, lock_owner)
 
     def migrate_legacy(self, folders: list[str] | None = None) -> dict:
         stats = {"industries": 0, "sources": 0, "documents": 0, "entities": 0,

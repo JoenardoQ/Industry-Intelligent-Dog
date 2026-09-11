@@ -50,6 +50,14 @@ def _verified(index: int, *, category: str = "official", origin: str = "foreign"
 
 
 class DeduplicationContractTests(unittest.TestCase):
+    def test_missing_dates_do_not_prove_a_title_replay(self):
+        left = {"title": "Annual industry outlook", "url": "https://a.example/old",
+                "published_at": "2010-01-01"}
+        for date_value in (None, "invalid", ""):
+            right = {"title": left["title"], "url": "https://a.example/new",
+                     "published_at": date_value}
+            self.assertEqual(len(collapse_batch([left, right])[0]), 2)
+
     def test_batch_merge_is_permutation_invariant_and_retains_document_provenance(self):
         abstract = "A sufficiently detailed primary report. " * 5
         items = [

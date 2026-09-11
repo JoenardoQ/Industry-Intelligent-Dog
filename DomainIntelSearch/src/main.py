@@ -322,11 +322,17 @@ def main():
         except Exception as exc:
             print(f"[错误] 任务包执行失败：{type(exc).__name__}: {exc}", file=sys.stderr)
             sys.exit(2)
-        print(f"[完成] 执行 {len(result['results'])} 个任务；产物均标记为 draft")
+        label = "完成" if result["status"] == "draft" else "未完整完成"
+        counts = result["counts"]
+        print(f"[{label}] 草稿 {counts.get('draft', 0)}；"
+              f"部分产物 {counts.get('partial', 0)}；跳过 {counts.get('skipped', 0)}；"
+              f"失败 {counts.get('failed', 0)}；未开始 {counts.get('not_started', 0)}")
         print(f"  运行清单: {result['manifest']}")
         for item in result["results"]:
             print(f"  - {item.get('title', item['index'])}: {item['status']} "
-                  f"{item.get('output_file', item.get('reason', ''))}")
+                  f"{item.get('reason') or item.get('snapshot_file') or item.get('output_file', '')}")
+        if result["status"] != "draft":
+            sys.exit(2)
 
     elif args.command == "kg":
         from src.agents.kg import KnowledgeGraphAgent

@@ -34,7 +34,7 @@ function useHashPage(): [PageKey, (page: PageKey) => void] {
   }
   const [page, setPage] = useState<PageKey>(read)
   useEffect(() => {
-    const listener = () => setPage(read())
+    const listener = () => { if (location.hash.startsWith('#/')) setPage(read()) }
     addEventListener('hashchange', listener)
     return () => removeEventListener('hashchange', listener)
   }, [])
@@ -49,7 +49,8 @@ function App() {
   const [toast, setToast] = useState<Toast>(null)
   const [loading, setLoading] = useState(true)
   const [setup, setSetup] = useState<SetupPayload|null>(null)
-  const [workflowProvider,setWorkflowProvider]=useState('taskpack')
+  const [workflowProvider,setWorkflowProvider]=useState('')
+  const [settingsError,setSettingsError]=useState('')
   const [showSetup, setShowSetup] = useState(localStorage.getItem('intdog.onboarding.v1') !== 'complete')
   const notify = useCallback((value: Toast) => {
     setToast(value)
@@ -62,6 +63,7 @@ function App() {
       setIndustry(current => {
         const next = rows.some(row => row.folder === current) ? current : rows[0]?.folder || ''
         if (next) localStorage.setItem('intdog.industry', next)
+        else localStorage.removeItem('intdog.industry')
         return next
       })
     } catch (error) { notify({ kind: 'error', text: String(error) }) }
@@ -70,21 +72,37 @@ function App() {
   useEffect(() => { void refreshIndustries() }, [refreshIndustries])
   const refreshSetup = useCallback(async()=>{ try { setSetup(await api<SetupPayload>('/setup')) } catch(error) { notify({kind:'error',text:String(error)}) } },[notify])
   useEffect(()=>{ void refreshSetup() },[refreshSetup])
-  const refreshWorkflowSettings=useCallback(async()=>{if(!industry){setWorkflowProvider('taskpack');return}try{const value=await api<{provider:string}>(`/settings/effective?folder=${encodeURIComponent(industry)}&operation=*`);setWorkflowProvider(value.provider||'taskpack')}catch{setWorkflowProvider('taskpack')}},[industry])
-  useEffect(()=>{void refreshWorkflowSettings();const listener=()=>void refreshWorkflowSettings();addEventListener('intdog:settings-changed',listener);return()=>removeEventListener('intdog:settings-changed',listener)},[refreshWorkflowSettings])
+  useEffect(() => {
+    let controller: AbortController | undefined
+    const refresh = async () => {
+      controller?.abort()
+      const request = new AbortController()
+      controller = request
+      setWorkflowProvider(''); setSettingsError('')
+      if (!industry) return
+      try {
+        const value = await api<{provider:string}>(`/settings/effective?folder=${encodeURIComponent(industry)}&operation=*`, {signal:request.signal})
+        if (!request.signal.aborted) setWorkflowProvider(value.provider)
+      } catch (error) {
+        if (!request.signal.aborted) setSettingsError(`连接设置读取失败：${String(error)}`)
+      }
+    }
+    const listener = () => { void refresh(); void refreshSetup() }
+    void refresh()
+    addEventListener('intdog:settings-changed', listener)
+    return () => { controller?.abort(); removeEventListener('intdog:settings-changed', listener) }
+  }, [industry, refreshSetup])
   const current = industries.find(row => row.folder === industry)
   const chooseIndustry = (folder: string) => { setIndustry(folder); localStorage.setItem('intdog.industry', folder) }
   const selectedProvider=workflowProvider
-  const selectedAgent=localStorage.getItem('intdog.agent')||selectedProvider
+  const selectedAgent=selectedProvider==='taskpack'?(localStorage.getItem('intdog.agent')||''):selectedProvider
   const agentState=setup?.agents.find(item=>item.id===selectedAgent)
   const apiState=setup?.api_providers.find(item=>item.id===selectedProvider)
   const connectionReady=selectedProvider==='taskpack'||Boolean(agentState?.ready)||Boolean(apiState?.ready)
-  const connectionLabel=selectedProvider==='taskpack'?(agentState&&agentState.id!=='taskpack'?`${agentState.name} · 任务包交接`:'任务包模式可用'):(agentState?.ready?`${agentState.name} 已连接`:apiState?.ready?`${apiState.name} 已配置`:'智能体尚未就绪')
+  const connectionLabel=settingsError||(selectedProvider==='taskpack'?'任务包模式可用':!selectedProvider?'正在读取连接设置':agentState?.ready?`${agentState.name} 已连接`:apiState?.ready?`${apiState.name} 已配置`:'智能体尚未就绪')
   const preferredAgent=setup?.agents.find(item=>item.id===selectedAgent)
   const preferredApi=setup?.api_providers.find(item=>item.id===selectedProvider)
-  const chatTarget=(preferredAgent?.installed||preferredAgent?.ready)?preferredAgent:
-    preferredApi?.ready?preferredApi:
-    setup?.agents.find(item=>item.ready)||setup?.api_providers.find(item=>item.ready)
+  const chatTarget=preferredAgent||preferredApi
   const chatProvider=chatTarget?.id||''
   const chatProviderName=chatTarget?.name||''
 
@@ -97,9 +115,9 @@ function App() {
     {mobileNav && <button className="scrim" aria-label="关闭导航" onClick={() => setMobileNav(false)}/>}
     <main>
       <header className="topbar"><button className="icon-button mobile-menu" onClick={() => setMobileNav(true)}><Menu/></button><IndustryPicker industries={industries} value={industry} onChange={chooseIndustry} disabled={loading}/><div className="top-status"><span className={`status-dot ${connectionReady?'':'warn'}`}/><span>{loading?'正在连接本地数据':`${current?`${current.name} 已加载 · `:''}${connectionLabel}`}</span><button onClick={()=>setShowSetup(true)}>连接设置</button></div></header>
-      <div className="workspace">{loading ? <Loading label="正在加载行业数据库…"/> : !industry && page !== 'system' ? <Empty title="还没有行业" body="从左侧进入系统状态，新建第一个行业。"/> : <Suspense fallback={<Loading label="正在载入工作台模块…"/>}><PageRouter page={page} industry={industry} navigate={navigate} notify={notify} setup={setup}/></Suspense>}</div>
+      <div className="workspace">{loading ? <Loading label="正在加载行业数据库…"/> : !industry && page !== 'system' ? <Empty title="还没有行业" body="从左侧进入系统状态，新建第一个行业。"/> : <Suspense fallback={<Loading label="正在载入工作台模块…"/>}><PageRouter key={industry} page={page} industry={industry} navigate={navigate} notify={notify} setup={setup}/></Suspense>}</div>
     </main>
-    <AgentConversation industry={industry} provider={chatProvider} providerName={chatProviderName} notify={notify}/>
+    <AgentConversation key={`${industry}:${chatProvider}`} industry={industry} provider={chatProvider} providerName={chatProviderName} notify={notify}/>
     <PageHelp page={page}/>
     {toast && <div className={`toast ${toast.kind}`} role="status">{toast.kind === 'ok' ? <Check/> : <X/>}{toast.text}</div>}
     {showSetup&&setup&&<Suspense fallback={null}><SetupWizard setup={setup} hasIndustry={Boolean(industries.length)} onRefresh={refreshSetup} onComplete={async(_provider,folder)=>{if(folder){localStorage.setItem('intdog.industry',folder);await refreshIndustries();navigate('overview')}setShowSetup(false)}}/></Suspense>}

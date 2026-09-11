@@ -54,6 +54,9 @@ def _serve(port: int) -> None:
 
 
 def _cli(arguments: list[str]) -> None:
+    # Frozen executables do not inherit the source launcher's Python -u flag.
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
     _load_pipe_credentials()
     sys.argv = ["intdog", *arguments]
     from src.main import main

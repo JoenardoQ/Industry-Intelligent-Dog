@@ -19,8 +19,9 @@ Electron: window, lifecycle, operating-system secure storage
           └─ Agent/provider adapters: local CLI, API, MCP, task packages
 ```
 
-- SQLite is the sole business-state write authority.
-- JSON, Markdown, and portable single-file HTML are views and artifacts, not a second database.
+- SQLite owns knowledge records, task state, conversations, schedules, and workflow-setting inheritance.
+- Local Agent bindings live in `_settings/agent_profiles.json`; encrypted API configuration belongs to Electron. Browser storage holds interface preferences, not authoritative provider settings.
+- Markdown, report sidecars, and portable HTML are local artifacts, read alongside SQLite records. Industry export and restore must preserve this file boundary.
 - Electron does not write domain facts; React has no filesystem or credential access.
 - API keys enter only operating-system secure storage and reach the sidecar through a one-shot anonymous pipe.
 
@@ -71,7 +72,26 @@ Facts, claims, relations, sources, documents, Stories, jobs, and reviews use sta
 
 On first run or without a same-version baseline, the summary reads “no drift detected; insufficient data for a trend” and does not raise an alert. Full metrics live in a details view.
 
-Source discovery and industry bootstrap reuse one canonical source prompt so their primary gate cannot drift. Report, research-assistant, and Agent modules still own domain-specific templates. They share evidence states and artifact-quality gates but have not yet migrated to one `PromptSpec`; consolidation must wait for prompt snapshots, output-schema compatibility checks, and regression evaluation.
+Source discovery and industry bootstrap reuse a source prompt. Report, research-assistant, and Agent modules own output-specific templates. Reports and `execute-tasks` share `artifact_quality`: body, references, placeholders, duplication, and structured evidence checks. Research chapters are not news items; per-item dates and sources are required for explicitly typed `briefing` output, not every research heading. A passing artifact remains a draft, not a verified fact. Task bundles distinguish drafts, partial output, and skipped tasks; the CLI returns nonzero for an incomplete bundle.
+
+Native Agent sessions receive full recent context on creation and only the new user turn on continuation or successful resume. Stateless CLI/API calls, including native-session fallback, receive full recent context. Unknown publication dates cannot satisfy the title-based deduplication time window; canonical URL and sufficiently matching content remain independent deduplication rules.
+
+## State and failure boundaries
+
+The workbench reads its effective provider from the settings API. A failed request displays an error instead of selecting a fallback provider. Industry changes remount industry-scoped pages and conversations. Artifact and entity requests are cancelled when selection changes; stale responses cannot overwrite the latest selection. Document anchors must not change the workbench page.
+
+Handle errors at HTTP responses, user actions, durable job outcomes, transactions, and process cleanup. Do not convert failed required reads to empty successful results. Keep source-level failure isolation so one unreachable publisher does not abort collection.
+
+## Known limitations
+
+- Artifact checks validate presentation and citation structure, not semantic support or research completeness.
+- Title-based deduplication deliberately retains uncertain matches when publication dates are missing.
+
+## Run persistence and conversation ordering
+
+Each task-bundle execution allocates a unique local run directory. The manifest is atomically replaced before an Agent call and after each task result. Provider failures preserve completed results, mark the failing task, and leave later tasks unstarted; they do not trigger an automatic retry. Each run retains its own output snapshots. An explicitly requested output path remains the latest-copy destination. A killed process leaves its last checkpoint, not a fabricated success; disk failures may prevent further checkpoint writes.
+
+Within the desktop backend process, each industry/provider conversation serializes history reads, Agent calls, and reply persistence. Other conversations remain independent. Locks are released on failure. This is a single-backend contract, not multi-process coordination.
 
 ## Documentation and release
 

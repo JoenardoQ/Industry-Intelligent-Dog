@@ -52,7 +52,7 @@ class NativeSessionRunner:
         self._lock = threading.Lock()
 
     def __call__(self, provider: str, workspace: Path, prompt: str,
-                 external_session_id: str) -> dict:
+                 external_session_id: str, continuation_prompt: str | None = None) -> dict:
         from .provider_factory import create_provider
         from .provider_readiness import session_readiness
 
@@ -79,18 +79,20 @@ class NativeSessionRunner:
                 session = entry["session"]
                 with entry["turn_lock"]:
                     session_id = str(entry.get("session_id") or external_session_id or "")
+                    turn_prompt = (continuation_prompt if session_id and
+                                   continuation_prompt is not None else prompt)
                     if spec.session_protocol == "codex_app_server":
                         if created and session_id:
                             session.resume_thread(session_id)
                         elif not session_id:
                             session_id = session.start_thread()
-                        result = session.start_turn(session_id, prompt)
+                        result = session.start_turn(session_id, turn_prompt)
                     else:
                         if created and session_id:
                             session.load_session(session_id)
                         elif not session_id:
                             session_id = session.new_session()
-                        result = session.prompt(session_id, prompt)
+                        result = session.prompt(session_id, turn_prompt)
                     entry["session_id"] = session_id
                 text = _event_text(result.get("events", []))
                 if not text:
@@ -147,6 +149,8 @@ class ConversationBroker:
         self.repo = repo
         self.data_root = Path(data_root)
         self.runner = runner or NativeSessionRunner()
+        self._conversation_locks: dict[tuple[str, str], threading.Lock] = {}
+        self._locks_guard = threading.Lock()
 
     def state(self, folder: str, provider: str) -> dict:
         conversation = self.repo.get_or_create_conversation(folder, provider)
@@ -161,13 +165,20 @@ class ConversationBroker:
         message = str(message or "").strip()
         if not message or len(message) > 20_000:
             raise ValueError("message must contain 1-20000 characters")
+        with self._locks_guard:
+            lock = self._conversation_locks.setdefault((folder, provider), threading.Lock())
+        with lock:
+            return self._chat(folder, provider, message)
+
+    def _chat(self, folder: str, provider: str, message: str) -> dict:
         conversation = self.repo.get_or_create_conversation(folder, provider)
         self.repo.append_conversation_message(conversation["id"], "user", message)
         history = self.repo.list_conversation_messages(conversation["id"], limit=24)
         prompt = self._prompt(folder, history)
         result = self.runner(
             provider, self.data_root / folder, prompt,
-            str(conversation.get("external_session_id") or ""))
+            str(conversation.get("external_session_id") or ""),
+            self._prompt(folder, [{"role": "user", "content": message}]))
         raw = str(result.get("text") or "").strip()
         if result.get("external_session_id") != conversation.get("external_session_id"):
             self.repo.set_conversation_session(

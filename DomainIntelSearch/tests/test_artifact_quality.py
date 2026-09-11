@@ -17,6 +17,87 @@ GOOD = """# AI 周报
 """
 
 
+def test_research_chapters_are_not_news_items():
+    text = GOOD + "\n## 研究方法\n\n本报告将企业披露、学术论文与产业链关系分开分析，来源数量不作为事实正确性的替代判断。\n"
+    assert evaluate_artifact(text, {"status": "draft"})["passed"]
+    briefing = evaluate_artifact(text, {"status": "draft", "artifact_type": "briefing"})
+    assert {"key_item_missing_date", "key_item_missing_source"} <= {
+        item["code"] for item in briefing["failures"]}
+
+
+def test_task_bundle_reports_partial_and_skipped_outputs(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from src.services import task_executor
+
+    texts = iter([GOOD, "TODO"])
+    def complete(_prompt):
+        return SimpleNamespace(text=next(texts), provider="test", model="test",
+                               response_id="", usage={})
+    monkeypatch.setattr(task_executor, "create_provider", lambda *_args: SimpleNamespace(complete=complete))
+    bundle = tmp_path / "tasks.json"
+    bundle.write_text(json.dumps([{"prompt": "research"}, {"prompt": "broken"}, {}]))
+    result = task_executor.execute_bundle({}, SimpleNamespace(industry_root=tmp_path), bundle)
+    assert [item["status"] for item in result["results"]] == ["draft", "partial", "skipped"]
+    assert result["status"] == "partial"
+    assert result["results"][1]["quality"]["passed"] is False
+    assert json.loads(Path(result["manifest"]).read_text())["status"] == "partial"
+
+
+def test_bundle_runs_keep_distinct_snapshots_with_the_same_clock_and_destination(tmp_path, monkeypatch):
+    from datetime import datetime
+    from types import SimpleNamespace
+    from src.services import task_executor
+
+    class FixedClock:
+        @staticmethod
+        def now():
+            return datetime(2026, 9, 11, 12, 0, 0)
+
+    texts = iter([GOOD, GOOD + "\nAdditional findings.\n"])
+    monkeypatch.setattr(task_executor, "datetime", FixedClock)
+    monkeypatch.setattr(task_executor, "create_provider", lambda *_args: SimpleNamespace(
+        complete=lambda _prompt: SimpleNamespace(text=next(texts), provider="test",
+                                                 model="test", response_id="", usage={})))
+    bundle = tmp_path / "tasks.json"
+    bundle.write_text(json.dumps([{"prompt": "research", "output_file": "latest.md"}]))
+    context = SimpleNamespace(industry_root=tmp_path)
+    first = task_executor.execute_bundle({}, context, bundle)
+    second = task_executor.execute_bundle({}, context, bundle)
+    assert first["manifest"] != second["manifest"]
+    assert Path(first["results"][0]["snapshot_file"]).read_text() == GOOD
+    assert Path(second["results"][0]["snapshot_file"]).read_text() == GOOD + "\nAdditional findings.\n"
+    assert (tmp_path / "latest.md").read_text() == GOOD + "\nAdditional findings.\n"
+
+
+def test_bundle_checkpoints_before_call_and_preserves_failure_without_retry(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from src.services import task_executor
+
+    calls = []
+    def complete(prompt):
+        manifests = list(tmp_path.glob("one_time/research/runs/*.json"))
+        assert len(manifests) == 1
+        state = json.loads(manifests[0].read_text())
+        assert state["status"] == "running"
+        assert state["results"][-1]["status"] == "running"
+        calls.append(prompt)
+        if prompt == "second":
+            assert state["results"][0]["status"] == "draft"
+            raise RuntimeError("synthetic secret must not enter manifest")
+        return SimpleNamespace(text=GOOD, provider="test", model="test", response_id="", usage={})
+    monkeypatch.setattr(task_executor, "create_provider", lambda *_args: SimpleNamespace(complete=complete))
+    bundle = tmp_path / "tasks.json"
+    bundle.write_text(json.dumps([{"prompt": item} for item in ("first", "second", "third")]))
+    result = task_executor.execute_bundle({}, SimpleNamespace(industry_root=tmp_path), bundle)
+    assert calls == ["first", "second"]
+    assert [item["status"] for item in result["results"]] == ["draft", "failed", "not_started"]
+    assert result["status"] == "partial"
+    saved = Path(result["manifest"]).read_text()
+    assert "synthetic secret" not in saved
+    assert json.loads(saved)["results"][1]["error_type"] == "RuntimeError"
+    assert Path(result["results"][0]["snapshot_file"]).read_text() == GOOD
+
+
 def test_quality_gate_is_deterministic_and_independent_of_fact_state(tmp_path):
     sidecar = tmp_path / "report.viz.json"
     sidecar.write_text(json.dumps({"directed_graph": {"nodes": [], "edges": []}}))

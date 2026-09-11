@@ -77,6 +77,8 @@ def evaluate_artifact(markdown: str, metadata: dict | None = None,
         plain = re.sub(r"https?://\S+", "", plain)
         if len(re.sub(r"\s+", "", plain)) < 24:
             failures.append(_failure("key_item_missing_summary", "重点条目缺少具体摘要", f"section:{index+1}"))
+        if metadata.get("artifact_type") != "briefing":
+            continue
         if not re.search(r"\b20\d{2}[-年/]\d{1,2}", heading + "\n" + body):
             failures.append(_failure("key_item_missing_date", "重点条目缺少日期", f"section:{index+1}"))
         if not any(url.startswith(("http://", "https://")) for _, url in _LINK.findall(body)):
@@ -147,7 +149,7 @@ def evaluate_artifact(markdown: str, metadata: dict | None = None,
 
     fact_state = str(metadata.get("status") or "unknown")
     return {
-        "version": "artifact-quality-v1", "passed": not failures,
+        "version": "artifact-quality-v2", "passed": not failures,
         "fact_state": fact_state,
         "artifact_status": fact_state if not failures else "partial",
         "content_sha256": sha256(text.encode("utf-8")).hexdigest(),
